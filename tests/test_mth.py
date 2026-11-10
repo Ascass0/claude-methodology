@@ -80,6 +80,30 @@ class CommitMessageTests(unittest.TestCase):
         self.assertEqual(commits.refs_of(msg), ["SPEC-0001", "#12"])
 
 
+class ReviewScopeTests(unittest.TestCase):
+    def test_required_by_paths(self):
+        from mthlib import review
+        agents = ["verificador", "revisor-upstream", "revisor-evals"]
+        paths = {"revisor-upstream": ["**", "!fork/**", "!.claude/**", "!FORK_CHANGES.md"],
+                 "revisor-evals": ["evals/**"]}
+        self.assertEqual(review.required(agents, paths, ["fork/docs/a.md", "FORK_CHANGES.md"]), ["verificador"])
+        self.assertEqual(review.required(agents, paths, ["tools/delegate.py"]), ["verificador", "revisor-upstream"])
+        self.assertEqual(review.required(agents, paths, ["evals/x.yaml"]),
+                         ["verificador", "revisor-upstream", "revisor-evals"])
+
+    def test_github_repo_slug(self):
+        from mthlib.git import Git
+        tmp = Path(tempfile.mkdtemp())
+        subprocess.run(["git", "init", "-q", str(tmp)], check=True)
+        for url, slug in (("https://github.com/Ascass0/hermes-docker.git", "Ascass0/hermes-docker"),
+                          ("git@github.com:Ascass0/DOckerAI.git", "Ascass0/DOckerAI"),
+                          ("/srv/git/local.git", None)):
+            subprocess.run(["git", "-C", str(tmp), "remote", "remove", "origin"], capture_output=True)
+            subprocess.run(["git", "-C", str(tmp), "remote", "add", "origin", url], check=True)
+            self.assertEqual(Git(tmp).github_repo(), slug)
+        shutil.rmtree(tmp)
+
+
 class BranchModelTests(unittest.TestCase):
     def setUp(self):
         self.cfg = _cfg(Path("."), branches={"extra": {"sync": {"flow": "feature"}}})
@@ -250,9 +274,12 @@ class EndToEndTests(unittest.TestCase):
         self.mth("init")
         self.assertEqual(self.git("branch", "--show-current"), "chore/adopt-methodology")
         cfg_path = self.work / ".claude/methodology.toml"
-        cfg = cfg_path.read_text().replace('test = ""', 'test = "true"').replace('agents = []', 'agents = ["revisor-x"]')
+        cfg = (cfg_path.read_text().replace('test = ""', 'test = "true"')
+               .replace('agents = ["verificador"]', 'agents = ["verificador", "revisor-x", "revisor-docs"]')
+               .replace('# revisor-contratos = ["subagents/**", "schemas/**"]', 'revisor-docs = ["docs/**", "!docs/drafts/**"]'))
         cfg_path.write_text(cfg)
         _write(self.work / ".claude/agents/revisor-x.md", "---\nname: revisor-x\n---\nRevisa.\n")
+        _write(self.work / ".claude/agents/revisor-docs.md", "---\nname: revisor-docs\n---\nRevisa docs.\n")
         self.git("add", "-A")
         self.mth("commit", "--type", "chore", "--scope", "methodology", "--summary", "configure repo",
                  "--body", "Set test command and reviewers.", "--refs", "n/a")
@@ -295,6 +322,10 @@ class EndToEndTests(unittest.TestCase):
         # Review is mandatory and bound to the HEAD sha; red CI blocks and the run is resumable.
         out = self.mth("integrate", "--title", "feat(runner): ephemeral runner", "--summary", "S.", ok=False)
         self.assertIn("Faltan revisiones", out)
+        status = self.mth("review", "status")
+        self.assertIn("verificador: pendiente", status)
+        self.assertIn("No aplican a estos cambios: revisor-docs", status)  # docs/ untouched
+        self.mth("review", "record", "verificador", "--blocking", "0", "--summary", "AC-01 verificado.")
         self.mth("review", "record", "revisor-x", "--blocking", "0", "--summary", "Sin hallazgos.")
         out = self.mth("integrate", "--title", "feat(runner): ephemeral runner", "--summary", "S.",
                        ok=False, checks="fail")
@@ -326,6 +357,7 @@ class EndToEndTests(unittest.TestCase):
         self.git("add", "-A")
         self.mth("commit", "--type", "fix", "--summary", "close leaked handle", "--body", "Close on exit.",
                  "--refs", "SPEC-0001")
+        self.mth("review", "record", "verificador", "--blocking", "0", "--summary", "Regresión OK.")
         self.mth("review", "record", "revisor-x", "--blocking", "0", "--summary", "OK.")
         self.mth("hotfix", "finish")
         self.git("fetch", "-q", "--tags")

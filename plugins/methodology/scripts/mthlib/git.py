@@ -118,6 +118,16 @@ class Git:
                     if (m := tag_re.match(t))]
         return max(versions, default=(0, 0, 0))
 
+    def changed_files(self, base: str) -> list[str]:
+        """Files changed on HEAD since its merge-base with ``base``."""
+        return [f for f in self.out("diff", "--name-only", f"{base}...HEAD").splitlines() if f]
+
+    def github_repo(self) -> str | None:
+        """``owner/repo`` of the remote when it is hosted on GitHub, else None."""
+        proc = self.try_run("remote", "get-url", self.remote)
+        m = re.search(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", proc.stdout.strip())
+        return f"{m.group(1)}/{m.group(2)}" if proc.returncode == 0 and m else None
+
     def count(self, rev_range: str) -> int:
         return int(self.out("rev-list", "--count", rev_range) or 0)
 

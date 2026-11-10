@@ -10,7 +10,26 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import globs
 from .errors import MthError
+
+
+def _matches(path: str, patterns: list[str]) -> bool:
+    """Gitignore-like evaluation: the last matching pattern wins; '!' negates."""
+    matched = False
+    for pattern in patterns:
+        negate = pattern.startswith("!")
+        if globs.match(path, pattern[1:] if negate else pattern):
+            matched = not negate
+    return matched
+
+
+def required(agents: list[str], paths: dict[str, list[str]], changed: list[str]) -> list[str]:
+    """Agents that must review a change, in precedence order.
+
+    Agents without ``paths`` always review; the rest only when a changed file matches.
+    """
+    return [a for a in agents if a not in paths or any(_matches(f, paths[a]) for f in changed)]
 
 
 def _store(git_dir: Path) -> Path:

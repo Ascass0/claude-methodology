@@ -45,7 +45,7 @@ class Ctx:
         return self.root / self.cfg["paths"][key]
 
     def gh(self) -> GitHub:
-        hub = GitHub(self.root)
+        hub = GitHub(self.root, self.git.github_repo())
         hub.ensure_ready()
         return hub
 
@@ -119,10 +119,24 @@ def _fragment(ctx: Ctx, info: branches.BranchInfo) -> changelog.Fragment | None:
     return frag
 
 
+def required_reviewers(ctx: Ctx, info: branches.BranchInfo) -> list[str]:
+    """Reviewers that apply to the branch, given the files it changes."""
+    if info.is_child or info.kind not in ctx.cfg["review"]["required_for"]:
+        return []
+    changed = ctx.git.changed_files(ctx.git.remote_ref(branches.target_of(info, ctx.cfg)))
+    return review.required(ctx.cfg["review"]["agents"], ctx.cfg["review"]["paths"], changed)
+
+
 def _review(ctx: Ctx, info: branches.BranchInfo, branch: str) -> dict[str, dict]:
     if info.is_child or info.kind not in ctx.cfg["review"]["required_for"]:
         return {}
-    return review.check(ctx.git.git_dir(), branch, ctx.git.sha("HEAD"), ctx.cfg["review"]["agents"])
+    if not ctx.cfg["review"]["agents"]:
+        review.check(ctx.git.git_dir(), branch, "", [])  # raises: review is mandatory
+    agents = required_reviewers(ctx, info)
+    if not agents:
+        say("· Ningún revisor aplica a los ficheros cambiados")
+        return {}
+    return review.check(ctx.git.git_dir(), branch, ctx.git.sha("HEAD"), agents)
 
 
 def _require_synced(ctx: Ctx, target: str) -> None:
