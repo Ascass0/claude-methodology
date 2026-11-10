@@ -24,8 +24,8 @@ from .ids import IdRegistry
 SECTIONS = ("Añadido", "Cambiado", "Obsoleto", "Eliminado", "Corregido", "Seguridad")
 BUMPS = ("patch", "minor", "major")
 MARKER = "<!-- mth:releases -->"
-DEFAULT_BUMP = {"feat": "minor", "fix": "patch", "hotfix": "patch"}
-DEFAULT_SECTION = {"feat": "Añadido", "fix": "Corregido", "hotfix": "Corregido"}
+DEFAULT_BUMP = {"feat": "minor", "fix": "patch", "hotfix": "patch", "security": "patch"}
+DEFAULT_SECTION = {"feat": "Añadido", "fix": "Corregido", "hotfix": "Corregido", "security": "Seguridad"}
 _PLACEHOLDER = re.compile(r"<[^>\n]+>")
 _FRONT = re.compile(r"^---\n(?P<meta>.*?)\n---\n(?P<body>.*)$", re.DOTALL)
 

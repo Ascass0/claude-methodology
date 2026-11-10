@@ -23,6 +23,7 @@ from .proc import run_shell
 from .trace import check as trace_check
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
+_MAX_LISTED = 50
 
 
 @dataclass
@@ -47,6 +48,20 @@ class Ctx:
         hub = GitHub(self.root)
         hub.ensure_ready()
         return hub
+
+    def own_commits(self, rev_range: str) -> list[tuple[str, str]]:
+        """Commits of ``rev_range`` that belong to this repo (external history excluded).
+
+        Raises:
+            MthError: A configured external ref is missing (its history would be
+                validated as ours, so we refuse instead of guessing).
+        """
+        external = self.cfg["commits"]["external_refs"]
+        missing = [r for r in external if not self.git.ok("rev-parse", "--verify", "--quiet", r)]
+        if missing:
+            raise MthError(f"No existe la referencia externa {', '.join(missing)}.",
+                           hint="Trae el remoto externo (por ejemplo, `git fetch upstream`) o corrige commits.external_refs.")
+        return self.git.commits(rev_range, exclude=external)
 
 
 # -- shared gates -------------------------------------------------------------
@@ -73,9 +88,12 @@ def _gate_tests(ctx: Ctx) -> str:
 
 
 def _gate_commits(ctx: Ctx, rev_range: str) -> list[tuple[str, str]]:
-    found = ctx.git.commits(rev_range)
+    found = ctx.own_commits(rev_range)
     if not found:
-        raise MthError("No hay commits nuevos que integrar.")
+        if ctx.git.count(rev_range) == 0:
+            raise MthError("No hay commits nuevos que integrar.")
+        say("· Solo hay merges de historia externa: no hay commits propios que validar")
+        return []
     registry = ctx.registry()
     errors = [f"  - {sha[:8]}: {e}" for sha, msg in found
               for e in commits.validate(msg, ctx.cfg, registry)]
@@ -125,7 +143,11 @@ def _merge_message(title: str, number: int, head: str, base: str,
     """Merge commit subject and body: English, descriptive, with references."""
     refs = list(dict.fromkeys([r for _, m in found for r in commits.refs_of(m)] + extra_refs))
     lines = [f"Merge {head} into {base}.", "", "Commits:"]
-    lines += [f"- {m.splitlines()[0]}" for _, m in found]
+    lines += [f"- {m.splitlines()[0]}" for _, m in found[:_MAX_LISTED]]
+    if len(found) > _MAX_LISTED:
+        lines.append(f"- ... and {len(found) - _MAX_LISTED} more")
+    if not found:
+        lines.append("- none of its own (merges external history only)")
     lines += ["", f"Refs: {', '.join(refs) if refs else commits.NO_REFS}"]
     return f"{title} (#{number})", "\n".join(lines)
 
@@ -324,7 +346,7 @@ def _publish(ctx: Ctx, head: str, version: str, found: list[tuple[str, str]]) ->
     """head → main (merge commit), tag, GitHub release, head → development, delete head."""
     g, cfg = ctx.git, ctx.cfg
     hub = ctx.gh()
-    tag = f"v{version}"
+    tag = f"{cfg.tag_prefix}{version}"
     title = f"chore(release): {tag}"
     notes = changelog.section_of(ctx.path("changelog").read_text(encoding="utf-8"), version)
 
@@ -381,12 +403,12 @@ def release(ctx: Ctx) -> None:
             raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
         _gate_trace(ctx)
         _gate_tests(ctx)
-        version = changelog.next_version(g.latest_version(), changelog.highest_bump(fragments))
+        version = changelog.next_version(g.latest_version(cfg.tag_prefix), changelog.highest_bump(fragments))
         head = f"release/v{version}"
         g.out("checkout", "-b", head)
         _apply_release(ctx, version, fragments)
         g.push(head)
-    found = g.commits(f"{g.remote_ref(cfg.main)}..{g.remote_ref(head)}")
+    found = ctx.own_commits(f"{g.remote_ref(cfg.main)}..{g.remote_ref(head)}")
     _publish(ctx, head, version, found)
 
 
@@ -410,7 +432,7 @@ def hotfix_finish(ctx: Ctx) -> None:
         _gate_trace(ctx)
         _review(ctx, info, branch)
         _gate_tests(ctx)
-        version = changelog.next_version(g.latest_version(), "patch")
+        version = changelog.next_version(g.latest_version(cfg.tag_prefix), "patch")
         _apply_release(ctx, version, [frag])
         g.push(branch)
     else:  # resuming: the fragment was already folded into the changelog by a previous run
@@ -419,7 +441,7 @@ def hotfix_finish(ctx: Ctx) -> None:
             raise MthError(f"Falta el fragmento {frag_path.name}.", hint="Créalo con `mth changes new`.")
         version = m.group(1)
         say(f"· Reanudando la publicación de v{version}")
-    found = g.commits(f"{g.remote_ref(cfg.main)}..HEAD")
+    found = ctx.own_commits(f"{g.remote_ref(cfg.main)}..HEAD")
     _publish(ctx, branch, version, found)
 
 
