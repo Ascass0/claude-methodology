@@ -6,6 +6,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.3.1] - 2026-11-10
+
+### Añadido
+- Protocolo de orquestación en `mth-develop`: la sesión principal divide la spec en tareas con ficheros disjuntos, delega en los agentes `dev-*` del repo con un encargo autocontenido y recibe un manifiesto; los commits los hace siempre la sesión principal.
+
 ## [0.3.0] - 2026-11-10
 
 ### Añadido
