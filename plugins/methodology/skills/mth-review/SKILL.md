@@ -5,7 +5,9 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 # Revisión
 
-`mth` es el comando del contexto de sesión (`$MTH`). Los revisores son `review.agents` en `.claude/methodology.toml`, en orden de precedencia.
+`mth` es el comando del contexto de sesión (`$MTH`). Los revisores son `review.agents` en `.claude/methodology.toml`, en orden de precedencia. Algunos solo aplican si el diff toca sus rutas (`review.paths`): **`mth review status` dice cuáles son obligatorios para esta rama**. Lanza esos y ninguno más.
+
+`verificador` (compartido, incluido en el plugin) comprueba que la rama cumple su spec y ejecuta los tests. Si está en la lista, va primero: no tiene sentido revisar estilo o parsimonia de algo que no cumple la spec.
 
 ## Antes de revisar
 
@@ -14,7 +16,7 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 ## Revisar
 
-Lanza **cada** agente revisor como subagente (herramienta Task con su nombre), en paralelo si es posible, con este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
+Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Task con su nombre; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
 
 ```
 Revisa la rama <rama> respecto a <destino>.

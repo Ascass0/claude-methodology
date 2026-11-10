@@ -25,11 +25,16 @@ class GitHub:
         root: Repository working tree (``gh`` resolves the repo from it).
     """
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, repo: str | None = None) -> None:
         self.root = root
+        self.repo = repo  # explicit target: never let gh guess between origin and upstream
 
     def _gh(self, *args: str, check: bool = True):
         return run(["gh", *args], cwd=self.root, check=check)
+
+    def _gh_repo(self, *args: str, check: bool = True):
+        """gh call scoped to the integration repository (appends --repo)."""
+        return self._gh(*args, *(["--repo", self.repo] if self.repo else []), check=check)
 
     def ensure_ready(self) -> None:
         """Raises MthError when gh is missing or not authenticated."""
@@ -37,7 +42,7 @@ class GitHub:
             raise MthError("gh no está autenticado.", hint="Ejecuta `gh auth login`.")
 
     def find_pr(self, head: str, base: str, state: str = "open") -> dict | None:
-        out = self._gh("pr", "list", "--head", head, "--base", base, "--state", state,
+        out = self._gh_repo("pr", "list", "--head", head, "--base", base, "--state", state,
                        "--json", "number,state,url", "--limit", "1").stdout
         items = json.loads(out or "[]")
         return items[0] if items else None
@@ -47,7 +52,7 @@ class GitHub:
             fh.write(body)
             body_file = fh.name
         try:
-            out = self._gh("pr", "create", "--head", head, "--base", base,
+            out = self._gh_repo("pr", "create", "--head", head, "--base", base,
                            "--title", title, "--body-file", body_file).stdout
         finally:
             os.unlink(body_file)
@@ -75,7 +80,7 @@ class GitHub:
             MthError: Failing checks, or no checks while ``required``.
         """
         for attempt in range(_POLL_ATTEMPTS):
-            proc = self._gh("pr", "checks", str(number), "--watch", "--fail-fast", check=False)
+            proc = self._gh_repo("pr", "checks", str(number), "--watch", "--fail-fast", check=False)
             text = (proc.stdout + proc.stderr).lower()
             if _NO_CHECKS not in text:
                 if proc.returncode != 0:
@@ -92,22 +97,24 @@ class GitHub:
 
     def merge(self, number: int, subject: str, body: str) -> None:
         """Merge with a merge commit (history of the branch is preserved)."""
-        self._gh("pr", "merge", str(number), "--merge", "--subject", subject, "--body", body)
+        self._gh_repo("pr", "merge", str(number), "--merge", "--subject", subject, "--body", body)
         say(f"· PR #{number} mergeado con merge commit")
 
     def release(self, tag: str, notes: str) -> None:
-        if self._gh("release", "view", tag, check=False).returncode == 0:
+        if self._gh_repo("release", "view", tag, check=False).returncode == 0:
             return
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
             fh.write(notes or tag)
             notes_file = fh.name
         try:
-            self._gh("release", "create", tag, "--title", tag, "--notes-file", notes_file, "--verify-tag")
+            self._gh_repo("release", "create", tag, "--title", tag, "--notes-file", notes_file, "--verify-tag")
         finally:
             os.unlink(notes_file)
         say(f"· Release de GitHub {tag} publicada")
 
     def api(self, method: str, path: str, payload: dict | None = None, check: bool = True):
+        if self.repo:
+            path = path.replace("{owner}/{repo}", self.repo)
         args = ["api", "-X", method, path, "-H", "Accept: application/vnd.github+json"]
         if payload is not None:
             args += ["--input", "-"]

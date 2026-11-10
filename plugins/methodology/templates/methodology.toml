@@ -52,15 +52,20 @@ external_refs = []
 required_for = ["feat", "fix", "hotfix"]
 
 [review]
-# Agentes revisores del repo (.claude/agents/<nombre>.md), en orden de precedencia.
-agents = []
+# Revisores en orden de precedencia: los del repo (.claude/agents/<nombre>.md) y los
+# compartidos del plugin (verificador). Ponlo primero: comprueba que la rama cumple su spec.
+agents = ["verificador"]
 required_for = ["feat", "fix", "hotfix"]
 
+# Revisores que solo aplican si el diff toca sus rutas (globs; '!' excluye, gana el último).
+[review.paths]
+# revisor-contratos = ["subagents/**", "schemas/**"]
+
 [roles]
-# Agentes del repo para cada rol (vacío = Claude asume el rol).
+# Agentes para cada rol (vacío = Claude asume el rol). documentador y verificador vienen en el plugin.
 coder = ""
-documenter = ""
-verifier = ""
+documenter = "documentador"
+verifier = "verificador"
 
 [ci]
 # Exigir CI en verde en cada PR (fail-safe: sin CI no se integra).

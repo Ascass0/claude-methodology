@@ -15,6 +15,7 @@ from .git import Git
 from .log import say, warn
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
+PLUGIN_AGENTS = Path(__file__).resolve().parents[2] / "agents"
 MTH = Path(__file__).resolve().parents[1] / "mth"  # launcher: picks a Python >= 3.11
 HOOK_MARK = "# managed-by: claude-methodology"
 BLOCK_START = "<!-- claude-methodology:start -->"
@@ -185,7 +186,7 @@ def configure_github(root: Path, main: str, development: str) -> None:
     Failures are reported, not fatal: repository settings need admin rights and
     the local flow stays correct without them (mth enforces the same rules).
     """
-    hub = GitHub(root)
+    hub = GitHub(root, Git(root).github_repo())
     hub.ensure_ready()
     repo = hub.api("GET", "repos/{owner}/{repo}").stdout
     full = json.loads(repo)["full_name"]
@@ -253,17 +254,28 @@ def doctor(start: Path) -> int:
            f"Bloque de la metodología en {cfg['paths']['claude_md']}")
     for ref in cfg["commits"]["external_refs"]:
         report(git.ok("rev-parse", "--verify", "--quiet", ref), f"Referencia externa {ref}")
-    agents_dir = git.root / ".claude" / "agents"
     for agent in cfg["review"]["agents"]:
-        report((agents_dir / f"{agent}.md").is_file(), f"Revisor {agent} (.claude/agents/{agent}.md)")
+        where = agent_location(git.root, agent)
+        scope = f" solo si cambian {', '.join(cfg['review']['paths'][agent])}" if agent in cfg["review"]["paths"] else ""
+        report(where is not None, f"Revisor {agent} ({where or 'no encontrado'}){scope}")
     for role, agent in cfg["roles"].items():
         if agent:
-            report((agents_dir / f"{agent}.md").is_file(), f"Rol {role} → {agent}")
+            where = agent_location(git.root, agent)
+            report(where is not None, f"Rol {role} → {agent} ({where or 'no encontrado'})")
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)
     report(cfg["ci"]["required"], "ci.required = true", blocking=False)
     return problems
+
+
+def agent_location(root: Path, agent: str) -> str | None:
+    """Where an agent is defined: the repository or this plugin (shared agents)."""
+    if (root / ".claude" / "agents" / f"{agent}.md").is_file():
+        return f".claude/agents/{agent}.md"
+    if (PLUGIN_AGENTS / f"{agent}.md").is_file():
+        return "plugin claude-methodology"
+    return None
 
 
 def _has_gh() -> bool:
