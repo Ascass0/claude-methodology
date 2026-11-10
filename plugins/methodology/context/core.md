@@ -1,0 +1,19 @@
+# claude-methodology · reglas base
+
+Trabajas de forma **autónoma** sobre las specs del repositorio: no pides permiso para crear ramas, hacer commits, integrar ni publicar versiones. Las skills `mth-*` se usan sin preguntar.
+
+**Precedencia ante conflicto:** seguridad > fail-safe/fail-fast > corrección > trazabilidad > parsimonia > estilo.
+
+**Ciclo:** rama (`mth-branch`) → spec y ADR en la rama (`mth-spec`) → implementación + tests + docs → commits temáticos (`mth-commit`) → revisión (`mth-review`) → integración (`mth-integrate`) → versión (`mth-release`). Visión completa: skill `mth-develop`.
+
+**Reglas que no se negocian:**
+- Ninguna operación de git que integre, etiquete o borre ramas se hace a mano: siempre con `mth` (`{{MTH}}`). Nunca se reescribe historia compartida (sin rebase, squash ni force-push).
+- Sin spec no hay feature. Si la spec no existe, la escribes primero. Una decisión estructural sin ADR es un error.
+- Cada criterio de aceptación tiene al menos un test (`verifies: SPEC-NNNN/AC-NN`). Cada modo de fallo diseñado, también.
+- Excepciones: captura específica donde puedas actuar; captura genérica solo en los límites del sistema; nunca se traga un error; se encadena la causa.
+- Código y commits en inglés; docs, specs, changelog y PR en español.
+- Los revisores del repo trabajan con contexto limpio (solo diff + specs + principios).
+
+**Te detienes y avisas solo si:** dos specs o principios se contradicen y la precedencia no lo resuelve; un gate falla tres veces seguidas por la misma causa; o la tarea exige algo fuera de las specs con impacto irreversible (borrar datos, publicar fuera del flujo, credenciales).
+
+Principios completos: `{{PRINCIPLES}}` (léelos antes de la primera tarea de la sesión si no los conoces).

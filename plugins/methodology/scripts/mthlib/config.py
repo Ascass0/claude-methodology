@@ -1,0 +1,170 @@
+"""Repository configuration: ``.claude/methodology.toml``.
+
+Invalid configuration is a fail-fast condition: every command refuses to run
+and the error names the offending key.
+"""
+from __future__ import annotations
+
+import copy
+import re
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from .errors import MthError
+
+CONFIG_PATH = Path(".claude") / "methodology.toml"
+
+DEFAULTS: dict[str, Any] = {
+    "version": 1,
+    "remote": "origin",
+    "commands": {"test": None, "precommit": ""},
+    "paths": {
+        "docs": "docs",
+        "specs": "specs/features",
+        "adr": "specs/adr",
+        "changes": "changes",
+        "changelog": "CHANGELOG.md",
+        "tests": ["tests/**", "test/**", "**/test_*.*", "**/*_test.*",
+                  "**/*.test.*", "**/*.spec.*"],
+    },
+    "ids": {
+        "SPEC": {"pattern": r"SPEC-\d{4}", "defined_in": ["specs/features/**/*.md"]},
+        "ADR": {"pattern": r"ADR-\d{4}", "defined_in": ["specs/adr/**/*.md"]},
+    },
+    "branches": {"main": "main", "development": "development", "extra": {}},
+    "commits": {"require_refs": ["feat", "fix", "refactor", "perf"]},
+    "changes": {"required_for": ["feat", "fix", "hotfix"]},
+    "review": {"agents": [], "required_for": ["feat", "fix", "hotfix"]},
+    "roles": {"coder": "", "documenter": "", "verifier": ""},
+    "ci": {"required": True},
+    "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
+              "adr_kind": "ADR", "exclude": []},
+    "release": {"github_release": True, "sign_tags": False},
+}
+
+# Expected type of every leaf key. Tables not listed here are rejected.
+_SCHEMA: dict[str, Any] = {
+    "version": int,
+    "remote": str,
+    "commands": {"test": str, "precommit": str},
+    "paths": {"docs": str, "specs": str, "adr": str, "changes": str,
+              "changelog": str, "tests": list},
+    "ids": dict,
+    "branches": {"main": str, "development": str, "extra": dict},
+    "commits": {"require_refs": list},
+    "changes": {"required_for": list},
+    "review": {"agents": list, "required_for": list},
+    "roles": {"coder": str, "documenter": str, "verifier": str},
+    "ci": {"required": bool},
+    "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
+              "adr_kind": str, "exclude": list},
+    "release": {"github_release": bool, "sign_tags": bool},
+}
+
+_EXTRA_NAME = re.compile(r"^[a-z]+$")
+_RESERVED_KINDS = {"feat", "fix", "chore", "hotfix", "release"}
+
+
+@dataclass(frozen=True)
+class Config:
+    """Validated configuration. ``data`` keeps the merged raw tables."""
+
+    root: Path
+    data: dict[str, Any]
+
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
+
+    @property
+    def remote(self) -> str:
+        return self.data["remote"]
+
+    @property
+    def main(self) -> str:
+        return self.data["branches"]["main"]
+
+    @property
+    def development(self) -> str:
+        return self.data["branches"]["development"]
+
+    @property
+    def test_command(self) -> str:
+        return self.data["commands"]["test"]
+
+
+def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(base)
+    for key, value in override.items():
+        # [ids] replaces the defaults entirely: a repo declares its own scheme.
+        if key != "ids" and isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def _check_types(data: dict[str, Any], schema: dict[str, Any], prefix: str) -> None:
+    for key, value in data.items():
+        path = f"{prefix}{key}"
+        if key not in schema:
+            raise MthError(f"Clave desconocida en la configuración: '{path}'.",
+                           hint="Revisa la ortografía; las claves válidas están en la plantilla.")
+        expected = schema[key]
+        if isinstance(expected, dict):
+            if not isinstance(value, dict):
+                raise MthError(f"'{path}' debe ser una tabla.")
+            _check_types(value, expected, path + ".")
+        elif not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
+            raise MthError(f"'{path}' debe ser de tipo {expected.__name__}.")
+
+
+def _check_semantics(data: dict[str, Any]) -> None:
+    if data["version"] != 1:
+        raise MthError(f"Versión de configuración no soportada: {data['version']}.")
+    if data["commands"]["test"] is None:
+        raise MthError("'commands.test' es obligatorio.",
+                       hint='Usa test = "" de forma explícita si el repo aún no tiene tests.')
+    if not data["ids"]:
+        raise MthError("'[ids]' no puede estar vacío: la trazabilidad necesita al menos un tipo de ID.")
+    for kind, spec in data["ids"].items():
+        if not isinstance(spec, dict) or set(spec) != {"pattern", "defined_in"}:
+            raise MthError(f"'ids.{kind}' debe tener exactamente 'pattern' y 'defined_in'.")
+        try:
+            re.compile(spec["pattern"])
+        except re.error as exc:
+            raise MthError(f"'ids.{kind}.pattern' no es una expresión regular válida: {exc}.") from exc
+        if not isinstance(spec["defined_in"], list) or not spec["defined_in"]:
+            raise MthError(f"'ids.{kind}.defined_in' debe ser una lista no vacía de globs.")
+    for key in ("spec_kind", "adr_kind"):
+        if data["trace"][key] not in data["ids"]:
+            raise MthError(f"'trace.{key}' = '{data['trace'][key]}' no está definido en [ids].")
+    for name, spec in data["branches"]["extra"].items():
+        if not _EXTRA_NAME.match(name) or name in _RESERVED_KINDS:
+            raise MthError(f"Prefijo de rama extra inválido o reservado: '{name}'.")
+        if not isinstance(spec, dict) or spec.get("flow") not in ("feature", "hotfix"):
+            raise MthError(f"'branches.extra.{name}.flow' debe ser 'feature' o 'hotfix'.")
+    agents = data["review"]["agents"]
+    if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):
+        raise MthError("'review.agents' debe ser una lista de nombres únicos.")
+
+
+def load(root: Path) -> Config:
+    """Load and validate the repository configuration.
+
+    Raises:
+        MthError: Missing file, TOML syntax error or invalid content.
+    """
+    path = root / CONFIG_PATH
+    if not path.is_file():
+        raise MthError(f"El repositorio no ha adoptado la metodología (falta {CONFIG_PATH}).",
+                       hint="Usa la skill mth-init.")
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise MthError(f"{CONFIG_PATH} no es TOML válido: {exc}.") from exc
+    _check_types(raw, _SCHEMA, "")
+    data = _merge(DEFAULTS, raw)
+    _check_semantics(data)
+    return Config(root=root, data=data)

@@ -1,0 +1,8 @@
+{
+  "name": "methodology",
+  "version": "0.1.0",
+  "description": "Desarrollo autónomo dirigido por specs: principios, Git Flow sin reescritura de historia, trazabilidad y changelog por fragmentos.",
+  "author": {
+    "name": "Gorka"
+  }
+}

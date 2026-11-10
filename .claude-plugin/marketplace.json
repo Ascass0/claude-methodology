@@ -1,0 +1,13 @@
+{
+  "name": "claude-methodology",
+  "owner": { "name": "Gorka" },
+  "metadata": { "description": "Metodología de desarrollo autónomo dirigido por specs para Claude Code." },
+  "plugins": [
+    {
+      "name": "methodology",
+      "source": "./plugins/methodology",
+      "description": "Principios, flujo git, specs/ADR, changelog por fragmentos y trazabilidad con scripts deterministas.",
+      "version": "0.1.0"
+    }
+  ]
+}
