@@ -15,6 +15,9 @@ specs = "specs/features"
 adr = "specs/adr"
 changes = "changes"
 changelog = "CHANGELOG.md"
+# Fichero donde mth escribe su bloque de instrucciones para Claude.
+# En un fork, usa ".claude/CLAUDE.md" para no modificar el CLAUDE.md de upstream.
+claude_md = "CLAUDE.md"
 tests = ["tests/**", "test/**", "**/test_*.*", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]
 
 # Identificadores trazables. Se definen en un encabezado markdown que empieza
@@ -40,6 +43,9 @@ development = "development"
 [commits]
 # Tipos que deben referenciar una spec, un ADR o un issue en el trailer Refs:.
 require_refs = ["feat", "fix", "refactor", "perf"]
+# Refs cuya historia es código externo (por ejemplo, "refs/remotes/upstream/main" en un fork):
+# sus commits no se validan ni se listan en los merges.
+external_refs = []
 
 [changes]
 # Ramas de primer nivel que deben aportar fragmento de changelog.
@@ -65,8 +71,11 @@ links = true          # enlaces markdown relativos válidos y dentro del repo
 acceptance = true     # los AC de specs "implementada" deben tener test
 spec_kind = "SPEC"
 adr_kind = "ADR"
+include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
 exclude = []
 
 [release]
 github_release = true
 sign_tags = false
+# Prefijo de las etiquetas de versión. En un fork, uno propio ("fork-v") para no chocar con upstream.
+tag_prefix = "v"

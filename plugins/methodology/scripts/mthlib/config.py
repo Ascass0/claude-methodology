@@ -26,6 +26,7 @@ DEFAULTS: dict[str, Any] = {
         "adr": "specs/adr",
         "changes": "changes",
         "changelog": "CHANGELOG.md",
+        "claude_md": "CLAUDE.md",
         "tests": ["tests/**", "test/**", "**/test_*.*", "**/*_test.*",
                   "**/*.test.*", "**/*.spec.*"],
     },
@@ -34,14 +35,14 @@ DEFAULTS: dict[str, Any] = {
         "ADR": {"pattern": r"ADR-\d{4}", "defined_in": ["specs/adr/**/*.md"]},
     },
     "branches": {"main": "main", "development": "development", "extra": {}},
-    "commits": {"require_refs": ["feat", "fix", "refactor", "perf"]},
+    "commits": {"require_refs": ["feat", "fix", "refactor", "perf"], "external_refs": []},
     "changes": {"required_for": ["feat", "fix", "hotfix"]},
     "review": {"agents": [], "required_for": ["feat", "fix", "hotfix"]},
     "roles": {"coder": "", "documenter": "", "verifier": ""},
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
-              "adr_kind": "ADR", "exclude": []},
-    "release": {"github_release": True, "sign_tags": False},
+              "adr_kind": "ADR", "include": ["**"], "exclude": []},
+    "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v"},
 }
 
 # Expected type of every leaf key. Tables not listed here are rejected.
@@ -50,20 +51,21 @@ _SCHEMA: dict[str, Any] = {
     "remote": str,
     "commands": {"test": str, "precommit": str},
     "paths": {"docs": str, "specs": str, "adr": str, "changes": str,
-              "changelog": str, "tests": list},
+              "changelog": str, "claude_md": str, "tests": list},
     "ids": dict,
     "branches": {"main": str, "development": str, "extra": dict},
-    "commits": {"require_refs": list},
+    "commits": {"require_refs": list, "external_refs": list},
     "changes": {"required_for": list},
     "review": {"agents": list, "required_for": list},
     "roles": {"coder": str, "documenter": str, "verifier": str},
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
-              "adr_kind": str, "exclude": list},
-    "release": {"github_release": bool, "sign_tags": bool},
+              "adr_kind": str, "include": list, "exclude": list},
+    "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str},
 }
 
 _EXTRA_NAME = re.compile(r"^[a-z]+$")
+_TAG_PREFIX = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 _RESERVED_KINDS = {"feat", "fix", "chore", "hotfix", "release"}
 
 
@@ -92,6 +94,10 @@ class Config:
     @property
     def test_command(self) -> str:
         return self.data["commands"]["test"]
+
+    @property
+    def tag_prefix(self) -> str:
+        return self.data["release"]["tag_prefix"]
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -145,9 +151,27 @@ def _check_semantics(data: dict[str, Any]) -> None:
             raise MthError(f"Prefijo de rama extra inválido o reservado: '{name}'.")
         if not isinstance(spec, dict) or spec.get("flow") not in ("feature", "hotfix"):
             raise MthError(f"'branches.extra.{name}.flow' debe ser 'feature' o 'hotfix'.")
+    if not _TAG_PREFIX.match(data["release"]["tag_prefix"]):
+        raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):
         raise MthError("'review.agents' debe ser una lista de nombres únicos.")
+
+
+def parse(root: Path, text: str, source: str = str(CONFIG_PATH)) -> Config:
+    """Validate configuration text without touching the repository.
+
+    Raises:
+        MthError: TOML syntax error or invalid content.
+    """
+    try:
+        raw = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise MthError(f"{source} no es TOML válido: {exc}.") from exc
+    _check_types(raw, _SCHEMA, "")
+    data = _merge(DEFAULTS, raw)
+    _check_semantics(data)
+    return Config(root=root, data=data)
 
 
 def load(root: Path) -> Config:
@@ -160,11 +184,4 @@ def load(root: Path) -> Config:
     if not path.is_file():
         raise MthError(f"El repositorio no ha adoptado la metodología (falta {CONFIG_PATH}).",
                        hint="Usa la skill mth-init.")
-    try:
-        raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as exc:
-        raise MthError(f"{CONFIG_PATH} no es TOML válido: {exc}.") from exc
-    _check_types(raw, _SCHEMA, "")
-    data = _merge(DEFAULTS, raw)
-    _check_semantics(data)
-    return Config(root=root, data=data)
+    return parse(root, path.read_text(encoding="utf-8"))

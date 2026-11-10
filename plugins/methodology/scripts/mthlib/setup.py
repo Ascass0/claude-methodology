@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from . import changelog, commits
-from .config import CONFIG_PATH, load
+from .config import CONFIG_PATH, load, parse
 from .errors import MthError
 from .gh import GitHub
 from .git import Git
@@ -62,8 +62,9 @@ def _claude_block(paths: dict) -> str:
 
 
 def upsert_claude_md(root: Path, paths: dict) -> None:
-    """Insert or refresh the methodology block in CLAUDE.md (other content untouched)."""
-    path = root / "CLAUDE.md"
+    """Insert or refresh the methodology block in ``paths.claude_md`` (other content untouched)."""
+    path = root / paths["claude_md"]
+    path.parent.mkdir(parents=True, exist_ok=True)
     block = _claude_block(paths)
     current = path.read_text(encoding="utf-8") if path.exists() else ""
     if BLOCK_START in current and BLOCK_END in current:
@@ -76,6 +77,7 @@ def upsert_claude_md(root: Path, paths: dict) -> None:
 
 
 def _ensure_changelog(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text((TEMPLATES / "CHANGELOG.md").read_text(encoding="utf-8"), encoding="utf-8")
         return
@@ -99,11 +101,20 @@ def _merge_settings(root: Path, marketplace_repo: str) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def init(start: Path, marketplace_repo: str | None, github: bool) -> None:
+def init(start: Path, marketplace_repo: str | None, github: bool, config_file: str | None = None) -> None:
     """Adopt the methodology on a dedicated branch and commit the scaffolding.
 
     Creates ``development`` from ``main`` when missing, then ``chore/adopt-methodology``
     with config, folders, changelog, CLAUDE.md block and plugin settings.
+
+    Args:
+        start: Any directory inside the repository.
+        marketplace_repo: ``owner/repo`` of the marketplace to declare in settings.
+        github: Apply merge settings and ruleset on GitHub.
+        config_file: Prepared configuration (outside the repo) used instead of the template.
+
+    Raises:
+        MthError: Dirty tree, missing remote/main, already adopted or invalid configuration.
     """
     git = Git.discover(start)
     root = git.root
@@ -114,22 +125,31 @@ def init(start: Path, marketplace_repo: str | None, github: bool) -> None:
     main = "main" if git.remote_has("main") else "master"
     if (root / CONFIG_PATH).exists():
         raise MthError("El repo ya tiene configuración de la metodología.", hint="Usa `mth doctor`.")
+    if config_file:
+        source = Path(config_file).expanduser()
+        if not source.is_file():
+            raise MthError(f"No existe el fichero de configuración {source}.")
+        config = source.read_text(encoding="utf-8")
+    else:
+        config = (TEMPLATES / "methodology.toml").read_text(encoding="utf-8").replace('main = "main"', f'main = "{main}"')
+        if not (root / ".github" / "workflows").is_dir():
+            config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
+    cfg = parse(root, config, config_file or "plantilla")  # validate before any mutation
+    for ref in cfg["commits"]["external_refs"]:
+        if not git.ok("rev-parse", "--verify", "--quiet", ref):
+            raise MthError(f"No existe la referencia externa {ref}.", hint="Trae el remoto externo (git fetch upstream).")
 
-    if not git.remote_has("development"):
-        git.out("branch", "development", git.remote_ref(main))
-        git.push("development")
-        say("· Rama development creada desde " + main)
-    git.checkout_synced("development")
+    if not git.remote_has(cfg.development):
+        git.out("branch", cfg.development, git.remote_ref(cfg.main))
+        git.push(cfg.development)
+        say(f"· Rama {cfg.development} creada desde {cfg.main}")
+    git.checkout_synced(cfg.development)
     if git.remote_has(ADOPT_BRANCH) or git.local_has(ADOPT_BRANCH):
         raise MthError(f"La rama {ADOPT_BRANCH} ya existe.")
     git.out("checkout", "-b", ADOPT_BRANCH)
 
-    config = (TEMPLATES / "methodology.toml").read_text(encoding="utf-8").replace('main = "main"', f'main = "{main}"')
-    if not (root / ".github" / "workflows").is_dir():
-        config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
     (root / CONFIG_PATH).parent.mkdir(parents=True, exist_ok=True)
     (root / CONFIG_PATH).write_text(config, encoding="utf-8")
-    cfg = load(root)
     for key in ("docs", "specs", "adr", "changes"):
         folder = root / cfg["paths"][key]
         folder.mkdir(parents=True, exist_ok=True)
@@ -228,9 +248,11 @@ def doctor(start: Path) -> int:
     log_path = git.root / cfg["paths"]["changelog"]
     report(log_path.is_file() and changelog.MARKER in log_path.read_text(encoding="utf-8"),
            f"{cfg['paths']['changelog']} con marcador de versiones")
-    claude_md = git.root / "CLAUDE.md"
+    claude_md = git.root / cfg["paths"]["claude_md"]
     report(claude_md.is_file() and BLOCK_START in claude_md.read_text(encoding="utf-8"),
-           "Bloque de la metodología en CLAUDE.md")
+           f"Bloque de la metodología en {cfg['paths']['claude_md']}")
+    for ref in cfg["commits"]["external_refs"]:
+        report(git.ok("rev-parse", "--verify", "--quiet", ref), f"Referencia externa {ref}")
     agents_dir = git.root / ".claude" / "agents"
     for agent in cfg["review"]["agents"]:
         report((agents_dir / f"{agent}.md").is_file(), f"Revisor {agent} (.claude/agents/{agent}.md)")

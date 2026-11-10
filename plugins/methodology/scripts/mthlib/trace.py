@@ -93,7 +93,8 @@ class Tracer:
     def __init__(self, cfg: Config, files: list[str]) -> None:
         self.cfg = cfg
         self.root = cfg.root
-        self.files = [f for f in files if not globs.match_any(f, cfg["trace"]["exclude"])]
+        self.files = [f for f in files if globs.match_any(f, cfg["trace"]["include"])
+                      and not globs.match_any(f, cfg["trace"]["exclude"])]
         self.registry = IdRegistry(cfg, files)
         self._anchor_cache: dict[str, set[str]] = {}
 
