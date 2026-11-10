@@ -17,7 +17,8 @@ description: Adopta claude-methodology en un repositorio o diagnostica su adopci
 3. Ajusta `.claude/methodology.toml` al repo, en un commit `chore(methodology)`:
    - `commands.test` (y `precommit` si hay lint rápido).
    - `[ids]` si el repo ya tiene su propio esquema (por ejemplo `F-\d{3}` definido en `docs/02-*.md`).
-   - `review.agents`: los agentes revisores existentes en `.claude/agents/`, en orden de precedencia.
+   - `review.agents`: `verificador` (incluido en el plugin) y los revisores del repo en `.claude/agents/`, en orden de precedencia. Los revisores específicos de un área se acotan con `[review.paths]` para que solo se ejecuten cuando el diff la toca.
+   - `roles.documenter = "documentador"` (incluido en el plugin).
    - `[roles]` y `[branches.extra]` si aplican.
    - `ci.required = true` en cuanto el repo tenga CI.
 4. `mth doctor` sin ✗.

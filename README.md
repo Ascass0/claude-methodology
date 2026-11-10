@@ -19,6 +19,7 @@ claude-methodology/
 │   ├── hooks/hooks.json              # SessionStart + PreToolUse(Bash)
 │   ├── scripts/mth.py, mthlib/       # CLI determinista (Python ≥ 3.11, sin dependencias)
 │   ├── skills/mth-*/SKILL.md         # develop, init, spec, branch, commit, review, integrate, release, trace
+│   ├── agents/                       # agentes compartidos: verificador, documentador
 │   └── templates/                    # config, spec, ADR, CHANGELOG, bloque de CLAUDE.md
 └── tests/                            # tests unitarios y de extremo a extremo (gh simulado)
 ```
@@ -96,6 +97,15 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | `main ⊆ development` | El merge de vuelta integra `main` en `development` tras cada versión |
 | Trazabilidad de las operaciones | `.git/mth/trace.jsonl` (eventos JSON con ID de ejecución) |
 | Diseño, excepciones, parsimonia, docs en código | Principios + revisores del repo (criterio) |
+
+## Agentes
+
+El plugin incluye dos agentes compartidos por todos los repos:
+
+- **`verificador`**: primer revisor de cada rama. Comprueba que cada criterio y cada modo de fallo de la spec están implementados y cubiertos por un test que de verdad lo comprueba, ejecuta los tests, confirma que un fix trae su test de regresión y detecta afirmaciones falsas en commits, changelog y docs.
+- **`documentador`**: actualiza docs, fragmento de changelog y los registros documentales que exija el repo, en español y sin duplicar fuentes de verdad.
+
+Cada repo añade en `.claude/agents/` sus revisores específicos y los declara en `review.agents` (en orden de precedencia). Con `[review.paths]`, un revisor de un área solo se exige cuando el diff la toca, lo que mantiene acotado el coste de cada integración. En Claude Code, los agentes de plugin pueden aparecer con el prefijo `methodology:`.
 
 ## Autonomía y permisos
 

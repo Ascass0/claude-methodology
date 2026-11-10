@@ -9,7 +9,7 @@ from pathlib import Path
 from . import __version__, branches, changelog, commits, guard, review, session, setup
 from .config import load
 from .errors import MthError
-from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, start, sync
+from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
 from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say
@@ -99,11 +99,18 @@ def _cmd_review(args: argparse.Namespace) -> int:
         ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, blocking=args.blocking)
         say(f"✓ Revisión de {args.agent} registrada para {sha[:8]} ({args.blocking} bloqueantes)")
         return 0
+    info = branches.parse(branch, ctx.cfg)
+    needed = required_reviewers(ctx, info) if info else []
     found = review.results(ctx.git.git_dir(), branch, sha)
-    for agent in agents:
+    if not needed:
+        say("No se requiere revisión para esta rama (tipo, rama hija o ningún revisor aplica).")
+    for agent in needed:
         r = found.get(agent)
         print(f"{'✓' if r and not r['blocking'] else '✗'} {agent}: "
               f"{'pendiente' if not r else str(r['blocking']) + ' bloqueantes'}")
+    skipped = [a for a in agents if a not in needed]
+    if needed and skipped:
+        say(f"No aplican a estos cambios: {', '.join(skipped)}")
     return 0
 
 

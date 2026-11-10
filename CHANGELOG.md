@@ -6,6 +6,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.3.0] - 2026-11-10
+
+### Añadido
+- Agentes compartidos en el plugin: `verificador` (cumplimiento real de la spec, tests válidos, regresión y afirmaciones falsas) y `documentador` (docs, fragmento y registros documentales del repo).
+- Revisores condicionales por rutas (`[review.paths]`, globs con negación `!`): solo se exigen si el diff toca su área. `mth review status` muestra los obligatorios de la rama.
+- `mth doctor` reconoce los agentes del plugin además de los del repo.
+
+### Cambiado
+- Todas las llamadas a `gh` indican el repositorio de `origin` (`--repo`): nunca se elige entre `origin` y `upstream` por defecto.
+- La plantilla declara `verificador` como primer revisor y los roles `documenter` y `verifier`.
+
 ## [0.2.1] - 2026-11-10
 
 ### Corregido

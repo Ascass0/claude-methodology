@@ -35,12 +35,12 @@ Con los principios activos: Design for Failure, fail-safe/fail-fast, parsimonia,
 
 ## 5. Cierra la rama
 
-1. Completa el fragmento `changes/<tipo>-<slug>.md` (en español, orientado al usuario).
-2. Feature: pon la spec en `implementada`.
+1. **Documentación:** delega en el agente de `roles.documenter` (por defecto `documentador`, incluido en el plugin) con la rama, el comando del diff y las specs afectadas. Actualiza docs, fragmento de changelog y los registros documentales que exija el repo. Revisa sus cambios y haz el commit `docs`.
+2. Feature: pon la spec en `implementada` solo si todos sus criterios están implementados y probados.
 3. `mth trace` sin hallazgos → skill `mth-trace`.
 4. `mth sync` para traer la rama destino.
-5. Revisión → skill `mth-review` (sobre el HEAD final).
-6. Integración → skill `mth-integrate`.
+5. Revisión → skill `mth-review` (sobre el HEAD final; el `verificador` va primero).
+6. Integración → skill `mth-integrate`. Si la rama cambia `.claude/` (hooks, agentes, ajustes), es normal que el modo automático de Claude Code no te deje integrar cambios sobre tus propias salvaguardas: deja la rama lista y pide a la persona que ejecute `mth integrate`.
 
 ## 6. Versión → skill `mth-release`
 

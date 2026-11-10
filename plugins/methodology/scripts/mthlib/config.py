@@ -37,7 +37,7 @@ DEFAULTS: dict[str, Any] = {
     "branches": {"main": "main", "development": "development", "extra": {}},
     "commits": {"require_refs": ["feat", "fix", "refactor", "perf"], "external_refs": []},
     "changes": {"required_for": ["feat", "fix", "hotfix"]},
-    "review": {"agents": [], "required_for": ["feat", "fix", "hotfix"]},
+    "review": {"agents": [], "required_for": ["feat", "fix", "hotfix"], "paths": {}},
     "roles": {"coder": "", "documenter": "", "verifier": ""},
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
@@ -56,7 +56,7 @@ _SCHEMA: dict[str, Any] = {
     "branches": {"main": str, "development": str, "extra": dict},
     "commits": {"require_refs": list, "external_refs": list},
     "changes": {"required_for": list},
-    "review": {"agents": list, "required_for": list},
+    "review": {"agents": list, "required_for": list, "paths": dict},
     "roles": {"coder": str, "documenter": str, "verifier": str},
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
@@ -156,6 +156,11 @@ def _check_semantics(data: dict[str, Any]) -> None:
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):
         raise MthError("'review.agents' debe ser una lista de nombres únicos.")
+    for agent, patterns in data["review"]["paths"].items():
+        if agent not in agents:
+            raise MthError(f"'review.paths.{agent}' no corresponde a ningún agente de review.agents.")
+        if not isinstance(patterns, list) or not patterns or not all(isinstance(p, str) and p for p in patterns):
+            raise MthError(f"'review.paths.{agent}' debe ser una lista no vacía de globs.")
 
 
 def parse(root: Path, text: str, source: str = str(CONFIG_PATH)) -> Config:
