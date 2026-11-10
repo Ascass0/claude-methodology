@@ -25,7 +25,7 @@ claude-methodology/
 
 ## Requisitos
 
-- Python ≥ 3.11, git y [GitHub CLI](https://cli.github.com/) autenticado (`gh auth login`).
+- Python ≥ 3.11 instalado (no hace falta que sea el `python3` activo: el lanzador `scripts/mth` busca uno válido aunque pyenv o un venv apunten a otra versión; `MTH_PYTHON` lo fija), git y [GitHub CLI](https://cli.github.com/) autenticado (`gh auth login`).
 - Un repositorio en GitHub con `main` y al menos un commit.
 
 ## Instalación

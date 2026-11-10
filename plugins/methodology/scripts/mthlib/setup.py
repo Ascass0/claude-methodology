@@ -15,7 +15,7 @@ from .git import Git
 from .log import say, warn
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
-MTH = Path(__file__).resolve().parents[1] / "mth.py"
+MTH = Path(__file__).resolve().parents[1] / "mth"  # launcher: picks a Python >= 3.11
 HOOK_MARK = "# managed-by: claude-methodology"
 BLOCK_START = "<!-- claude-methodology:start -->"
 BLOCK_END = "<!-- claude-methodology:end -->"
@@ -31,7 +31,7 @@ def hook_script() -> str:
             f"if [ ! -f {mth} ]; then\n"
             "  echo '✗ claude-methodology no encontrado: abre una sesión de Claude Code o ejecuta mth doctor' >&2\n"
             "  exit 1\nfi\n"
-            f'exec python3 {mth} check-msg "$1"\n')
+            f'exec sh {mth} check-msg "$1"\n')
 
 
 def install_hook(git: Git) -> str:
