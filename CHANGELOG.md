@@ -6,6 +6,11 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.2.1] - 2026-11-10
+
+### Corregido
+- Los hooks y el hook `commit-msg` usan un lanzador que busca un Python >= 3.11 en lugar de depender de `python3`: con pyenv o un venv en una versión anterior, el guard quedaba desactivado sin avisar y el contexto de sesión no se inyectaba. `MTH_PYTHON` permite fijar el intérprete.
+
 ## [0.2.0] - 2026-11-10
 
 ### Añadido

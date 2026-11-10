@@ -1,0 +1,15 @@
+#!/bin/sh
+# claude-methodology launcher: runs mth.py with the first Python >= 3.11 available,
+# independent of pyenv/venv shims that may resolve `python3` to an older version.
+# Override with MTH_PYTHON=/path/to/python.
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+for py in ${MTH_PYTHON:-} python3.14 python3.13 python3.12 python3.11 python3 \
+          /usr/bin/python3.14 /usr/bin/python3.13 /usr/bin/python3.12 /usr/bin/python3.11 \
+          /usr/local/bin/python3.13 /usr/local/bin/python3.12 /usr/local/bin/python3.11; do
+  if command -v "$py" >/dev/null 2>&1 &&
+     "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+    exec "$py" "$DIR/mth.py" "$@"
+  fi
+done
+echo "✗ claude-methodology necesita Python >= 3.11 y no lo encuentra (define MTH_PYTHON)." >&2
+exit 1
