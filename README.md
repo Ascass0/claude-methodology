@@ -105,7 +105,9 @@ El plugin incluye dos agentes compartidos por todos los repos:
 - **`verificador`**: primer revisor de cada rama. Comprueba que cada criterio y cada modo de fallo de la spec están implementados y cubiertos por un test que de verdad lo comprueba, ejecuta los tests, confirma que un fix trae su test de regresión y detecta afirmaciones falsas en commits, changelog y docs.
 - **`documentador`**: actualiza docs, fragmento de changelog y los registros documentales que exija el repo, en español y sin duplicar fuentes de verdad.
 
-Cada repo añade en `.claude/agents/` sus revisores específicos y los declara en `review.agents` (en orden de precedencia). Con `[review.paths]`, un revisor de un área solo se exige cuando el diff la toca, lo que mantiene acotado el coste de cada integración. En Claude Code, los agentes de plugin pueden aparecer con el prefijo `methodology:`.
+Cada repo añade en `.claude/agents/` sus **agentes de implementación** (`dev-*`), especializados por área, y sus revisores específicos. La sesión principal orquesta: divide la spec en tareas con ficheros disjuntos, entrega a cada `dev-*` un encargo autocontenido y recibe un manifiesto; los commits los hace siempre la sesión principal (skill `mth-develop`, paso 4).
+
+Los revisores del repo se declaran en `review.agents` (en orden de precedencia). Con `[review.paths]`, un revisor de un área solo se exige cuando el diff la toca, lo que mantiene acotado el coste de cada integración. En Claude Code, los agentes de plugin pueden aparecer con el prefijo `methodology:`.
 
 ## Autonomía y permisos
 

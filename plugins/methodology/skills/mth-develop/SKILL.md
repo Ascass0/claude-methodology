@@ -25,9 +25,26 @@ description: Ciclo completo de desarrollo autónomo dirigido por specs de claude
 
 Si la spec no existe, escríbela en la propia rama como primer commit: contexto, objetivo, fuera de alcance, comportamiento, **modos de fallo** y **criterios de aceptación verificables**. Pásala a `aprobada` cuando sea coherente con los principios y los ADR vigentes. Toda decisión estructural va en un ADR aceptado antes de implementarla. `mth integrate` rechaza una feature cuyo fragmento no referencie su spec.
 
-## 4. Implementa
+## 4. Implementa (orquestas, los agentes `dev-*` implementan)
 
-Con los principios activos: Design for Failure, fail-safe/fail-fast, parsimonia, excepciones solo donde se actúa, trazas con ID de correlación, docstrings mínimos, referencias `ADR-NNNN` en decisiones no obvias. Delega en los agentes de rol del repo si `[roles]` los declara.
+Tú mantienes la spec, el plan y las decisiones. La implementación especializada la delegas en los agentes `dev-*` del repo (`.claude/agents/`) cuyo ámbito cubra la tarea; su `description` dice cuál. Si ninguno encaja, implementas tú.
+
+1. **Plan:** divide la spec en tareas con ficheros **disjuntos**. Solo se lanzan en paralelo tareas que no tocan los mismos ficheros.
+2. **Encargo** a cada agente, autocontenido (no ve esta conversación):
+
+   ```
+   Encargo para <dev-agente>
+   - Rama: <rama> (base <destino>)
+   - Spec: <ID y sección>. Criterios de esta tarea: <AC-NN / afirmaciones>
+   - Modos de fallo a cubrir: <de la spec>
+   - Alcance: puede tocar <ficheros/módulos>; fuera de alcance: <...>
+   - Restricciones: <ADR, flags, convenciones>. Principios: <ruta de PRINCIPLES.md>
+   - Hecho cuando: <tests concretos pasan>
+   ```
+3. **Manifiesto de vuelta:** cambios, tests y resultado, criterios cubiertos, decisiones, desvíos y preguntas. Revisa el diff real (`git diff`), no solo el manifiesto. Si hay PREGUNTAS o DESVÍOS, resuélvelos (corrigiendo la spec si procede) antes de seguir.
+4. **Commits temáticos** tú (skill `mth-commit`): los agentes nunca hacen commits ni tocan git.
+
+Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, parsimonia, excepciones solo donde se actúa, trazas con ID de correlación, docstrings mínimos, referencias `ADR-NNNN` en decisiones no obvias.
 
 - Tests: uno por AC (con `verifies: SPEC-NNNN/AC-NN`), uno por modo de fallo, uno de regresión por bug. Ninguno más.
 - Docs actualizadas en la misma rama.
