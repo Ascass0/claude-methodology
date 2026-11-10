@@ -183,6 +183,26 @@ class GuardTests(unittest.TestCase):
             self.assertFalse(self.blocked(cmd), cmd)
 
 
+class LauncherTests(unittest.TestCase):
+    """The launcher must skip shims that resolve to Python < 3.11 (pyenv, venvs)."""
+
+    def test_skips_old_python_shims(self):
+        tmp = Path(tempfile.mkdtemp())
+        for name in ("python3", "python3.12", "python3.13", "python3.14"):
+            shim = tmp / name
+            shim.write_text("#!/bin/sh\nexit 1\n")  # behaves like a pyenv shim for a missing version
+            shim.chmod(0o755)
+        real = shutil.which("python3.12") or shutil.which("python3.11") or sys.executable
+        (tmp / "python3.11").write_text(f"#!/bin/sh\nexec {real} \"$@\"\n")
+        (tmp / "python3.11").chmod(0o755)
+        env = {**os.environ, "PATH": f"{tmp}:/usr/bin:/bin"}
+        out = subprocess.run(["sh", str(PLUGIN / "scripts" / "mth"), "--version"], env=env,
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertRegex(out.stdout.strip(), r"^\d+\.\d+\.\d+$")
+        shutil.rmtree(tmp)
+
+
 @unittest.skipUnless(shutil.which("git"), "git required")
 class EndToEndTests(unittest.TestCase):
     """main → development → feat (+ child) → release → hotfix, against a local remote."""

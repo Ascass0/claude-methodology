@@ -12,7 +12,7 @@ from .git import Git
 from .setup import install_hook
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
-MTH = PLUGIN_ROOT / "scripts" / "mth.py"
+MTH = PLUGIN_ROOT / "scripts" / "mth"  # launcher: picks a Python >= 3.11
 
 
 def _state(cwd: Path) -> list[str]:
@@ -47,7 +47,7 @@ def main() -> int:
     """Print context for Claude. Never fails: a broken hook must not block the session."""
     try:
         core = (PLUGIN_ROOT / "context" / "core.md").read_text(encoding="utf-8")
-        cmd = f'python3 "{MTH}"'
+        cmd = f'sh "{MTH}"'
         env_file = os.environ.get("CLAUDE_ENV_FILE")
         if env_file:
             with open(env_file, "a", encoding="utf-8") as fh:
