@@ -6,6 +6,16 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.2.0] - 2026-11-10
+
+### Añadido
+- Soporte de forks: `release.tag_prefix`, `commits.external_refs`, `trace.include` y `paths.claude_md`.
+- `mth init --config` adopta la metodología con una configuración preparada, validada antes de tocar el repo.
+- Ramas de primer nivel `security` con sección y bump propios en el fragmento.
+
+### Cambiado
+- Los mensajes de merge listan como máximo 50 commits propios.
+
 ## [0.1.0] - 2026-11-10
 
 ### Añadido

@@ -24,6 +24,10 @@ description: Adopta claude-methodology en un repositorio o diagnostica su adopci
 5. `mth trace`: corrige los hallazgos del contenido previo (enlaces fuera del repo, IDs duplicados) o exclúyelos de forma explícita en `trace.exclude` con su motivo en el commit.
 6. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
 
+## Fork de otro proyecto
+
+Si el repo contiene la historia de un upstream (remoto `upstream`, tags y ficheros ajenos), no uses la plantilla: escribe la configuración en un fichero **fuera del repo** y adopta con `mth init --config <fichero>`. Claves imprescindibles: `paths.*` bajo un directorio propio, `paths.claude_md = ".claude/CLAUDE.md"`, `commits.external_refs = ["refs/remotes/upstream/main"]`, `release.tag_prefix` propio y `trace.include` limitado a lo propio. Las sincronizaciones con upstream se hacen por merge en una rama `sync/`, nunca por cherry-pick: un cherry-pick crea commits nuevos que sí se validarían como propios.
+
 ## Diagnóstico
 
 `mth doctor` lista cada comprobación con ✓, ✗ (bloquea) o ⚠ (aviso). Corrige los ✗ en una rama `chore/`.

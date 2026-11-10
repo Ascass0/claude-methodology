@@ -315,6 +315,82 @@ class EndToEndTests(unittest.TestCase):
         trace_log = (self.work / ".git/mth/trace.jsonl").read_text().splitlines()
         self.assertTrue(any(json.loads(line)["event"] == "release" for line in trace_log))
 
+    def test_fork_mode(self):
+        """Upstream history, upstream tags and upstream files must not leak into the flow."""
+        self.git("checkout", "-q", "-b", "up")
+        (self.work / "core.py").write_text("x = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "Upstream change one")
+        self.git("tag", "v9.9.9")
+        self.git("update-ref", "refs/remotes/upstream/main", "up")
+        self.git("checkout", "-q", "main")
+        _write(self.work / "fork/docs/02-cambios.md", "# 02 · Cambios\n\n## F-001 · Runner\n")
+        _write(self.work / "website/docs/x.md", "[roto](nada.md)\n")
+        _write(self.work / "CLAUDE.md", "# Upstream rules\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "fork docs")
+        self.git("push", "-q", "origin", "main")
+        cfg_file = self.tmp / "fork.toml"
+        cfg_file.write_text(textwrap.dedent("""
+            version = 1
+            [commands]
+            test = "true"
+            [paths]
+            docs = "fork/docs"
+            specs = "fork/docs"
+            adr = "fork/docs/adr"
+            changes = "fork/changes"
+            changelog = "fork/CHANGELOG.md"
+            claude_md = ".claude/CLAUDE.md"
+            [ids.F]
+            pattern = 'F-\\d{3}'
+            defined_in = ["fork/docs/02-*.md"]
+            [branches.extra.sync]
+            flow = "feature"
+            [commits]
+            external_refs = ["refs/remotes/upstream/main"]
+            [review]
+            required_for = []
+            [ci]
+            required = false
+            [trace]
+            acceptance = false
+            spec_kind = "F"
+            adr_kind = "F"
+            include = ["fork/**", ".claude/**"]
+            [release]
+            github_release = false
+            tag_prefix = "fork-v"
+            """))
+        self.mth("init", "--config", str(cfg_file))
+        self.assertEqual((self.work / "CLAUDE.md").read_text(), "# Upstream rules\n")
+        self.assertIn("claude-methodology:start", (self.work / ".claude/CLAUDE.md").read_text())
+        self.assertFalse((self.work / "CHANGELOG.md").exists())
+        self.mth("integrate", "--title", "chore(methodology): adopt claude-methodology", "--summary", "A.")
+
+        # Upstream sync: thousands of non-conventional commits must not block integration.
+        self.mth("branch", "sync", "upstream-1")
+        self.git("merge", "--no-ff", "up", "-m", "Merge upstream/main into sync/upstream-1")
+        out = self.mth("integrate", "--title", "chore(sync): merge upstream main", "--summary", "S.")
+        self.assertIn("historia externa", out)
+
+        self.mth("branch", "fix", "leak", "--spec", "F-001")
+        frag = self.work / "fork/changes/fix-leak.md"
+        frag.write_text(frag.read_text().replace("<describe el cambio para quien usa el proyecto>", "Fuga."))
+        (self.work / "fork/leak.txt").write_text("l")
+        self.git("add", "-A")
+        self.mth("commit", "--type", "fix", "--summary", "close leak", "--body", "Close.", "--refs", "F-001")
+        self.mth("integrate", "--title", "fix(runner): close leak", "--summary", "F.")
+
+        # Release ignores upstream tags and does not list upstream commits.
+        self.mth("release")
+        self.git("fetch", "-q", "--tags")
+        self.assertIn("fork-v0.0.1", self.git("tag", "--list"))
+        body = self.git("log", "-1", "--format=%B", "origin/main")
+        self.assertNotIn("Upstream change one", body)
+        self.assertIn("fix: close leak", body)
+        self.assertIn("✓ Trazabilidad OK", self.mth("trace"))  # website/ is outside trace.include
+
     def test_parent_blocked_by_open_child(self):
         self.mth("init")
         cfg_path = self.work / ".claude/methodology.toml"

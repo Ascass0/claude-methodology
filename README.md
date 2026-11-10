@@ -54,16 +54,26 @@ Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs,
 | Clave | Para qué |
 |---|---|
 | `commands.test` / `precommit` | Tests (gate de integración y release) y comprobación rápida antes de cada commit |
-| `paths.*` | Ubicación de docs, specs, ADR, fragmentos, changelog y tests |
+| `paths.*` | Ubicación de docs, specs, ADR, fragmentos, changelog, tests y del fichero donde mth escribe su bloque para Claude (`claude_md`) |
 | `[ids.<TIPO>]` | Esquema de IDs trazables: `pattern` y dónde se definen (`defined_in`). Ejemplo para el fork: `[ids.F] pattern = 'F-\d{3}'`, `defined_in = ["docs/02-*.md"]` |
 | `branches.extra` | Prefijos propios (`sync`, `security`, `purge`) con su flujo: `feature` o `hotfix` |
 | `commits.require_refs` | Tipos de commit que deben referenciar spec, ADR o issue |
+| `commits.external_refs` | Refs de historia externa (upstream) cuyos commits no se validan ni se listan |
 | `changes.required_for` | Ramas que aportan fragmento de changelog |
 | `review.agents` / `required_for` | Agentes revisores del repo (en orden de precedencia) y ramas que exigen revisión |
 | `roles.*` | Agentes del repo para coder, documentador y verificador |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
-| `trace.*` | Comprobaciones de trazabilidad activas y exclusiones justificadas |
-| `release.*` | Release de GitHub y firma de etiquetas |
+| `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
+| `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) |
+
+### Uso en un fork
+
+Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la configuración fuera del repo y adóptala con `mth init --config <fichero>`, de modo que nada se escriba en rutas de upstream:
+
+- `paths.*` bajo un directorio propio (por ejemplo, `fork/`) y `paths.claude_md = ".claude/CLAUDE.md"`.
+- `commits.external_refs = ["refs/remotes/upstream/main"]`: las sincronizaciones por merge no validan commits ajenos.
+- `release.tag_prefix` propio (por ejemplo, `"fork-v"`): las versiones no chocan con los tags de upstream.
+- `trace.include` limitado a lo propio: la documentación de upstream no se comprueba.
 
 ## De la regla al mecanismo
 

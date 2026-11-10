@@ -7,8 +7,6 @@ from pathlib import Path
 from .errors import MthError
 from .proc import run
 
-_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-
 
 class Git:
     """Git operations rooted at a working tree.
@@ -92,9 +90,15 @@ class Git:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return self.ok("merge-base", "--is-ancestor", ancestor, descendant)
 
-    def commits(self, rev_range: str) -> list[tuple[str, str]]:
-        """Non-merge commits in ``rev_range`` as ``(sha, message)``, oldest first."""
-        raw = self.out("log", "--reverse", "--no-merges", "--format=%H%x00%B%x1e", rev_range)
+    def commits(self, rev_range: str, exclude: list[str] | None = None) -> list[tuple[str, str]]:
+        """Non-merge commits in ``rev_range`` as ``(sha, message)``, oldest first.
+
+        Args:
+            rev_range: Revision range (``base..head``).
+            exclude: Refs whose history is left out (external code such as upstream).
+        """
+        raw = self.out("log", "--reverse", "--no-merges", "--format=%H%x00%B%x1e", rev_range,
+                       *[f"^{ref}" for ref in exclude or []])
         result = []
         for chunk in raw.split("\x1e"):
             chunk = chunk.strip("\n")
@@ -103,12 +107,19 @@ class Git:
                 result.append((sha.strip(), message.strip()))
         return result
 
-    def latest_version(self) -> tuple[int, int, int]:
-        """Highest ``vX.Y.Z`` tag, or ``(0, 0, 0)`` when none exists."""
+    def latest_version(self, prefix: str = "v") -> tuple[int, int, int]:
+        """Highest ``<prefix>X.Y.Z`` tag, or ``(0, 0, 0)`` when none exists.
+
+        Tags with another prefix (for example, those fetched from upstream) are ignored.
+        """
+        tag_re = re.compile(rf"^{re.escape(prefix)}(\d+)\.(\d+)\.(\d+)$")
         versions = [tuple(int(x) for x in m.groups())
-                    for t in self.out("tag", "--list", "v*").split()
-                    if (m := _TAG_RE.match(t))]
+                    for t in self.out("tag", "--list", f"{prefix}*").split()
+                    if (m := tag_re.match(t))]
         return max(versions, default=(0, 0, 0))
+
+    def count(self, rev_range: str) -> int:
+        return int(self.out("rev-list", "--count", rev_range) or 0)
 
     def tag_exists(self, tag: str) -> bool:
         return self.ok("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")

@@ -80,7 +80,7 @@ def _cmd_changes(args: argparse.Namespace) -> int:
     for e in errors:
         print(f"✗ {e}")
     if args.action == "preview" and fragments and not errors:
-        version = changelog.next_version(ctx.git.latest_version(), changelog.highest_bump(fragments))
+        version = changelog.next_version(ctx.git.latest_version(ctx.cfg.tag_prefix), changelog.highest_bump(fragments))
         print(changelog.render(version, fragments))
     say(f"{len(fragments)} fragmentos, {len(errors)} errores")
     return EXIT_ERROR if errors else 0
@@ -121,6 +121,7 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", help="adopta la metodología en el repo actual")
     s.add_argument("--marketplace-repo", help="owner/repo del marketplace claude-methodology")
     s.add_argument("--github", action="store_true", help="aplica ajustes de merge y ruleset en GitHub")
+    s.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
     sub.add_parser("doctor", help="comprueba la adopción")
     s = sub.add_parser("github", help="aplica ajustes de merge y ruleset en GitHub")
 
@@ -179,7 +180,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "session":
         return session.main()
     if c == "init":
-        setup.init(Path.cwd(), args.marketplace_repo, args.github)
+        setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config)
         return 0
     if c == "doctor":
         return EXIT_ERROR if setup.doctor(Path.cwd()) else 0
