@@ -213,7 +213,8 @@ feat|fix|chore/<slug> ──●──●──●  (desde development)
 
 ## 11. Autonomía
 
-- Se trabaja de forma autónoma: crear ramas, hacer commits, integrar, publicar versiones y lanzar skills NO requiere permiso. La supervisión, si un repositorio la necesita, se añade con un hook en ese repositorio.
+- Se trabaja de forma autónoma: crear ramas, hacer commits, integrar, publicar versiones y lanzar skills NO requiere permiso. Es el nivel `full` de `autonomy.level`, el valor por defecto.
+- Un repositorio que necesite supervisión elige otro nivel: `until-pr` (integrar y publicar piden confirmación a la persona) o `supervised` (además, cada rama nueva, commit y push). Una confirmación rechazada NO DEBE sortearse por otra vía. [hook: el guard pide la confirmación (ADR-0004 de claude-methodology)]
 - La autonomía se apoya en gates deterministas, no en la confianza: no se integra con tests en rojo, trazabilidad rota, revisiones pendientes o CI en rojo. [script]
 - Se DEBE detener el trabajo y avisar solo cuando:
   1. dos specs o principios se contradicen y la precedencia no lo resuelve;

@@ -1,18 +1,44 @@
-"""SessionStart hook: inject the core rules and the repository state into context."""
+"""SessionStart hook: inject the core rules and the repository state into context.
+
+A repository without ``.claude/methodology.toml`` gets only the adoption
+notice (SPEC-0004). The rules follow ``autonomy.level`` (SPEC-0007) and
+``language.docs`` (SPEC-0008).
+"""
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 
-from . import branches, lang
-from .config import load
+from . import branches
+from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
 from .setup import install_hook
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 MTH = PLUGIN_ROOT / "scripts" / "mth"  # launcher: picks a Python >= 3.11
+
+AUTONOMY = {
+    "full": ("Trabajas de forma **autónoma** sobre las specs del repositorio: no pides permiso para crear ramas, "
+             "hacer commits, integrar ni publicar versiones. Las skills `mth-*` se usan sin preguntar."),
+    "until-pr": ("Trabajas de forma **autónoma hasta el PR** (`autonomy.level = \"until-pr\"`): creas ramas y haces "
+                 "commits sin pedir permiso, pero integrar (`mth integrate`) y publicar (`mth release`, "
+                 "`mth hotfix finish`) piden confirmación a la persona. Si la rechaza, no lo reintentes por otra vía. "
+                 "Las skills `mth-*` se usan sin preguntar."),
+    "supervised": ("Trabajas **supervisado** (`autonomy.level = \"supervised\"`): cada rama nueva, commit, push, "
+                   "integración y publicación pide confirmación a la persona. Si la rechaza, no lo reintentes por "
+                   "otra vía. Las skills `mth-*` se usan sin preguntar."),
+}
+
+
+def rules(cfg: Config | None, cmd: str) -> str:
+    """Core rules for an adopted repo; ``cfg`` is None when its configuration is invalid (fail-safe)."""
+    core = (PLUGIN_ROOT / "context" / "core.md").read_text(encoding="utf-8")
+    autonomy = cfg["autonomy"]["level"] if cfg else "supervised"
+    language = cfg.vocab.name if cfg else "español"
+    return (core.replace("{{AUTONOMY}}", AUTONOMY[autonomy]).replace("{{DOCS_LANGUAGE}}", language)
+            .replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md")))
 
 
 def _state(cwd: Path) -> list[str]:
@@ -47,25 +73,31 @@ def _state(cwd: Path) -> list[str]:
     return lines
 
 
-def _docs_language(cwd: Path) -> str:
+def context(cwd: Path, cmd: str) -> str:
+    """Everything the hook prints for ``cwd``."""
     try:
-        return load(Git.discover(cwd).root).vocab.name
+        git = Git.discover(cwd)
     except MthError:
-        return lang.ES.name
+        return "[claude-methodology] Fuera de un repositorio git: la metodología no aplica."
+    if not (git.root / CONFIG_PATH).is_file():
+        notice = (PLUGIN_ROOT / "context" / "unadopted.md").read_text(encoding="utf-8")
+        return notice.replace("{{MTH}}", cmd)
+    try:
+        cfg: Config | None = load(git.root)
+    except MthError:
+        cfg = None
+    return rules(cfg, cmd) + "\n" + "\n".join(_state(cwd))
 
 
 def main() -> int:
     """Print context for Claude. Never fails: a broken hook must not block the session."""
     try:
-        core = (PLUGIN_ROOT / "context" / "core.md").read_text(encoding="utf-8")
         cmd = f'sh "{MTH}"'
         env_file = os.environ.get("CLAUDE_ENV_FILE")
         if env_file:
             with open(env_file, "a", encoding="utf-8") as fh:
                 fh.write(f"export MTH='{cmd}'\n")
-        print(core.replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md"))
-              .replace("{{DOCS_LANGUAGE}}", _docs_language(Path.cwd())))
-        print("\n".join(_state(Path.cwd())))
+        print(context(Path.cwd(), cmd))
     except Exception as exc:  # noqa: BLE001 — hook boundary.
         print(f"[claude-methodology] contexto no disponible: {exc}", file=sys.stderr)
     return 0

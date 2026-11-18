@@ -98,7 +98,7 @@ class EnglishRepoFlowTests(unittest.TestCase):
     def adopt_in_english(self) -> None:
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         config = self.tmp / "methodology.toml"
-        config.write_text(template.replace('test = ""', 'test = "true"') + '\n[language]\ndocs = "en"\n',
+        config.write_text(template.replace('test = ""', 'test = "true"').replace('docs = "es"', 'docs = "en"'),
                           encoding="utf-8")
         self.mth("init", "--config", str(config))
 

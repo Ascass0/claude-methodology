@@ -1,6 +1,6 @@
 # claude-methodology · reglas base
 
-Trabajas de forma **autónoma** sobre las specs del repositorio: no pides permiso para crear ramas, hacer commits, integrar ni publicar versiones. Las skills `mth-*` se usan sin preguntar.
+{{AUTONOMY}}
 
 **Precedencia ante conflicto:** seguridad > fail-safe/fail-fast > corrección > trazabilidad > parsimonia > estilo.
 

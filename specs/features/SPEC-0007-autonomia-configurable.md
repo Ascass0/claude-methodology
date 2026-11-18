@@ -1,6 +1,6 @@
 # SPEC-0007 · Autonomía configurable
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0004
 - Sustituye a: —
