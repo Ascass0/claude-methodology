@@ -1,6 +1,6 @@
 # SPEC-0002 · Niveles de modelo por tarea, escalado en el reintento y métricas
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0002
 - Sustituye a: —
