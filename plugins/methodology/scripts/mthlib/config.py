@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import versions
+from . import lang, versions
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -42,15 +42,20 @@ DEFAULTS: dict[str, Any] = {
     "roles": {"coder": "", "documenter": "", "verifier": ""},
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
-              "adr_kind": "ADR", "include": ["**"], "exclude": []},
+              "adr_kind": "ADR", "include": ["**"], "exclude": [], "legacy_base": ""},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
+    "language": {"docs": "es"},
+    "hooks": {"commit_msg": "own"},
+    "autonomy": {"level": "full"},
 }
 
 # Model aliases understood by Claude Code's Agent tool (ADR-0002).
 MODEL_ALIASES = ("haiku", "sonnet", "opus", "fable")
 MODEL_ROLES = ("task", "review", "documenter")
+HOOK_MODES = ("own", "replace", "chain")  # SPEC-0006
+AUTONOMY_LEVELS = ("full", "until-pr", "supervised")  # SPEC-0007
 
 # Expected type of every leaf key. Tables not listed here are rejected.
 _SCHEMA: dict[str, Any] = {
@@ -67,12 +72,16 @@ _SCHEMA: dict[str, Any] = {
     "roles": {"coder": str, "documenter": str, "verifier": str},
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
-              "adr_kind": str, "include": list, "exclude": list},
+              "adr_kind": str, "include": list, "exclude": list, "legacy_base": str},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
+    "language": {"docs": str},
+    "hooks": {"commit_msg": str},
+    "autonomy": {"level": str},
 }
 
 _EXTRA_NAME = re.compile(r"^[a-z]+$")
+_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _TAG_PREFIX = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
 _RESERVED_KINDS = {"feat", "fix", "chore", "hotfix", "release"}
 
@@ -106,6 +115,10 @@ class Config:
     @property
     def tag_prefix(self) -> str:
         return self.data["release"]["tag_prefix"]
+
+    @property
+    def vocab(self) -> lang.Vocabulary:
+        return lang.vocabulary(self.data["language"]["docs"])
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -162,6 +175,15 @@ def _check_semantics(data: dict[str, Any]) -> None:
     if not _TAG_PREFIX.match(data["release"]["tag_prefix"]):
         raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
     versions.validate(data["release"]["version_files"])
+    if data["hooks"]["commit_msg"] not in HOOK_MODES:
+        raise MthError(f"'hooks.commit_msg' = '{data['hooks']['commit_msg']}' debe ser uno de {', '.join(HOOK_MODES)}.")
+    if data["autonomy"]["level"] not in AUTONOMY_LEVELS:
+        raise MthError(f"'autonomy.level' = '{data['autonomy']['level']}' debe ser uno de {', '.join(AUTONOMY_LEVELS)}.")
+    legacy = data["trace"]["legacy_base"]
+    if legacy and not _COMMIT.match(legacy):
+        raise MthError(f"'trace.legacy_base' = '{legacy}' debe ser el hash completo de un commit (40 caracteres hexadecimales).")
+    if data["language"]["docs"] not in lang.LANGUAGES:
+        raise MthError(f"'language.docs' = '{data['language']['docs']}' no es un idioma admitido ({', '.join(lang.LANGUAGES)}).")
     _check_models(data["models"])
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):

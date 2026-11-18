@@ -86,6 +86,9 @@ spec_kind = "SPEC"
 adr_kind = "ADR"
 include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
 exclude = []
+# Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde entonces son avisos
+# (mth trace --legacy los lista); lo que se toca después cumple todas las reglas. "" = desactivado.
+legacy_base = ""
 
 [release]
 github_release = true
@@ -98,3 +101,18 @@ tag_prefix = "v"
 # [[release.version_files]]
 # path = "package.json"
 # pattern = '"version": "(\d+\.\d+\.\d+)"'
+
+[hooks]
+# Qué hacer con un hook commit-msg ajeno: "own" lo deja intacto (la validación de mensajes no se
+# activa), "replace" lo guarda como commit-msg.pre-mth e instala el de mth, "chain" lo guarda como
+# commit-msg.local y lo ejecuta antes de validar. Un gestor de hooks (husky…) se configura a mano.
+commit_msg = "own"
+
+[autonomy]
+# "full": Claude crea ramas, commits, integra y publica sin preguntar. "until-pr": integrar y
+# publicar piden confirmación. "supervised": además, cada rama nueva, commit y push.
+level = "full"
+
+[language]
+# Idioma de docs, specs, ADR, changelog y PR: "es" o "en". Código y commits, siempre en inglés.
+docs = "es"

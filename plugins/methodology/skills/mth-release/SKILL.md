@@ -5,7 +5,7 @@ description: Publica una versión (development → main con merge commit, tag Se
 
 # Versiones
 
-`mth` es el comando del contexto de sesión (`$MTH`). La publicación es autónoma con la CI en verde.
+`mth` es el comando del contexto de sesión (`$MTH`). La publicación es autónoma con la CI en verde (con `autonomy.level` `until-pr` o `supervised`, el guard pide antes la confirmación de la persona).
 
 ## Versión desde development
 

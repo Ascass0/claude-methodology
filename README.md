@@ -3,7 +3,7 @@
 Metodología de desarrollo autónomo dirigido por specs para Claude Code, distribuida como plugin. Aterriza los [principios](plugins/methodology/PRINCIPLES.md) en tres capas:
 
 1. **Scripts deterministas** (`mth`): todo lo mecánico (ramas, commits, integración, versiones, changelog, trazabilidad) lo hace código que valida y bloquea, no instrucciones en prosa.
-2. **Hooks**: al iniciar sesión se inyectan las reglas base y el estado del repo; antes de cada comando de shell, un guard bloquea lo que rompe el flujo o reescribe historia.
+2. **Hooks**: en un repo adoptado, al iniciar sesión se inyectan las reglas base y el estado del repo; antes de cada comando de shell, un guard bloquea lo que rompe el flujo o reescribe historia.
 3. **Skills** `mth-*`: guían a Claude por cada fase y llaman a los scripts. Claude las usa sin pedir permiso.
 
 El criterio (diseño, calidad, documentación) queda en los principios y en los agentes revisores de cada repositorio.
@@ -41,14 +41,23 @@ Fija la versión del plugin por repositorio: un cambio de metodología se adopta
 
 ## Adopción en un repositorio
 
-`mth init`:
+Mientras un repositorio no tiene `.claude/methodology.toml`, el plugin está inactivo: el hook de sesión solo avisa de que se puede adoptar y el guard no bloquea nada ([SPEC-0004](specs/features/SPEC-0004-adopcion-guiada.md), [ADR-0003](specs/adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md)).
+
+La adopción es una entrevista guiada, con la skill `mth-init`:
+
+1. `mth survey` inventaria el repo sin modificarlo (ramas, specs y ADR existentes, agentes, hooks, herramientas de release, CI).
+2. Opus presenta la metodología y pregunta solo lo que el inventario no resuelve.
+3. `mth init --answers <json>` convierte las respuestas en `.claude/methodology.toml` y en el ADR de adopción.
+4. Si no se quiere adoptar, `mth init --decline` desactiva el plugin en ese repo (`.claude/settings.local.json`, no versionado).
+
+`mth init` sin `--answers` sigue existiendo y adopta con la plantilla por defecto:
 
 - crea `development` desde `main` si no existe;
 - abre `chore/adopt-methodology` con `.claude/methodology.toml`, `docs/`, `specs/features/`, `specs/adr/`, `changes/`, `CHANGELOG.md` (con marcador de versiones) y un bloque gestionado en `CLAUDE.md` (el resto del fichero no se toca);
-- instala el hook `commit-msg`;
+- instala el hook `commit-msg` (según `hooks.commit_msg` si ya había uno);
 - con `--github`: solo merge commits en el repo y un ruleset que protege `main` y `development` (PR obligatorio, sin borrado ni force-push).
 
-Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs, revisores, roles, prefijos de rama propios), se comprueba con `mth doctor` y se integra con `mth integrate`.
+Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs, revisores, roles, prefijos de rama propios), se comprueba con `mth doctor` y se integra con `mth integrate`. En una adopción gradual, `trace.legacy_base` evita que el contenido anterior bloquee la trazabilidad; `mth trace --legacy` lo lista.
 
 ### Configuración
 
@@ -66,6 +75,10 @@ Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs,
 | `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
 | `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
+| `trace.legacy_base` | Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde él son avisos y `mth trace --legacy` los lista. Ver [SPEC-0005](specs/features/SPEC-0005-modo-legado-en-la-trazabilidad.md) |
+| `hooks.commit_msg` | Qué hacer con un hook `commit-msg` ajeno: `own` (lo deja), `replace` (instala el de mth) o `chain` (lo ejecuta antes de validar). Ver [SPEC-0006](specs/features/SPEC-0006-hooks-commit-msg-encadenados.md) |
+| `autonomy.level` | `full` (por defecto), `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, ramas, commits y push). Ver [SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md) y [ADR-0004](specs/adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) |
+| `language.docs` | Idioma de docs, specs, ADR, changelog y PR: `es` (por defecto) o `en`. Código y commits, siempre en inglés. Ver [SPEC-0008](specs/features/SPEC-0008-idioma-de-la-documentacion-configurable.md) |
 | `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
 
 ### Uso en un fork
@@ -103,6 +116,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Changelog sin conflictos | Fragmentos por rama; `mth release` los agrega (Keep a Changelog) |
 | SemVer y etiquetas | `mth release` calcula la versión del mayor `bump`; etiqueta anotada |
 | `main ⊆ development` | El merge de vuelta integra `main` en `development` tras cada versión |
+| Adopción sin conflictos silenciosos | `mth survey` + entrevista de `mth-init` + `mth init --answers`; sin adoptar, el plugin no actúa |
 | Trazabilidad de las operaciones | `.git/mth/trace.jsonl` (eventos JSON con ID de ejecución) |
 | Diseño, excepciones, parsimonia, docs en código | Principios + revisores del repo (criterio) |
 
@@ -121,9 +135,9 @@ Los revisores del repo se declaran en `review.agents` (en orden de precedencia).
 
 ## Autonomía y permisos
 
-La metodología no pide permiso para ramas, commits, integraciones ni versiones. El plugin **no** cambia el modo de permisos de Claude Code: eso se decide en cada repositorio. Para que no haya confirmaciones, configura `.claude/settings.json` del repo (por ejemplo, `defaultMode: acceptEdits` y reglas `allow` para `Bash(git:*)`, `Bash(gh:*)` y `Bash(python3:*)`; verifica la sintaxis en la [documentación de permisos](https://docs.claude.com/en/docs/claude-code/iam)) o ejecuta Claude dentro de un sandbox o devcontainer.
+Por defecto (`autonomy.level = "full"`), la metodología no pide permiso para ramas, commits, integraciones ni versiones. El plugin **no** cambia el modo de permisos de Claude Code: eso se decide en cada repositorio. Para que no haya confirmaciones, configura `.claude/settings.json` del repo (por ejemplo, `defaultMode: acceptEdits` y reglas `allow` para `Bash(git:*)`, `Bash(gh:*)` y `Bash(python3:*)`; verifica la sintaxis en la [documentación de permisos](https://docs.claude.com/en/docs/claude-code/iam)) o ejecuta Claude dentro de un sandbox o devcontainer.
 
-Si un repositorio necesita supervisión, añade un hook en ese repositorio (por ejemplo, uno `PreToolUse` que pida confirmación para `mth release`).
+Si un repositorio necesita supervisión, elige `until-pr` o `supervised` en `autonomy.level`: el guard pide la confirmación de la persona ([SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md)).
 
 ## Límites conocidos
 

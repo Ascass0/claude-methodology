@@ -5,7 +5,7 @@ description: Ciclo completo de desarrollo autónomo dirigido por specs de claude
 
 # Ciclo de desarrollo
 
-`mth` es el comando que aparece en el contexto de sesión (`sh …/scripts/mth`), también disponible como `$MTH`. Trabajas sin pedir permiso. Ejecuta `mth status` si no sabes en qué punto estás.
+`mth` es el comando que aparece en el contexto de sesión (`sh …/scripts/mth`), también disponible como `$MTH`. Trabajas sin pedir permiso, salvo los pasos que `autonomy.level` reserva a la persona: el guard te pide su confirmación y, si la rechaza, no lo reintentas por otra vía. Ejecuta `mth status` si no sabes en qué punto estás.
 
 ## 1. Clasifica el cambio (PRINCIPLES §12)
 

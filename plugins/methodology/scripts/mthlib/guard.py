@@ -4,6 +4,10 @@ It is a guardrail for the agent, not a security boundary: GitHub rulesets
 are the enforcement layer for shared branches. If the guard itself fails it
 lets the command through (deliberate fail-open: a broken guard must not
 paralyse the agent) and reports the failure on stderr.
+
+It does nothing in a repository that has not adopted the methodology
+(SPEC-0004). It also asks the person to confirm the steps that
+``autonomy.level`` reserves (SPEC-0007, ADR-0004).
 """
 from __future__ import annotations
 
@@ -11,32 +15,53 @@ import json
 import re
 import shlex
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-from .config import load
+from .config import AUTONOMY_LEVELS, CONFIG_PATH, load
 from .errors import MthError
 from .git import Git
 
 _SPLIT = re.compile(r"\|\||&&|;|\||\n")
 BLOCK = 2  # Claude Code: exit code 2 blocks the tool call and shows stderr to the model.
+_MTH_SPELLINGS = ("$MTH", "${MTH}")
+_MTH_NAMES = ("mth", "mth.py")
+
+# Commands each autonomy level asks the person to confirm (cumulative).
+_UNTIL_PR = {("mth", "integrate"), ("mth", "release"), ("mth", "hotfix finish")}
+CONFIRM: dict[str, set[tuple[str, str]]] = {
+    "full": set(),
+    "until-pr": _UNTIL_PR,
+    "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("git", "commit"), ("git", "push")},
+}
+assert set(CONFIRM) == set(AUTONOMY_LEVELS)
 
 
-def _protected(cwd: Path) -> tuple[set[str], str | None]:
+@dataclass(frozen=True)
+class Context:
+    adopted: bool
+    protected: set[str]
+    current: str | None
+    autonomy: str
+
+
+def _context(cwd: Path) -> Context:
     try:
         git = Git.discover(cwd)
     except MthError:
-        return set(), None
-    names = {"main", "development"}
+        return Context(False, set(), None, "full")
+    if not (git.root / CONFIG_PATH).is_file():
+        return Context(False, set(), None, "full")
     try:
         cfg = load(git.root)
-        names = {cfg.main, cfg.development}
-    except MthError:
-        pass
+        names, autonomy = {cfg.main, cfg.development}, cfg["autonomy"]["level"]
+    except MthError:  # invalid configuration: protect the defaults and confirm everything (fail-safe)
+        names, autonomy = {"main", "development"}, "supervised"
     try:
         current = git.current_branch()
     except MthError:
         current = None
-    return names, current
+    return Context(True, names, current, autonomy)
 
 
 def _tokens(segment: str) -> list[str]:
@@ -44,6 +69,37 @@ def _tokens(segment: str) -> list[str]:
         return shlex.split(segment)
     except ValueError:
         return segment.split()
+
+
+def _invocations(command: str):
+    """(program, subcommand) of each segment, with ``mth`` in any of its spellings."""
+    for segment in _SPLIT.split(command):
+        tok = _tokens(segment.strip())
+        while tok and "=" in tok[0] and not tok[0].startswith("-"):
+            tok = tok[1:]
+        for i, token in enumerate(tok):
+            if token in _MTH_SPELLINGS or token.rsplit("/", 1)[-1] in _MTH_NAMES:
+                rest = tok[i + 1:]
+                if rest[:2] == ["hotfix", "finish"]:
+                    yield "mth", "hotfix finish"
+                elif rest:
+                    yield "mth", rest[0]
+                break
+        else:
+            if tok and tok[0].rsplit("/", 1)[-1] == "git":
+                rest = tok[1:]
+                while rest and rest[0].startswith("-"):
+                    rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
+                if rest:
+                    yield "git", rest[0]
+
+
+def confirmation(command: str, autonomy: str) -> str | None:
+    """Why ``command`` needs the person's confirmation at this autonomy level, or None."""
+    for prog, sub in _invocations(command):
+        if (prog, sub) in CONFIRM[autonomy]:
+            return f"autonomy.level = {autonomy}: `{prog} {sub}` requiere confirmación"
+    return None
 
 
 def violation(command: str, protected: set[str], current: str | None) -> str | None:
@@ -95,14 +151,20 @@ def main(stdin: str) -> int:
     try:
         event = json.loads(stdin or "{}")
         command = event.get("tool_input", {}).get("command", "")
-        if not re.search(r"\b(git|gh)\b", command):
+        if not re.search(r"\b(git|gh|mth)\b", command, re.IGNORECASE):
             return 0
-        protected, current = _protected(Path(event.get("cwd") or "."))
-        reason = violation(command, protected, current)
+        ctx = _context(Path(event.get("cwd") or "."))
+        if not ctx.adopted:
+            return 0
+        reason = violation(command, ctx.protected, ctx.current)
+        ask = None if reason else confirmation(command, ctx.autonomy)
     except Exception as exc:  # noqa: BLE001 — boundary of a hook: fail-open, see module doc.
         print(f"[claude-methodology] guard no disponible: {exc}", file=sys.stderr)
         return 0
     if reason:
         print(f"[claude-methodology] Bloqueado: {reason}.", file=sys.stderr)
         return BLOCK
+    if ask:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
+                                                 "permissionDecisionReason": f"[claude-methodology] {ask}."}}))
     return 0

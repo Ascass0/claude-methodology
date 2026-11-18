@@ -7,14 +7,13 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, branches, changelog, commits, guard, plan, review, session, setup
+from . import __version__, branches, changelog, commits, flow, guard, plan, review, session, setup, survey
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
 from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
-from .trace import check as trace_check
 
 EXIT_ERROR = 1
 EXIT_BUG = 70
@@ -52,12 +51,16 @@ def _cmd_check_msg(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_trace(_: argparse.Namespace) -> int:
+def _cmd_trace(args: argparse.Namespace) -> int:
     ctx = _ctx("trace")
-    findings = trace_check(ctx.cfg, ctx.git.files())
+    findings, legacy = flow.run_trace(ctx)
     for f in findings:
         print(f"✗ {f}")
     say("✓ Trazabilidad OK" if not findings else f"{len(findings)} hallazgos")
+    if legacy:
+        say(flow.legacy_summary(ctx, legacy))
+        for f in legacy if args.legacy else []:
+            print(f"⚠ {f}")
     return EXIT_ERROR if findings else 0
 
 
@@ -72,17 +75,17 @@ def _cmd_changes(args: argparse.Namespace) -> int:
         if path.exists():
             raise MthError(f"{path.name} ya existe.")
         folder.mkdir(parents=True, exist_ok=True)
-        path.write_text(changelog.template(info.kind, _split_refs(args.refs)), encoding="utf-8")
+        path.write_text(changelog.template(info.kind, _split_refs(args.refs), ctx.cfg.vocab), encoding="utf-8")
         say(f"✓ {path.relative_to(ctx.root)}")
         return 0
     fragments = changelog.load_all(folder)
     registry = ctx.registry()
-    errors = [e for f in fragments for e in changelog.validate(f, registry, False)]
+    errors = [e for f in fragments for e in changelog.validate(f, registry, False, ctx.cfg.vocab)]
     for e in errors:
         print(f"✗ {e}")
     if args.action == "preview" and fragments and not errors:
         version = changelog.next_version(ctx.git.latest_version(ctx.cfg.tag_prefix), changelog.highest_bump(fragments))
-        print(changelog.render(version, fragments))
+        print(changelog.render(version, fragments, vocab=ctx.cfg.vocab))
     say(f"{len(fragments)} fragmentos, {len(errors)} errores")
     return EXIT_ERROR if errors else 0
 
@@ -135,10 +138,11 @@ _MODEL_ARG = re.compile(r"^(T-\d{2})=([a-z]+)$")
 def _plan_tasks(ctx: Ctx, spec_id: str) -> tuple[str, list[plan.Task]]:
     """Valid tasks of the spec's plan; prints every problem and fails when there are any."""
     rel, text = _spec_text(ctx, spec_id)
-    if not plan.has_plan(text):
-        raise MthError(f"{spec_id} no tiene sección '## {plan.SECTION}'.",
+    vocab = ctx.cfg.vocab
+    if not plan.has_plan(text, vocab):
+        raise MthError(f"{spec_id} no tiene sección '## {vocab.plan_section}'.",
                        hint="Añade el plan a la spec (skill mth-spec) antes de delegar.")
-    tasks, problems = plan.check(text, ctx.cfg["models"]["ladder"])
+    tasks, problems = plan.check(text, ctx.cfg["models"]["ladder"], vocab)
     for p in problems:
         print(f"✗ {rel}:{p.line}: {p.message}")
     if problems:
@@ -243,6 +247,21 @@ def _cmd_models(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_survey(args: argparse.Namespace) -> int:
+    result = survey.run(Git.discover(Path.cwd()))
+    if args.json:
+        print(result.to_json())
+        return 0
+    print(f"Perfil: {result.profile}")
+    for key, value in result.signals.items():
+        if value:
+            print(f"· {key}: {value}")
+    print("Preguntas: " + ", ".join(f"{q['id']} ({q['evidence']})" for q in result.questions))
+    for w in result.warnings:
+        warn(w)
+    return 0
+
+
 def _cmd_status(_: argparse.Namespace) -> int:
     for line in session._state(Path.cwd()):
         print(line)
@@ -257,7 +276,12 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", help="adopta la metodología en el repo actual")
     s.add_argument("--marketplace-repo", help="owner/repo del marketplace claude-methodology")
     s.add_argument("--github", action="store_true", help="aplica ajustes de merge y ruleset en GitHub")
-    s.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
+    mode.add_argument("--answers", help="respuestas de la entrevista de adopción (JSON, skill mth-init)")
+    mode.add_argument("--decline", action="store_true", help="desactiva el plugin en este repo (no versionado)")
+    s = sub.add_parser("survey", help="inventario del repo antes de adoptar (solo lectura)")
+    s.add_argument("--json", action="store_true", help="salida en JSON para la skill mth-init")
     sub.add_parser("doctor", help="comprueba la adopción")
     s = sub.add_parser("github", help="aplica ajustes de merge y ruleset en GitHub")
 
@@ -283,7 +307,8 @@ def _parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("check-msg", help="valida un mensaje (hook commit-msg)")
     s.add_argument("file")
-    sub.add_parser("trace", help="comprueba referencias, enlaces y criterios de aceptación")
+    s = sub.add_parser("trace", help="comprueba referencias, enlaces y criterios de aceptación")
+    s.add_argument("--legacy", action="store_true", help="lista también los hallazgos en contenido legado")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
@@ -327,8 +352,13 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "session":
         return session.main()
     if c == "init":
-        setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config)
+        if args.decline:
+            setup.decline(Path.cwd())
+        else:
+            setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config, args.answers)
         return 0
+    if c == "survey":
+        return _cmd_survey(args)
     if c == "doctor":
         return EXIT_ERROR if setup.doctor(Path.cwd()) else 0
     if c == "github":
