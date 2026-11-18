@@ -11,6 +11,7 @@ Trabajas de forma **autónoma** sobre las specs del repositorio: no pides permis
 - Sin spec no hay feature. Si la spec no existe, la escribes primero. Una decisión estructural sin ADR es un error.
 - Cada criterio de aceptación tiene al menos un test (`verifies: SPEC-NNNN/AC-NN`). Cada modo de fallo diseñado, también.
 - Excepciones: captura específica donde puedas actuar; captura genérica solo en los límites del sistema; nunca se traga un error; se encadena la causa.
+- Diseño sin antipatrones STUPID: dependencias explícitas en lugar de estado global, contratos estrechos, lógica separada de la E/S (tests unitarios sin infraestructura real), sin optimizar sin medir, nombres que revelan intención y cada conocimiento en un único sitio.
 - Código y commits en inglés; docs, specs, changelog y PR en español.
 - Los revisores del repo trabajan con contexto limpio (solo diff + specs + principios).
 
