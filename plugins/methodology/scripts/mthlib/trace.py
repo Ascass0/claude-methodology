@@ -23,9 +23,7 @@ _SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 _HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$")
 _HTML_ANCHOR = re.compile(r"<a\s+(?:id|name)=[\"']([^\"']+)[\"']", re.IGNORECASE)
 _MD_LINK_TEXT = re.compile(r"\[([^\]]*)\]\([^)]*\)")
-_STATUS = re.compile(r"^-\s*Estado:\s*([a-záéíóú]+)", re.IGNORECASE | re.MULTILINE)
 _AC = re.compile(r"\*\*(AC-\d{2,3})\*\*")
-_IMPLEMENTED = "implementada"
 
 
 @dataclass(frozen=True)
@@ -115,7 +113,7 @@ class Tracer:
         out = []
         for path, text in texts.items():
             if path.startswith(specs_dir) and path.endswith(".md") and plan.has_plan(text):
-                out += [Finding(path, p.line, f"plan de trabajo: {p.message}") for p in plan.check(text, self.cfg["models"]["ladder"])[1]]
+                out += [Finding(path, p.line, f"plan de trabajo: {p.message}") for p in plan.check(text, self.cfg["models"]["ladder"], self.cfg.vocab)[1]]
         return out
 
     def _duplicates(self) -> list[Finding]:
@@ -175,14 +173,16 @@ class Tracer:
         specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
         id_re = self.registry.kinds[spec_kind]
         verifies = re.compile(rf"verifies:\s*({id_re})/(AC-\d{{2,3}})", re.IGNORECASE)
+        vocab = self.cfg.vocab
+        status_re = re.compile(rf"^-\s*{re.escape(vocab.status_label)}:\s*([a-záéíóú]+)", re.IGNORECASE | re.MULTILINE)
 
-        covered: set[tuple[str, str]] = set()
+        covered: dict[tuple[str, str], tuple[str, int]] = {}
         out = []
         for path, text in texts.items():
             if globs.match_any(path, self.cfg["paths"]["tests"]):
                 for lineno, line in enumerate(text.splitlines(), 1):
                     for m in verifies.finditer(line):
-                        covered.add((m.group(1), m.group(2).upper()))
+                        covered.setdefault((m.group(1), m.group(2).upper()), (path, lineno))
 
         declared: set[tuple[str, str]] = set()
         for path, text in texts.items():
@@ -198,18 +198,24 @@ class Tracer:
                 for ac in _AC.findall(line):
                     acs.append((ac, lineno))
                     declared.add((spec_id, ac))
-            status = (_STATUS.search(text) or [None, ""])[1].lower()
-            if status == _IMPLEMENTED:
+            status = (status_re.search(text) or [None, ""])[1].lower()
+            if status == vocab.implemented:
                 if not acs:
                     out.append(Finding(path, 1, f"{spec_id} está implementada pero no declara criterios de aceptación"))
                 for ac, lineno in acs:
                     if (spec_id, ac) not in covered:
                         out.append(Finding(path, lineno,
                                            f"{spec_id}/{ac} no tiene ningún test con 'verifies: {spec_id}/{ac}'"))
-        for spec_id, ac in sorted(covered - declared):
-            out.append(Finding(self.cfg["paths"]["specs"], 0,
-                               f"un test verifica {spec_id}/{ac}, que no existe en la spec"))
+        for spec_id, ac in sorted(set(covered) - declared):
+            path, lineno = covered[(spec_id, ac)]
+            out.append(Finding(path, lineno, f"un test verifica {spec_id}/{ac}, que no existe en la spec"))
         return out
+
+
+def partition(findings: list[Finding], legacy_files: set[str]) -> tuple[list[Finding], list[Finding]]:
+    """Split findings into errors and those located in legacy files (SPEC-0005)."""
+    errors = [f for f in findings if f.path not in legacy_files]
+    return errors, [f for f in findings if f.path in legacy_files]
 
 
 def check(cfg: Config, files: list[str]) -> list[Finding]:

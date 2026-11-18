@@ -153,6 +153,19 @@ class Git:
     def tag_exists(self, tag: str) -> bool:
         return self.ok("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}")
 
+    def unchanged_since(self, rev: str) -> set[str]:
+        """Files of ``rev`` whose working-tree content is identical to that commit.
+
+        Raises:
+            MthError: ``rev`` is not a commit of this repository.
+        """
+        if not self.ok("cat-file", "-e", f"{rev}^{{commit}}"):
+            raise MthError(f"No existe el commit {rev} de trace.legacy_base.",
+                           hint="Trae la historia completa (git fetch --unshallow) o corrige trace.legacy_base.")
+        in_base = set(self.out("ls-tree", "-r", "--name-only", "-z", rev).split("\0"))
+        changed = set(self.out("diff", "--name-only", "-z", rev).split("\0"))
+        return {f for f in in_base - changed if f}
+
     def files(self) -> list[str]:
         """Tracked and untracked-but-not-ignored files (POSIX relative paths)."""
         raw = run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=self.root).stdout

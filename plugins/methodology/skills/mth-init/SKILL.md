@@ -1,33 +1,61 @@
 ---
 name: mth-init
-description: Adopta claude-methodology en un repositorio o diagnostica su adopción. Úsala cuando el contexto de sesión diga que falta .claude/methodology.toml, cuando el usuario pida preparar o configurar un repo con la metodología, o cuando algo de la metodología falle (hook commit-msg, configuración inválida, gh sin autenticar).
+description: Adopta claude-methodology en un repositorio con una entrevista guiada, o diagnostica su adopción. Úsala cuando el contexto de sesión diga que el repo no ha adoptado la metodología, cuando el usuario pida preparar o configurar un repo con ella, o cuando algo de la metodología falle (hook commit-msg, configuración inválida, gh sin autenticar).
+model: opus
 ---
 
 # Adoptar la metodología
 
-`mth` es el comando del contexto de sesión (`$MTH`).
+`mth` es el comando del contexto de sesión (`$MTH`). La adopción la conduce Opus porque es la tarea con más criterio del ciclo: entender cómo trabaja ya el repo y adaptar la metodología sin romperlo (ADR-0003 de claude-methodology). Lo determinista lo hace `mth`: el inventario y la traducción de respuestas a configuración.
 
-## Repo nuevo
+## 1. Inventario
 
-1. Árbol limpio y remoto con `main`.
-2. `mth init --marketplace-repo <owner>/claude-methodology --github`
-   - Crea `development` si no existe, abre `chore/adopt-methodology` y hace commit de: `.claude/methodology.toml`, `docs/`, `specs/features/`, `specs/adr/`, `changes/`, `CHANGELOG.md`, el bloque de `CLAUDE.md` y la activación del plugin en `.claude/settings.json`.
-   - Instala el hook `commit-msg`.
-   - `--github` aplica en GitHub: solo merge commits y ruleset de `main`/`development` (PR obligatorio, sin borrado ni force-push). Requiere permisos de admin; si falla, avisa y continúa.
-3. Ajusta `.claude/methodology.toml` al repo, en un commit `chore(methodology)`:
-   - `commands.test` (y `precommit` si hay lint rápido).
-   - `[ids]` si el repo ya tiene su propio esquema (por ejemplo `F-\d{3}` definido en `docs/02-*.md`).
-   - `review.agents`: `verificador` (incluido en el plugin) y los revisores del repo en `.claude/agents/`, en orden de precedencia. Los revisores específicos de un área se acotan con `[review.paths]` para que solo se ejecuten cuando el diff la toca.
-   - `roles.documenter = "documentador"` (incluido en el plugin).
-   - `[roles]` y `[branches.extra]` si aplican.
-   - `ci.required = true` en cuanto el repo tenga CI.
-4. `mth doctor` sin ✗.
-5. `mth trace`: corrige los hallazgos del contenido previo (enlaces fuera del repo, IDs duplicados) o exclúyelos de forma explícita en `trace.exclude` con su motivo en el commit.
-6. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
+1. Árbol limpio y remoto con `main`. Si no, díselo a la persona y para.
+2. `mth survey --json` (solo lee). Da el perfil (`new`, `existing`, `methodology`, `fork`), las señales y las preguntas necesarias, cada una con su evidencia.
+3. Lee lo que el inventario señala y no puedes juzgar sin leer: CLAUDE.md o AGENTS.md, las `description` de `.claude/agents/`, un par de specs o ADR de ejemplo y los hooks.
+
+## 2. Presenta la metodología
+
+Un mensaje breve antes de la primera pregunta:
+
+> **claude-methodology** hace que Claude desarrolle de forma autónoma a partir de specs: cada cambio parte de una spec con criterios de aceptación, cada decisión estructural queda en un ADR, cada criterio tiene un test, y git se usa sin reescribir historia (ramas por tarea, commits convencionales, integración por PR). He analizado tu repo: {perfil y señales en una línea}. Te haré {k} preguntas, solo sobre los puntos en los que tu forma de trabajar y la metodología difieren. Nada se aplica hasta que revises el PR de adopción.
+
+En un repo nuevo, sustituye la segunda mitad por: «El repo está vacío, así que solo necesito {k} preferencias.»
+
+## 3. Pregunta
+
+- Haz **solo** las preguntas del inventario, con los textos de [preguntas.md](preguntas.md), en su orden y en rondas de hasta cuatro con `AskUserQuestion`.
+- Si la persona corrige el perfil o la evidencia ("esas RFC están abandonadas"), ajústalo en la respuesta que corresponda. El inventario no se edita.
+- Si rechaza adoptar en cualquier momento: `mth init --decline` y termina.
+
+### Perfil `methodology`: plan de migración
+
+Tras las preguntas, presenta una tabla con cada artefacto afectado (carpetas de specs y ADR, agentes, hooks, líneas de CLAUDE.md, herramientas de publicación) y lo que se hará con él: mapear, convertir, archivar, encadenar, sustituir o retirar. Pregunta con `AskUserQuestion` si la aprueba o qué quiere ajustar. Ajusta solo lo que señale y vuelve a preguntar. Si tras **tres rondas de ajuste** no hay acuerdo, detente, resume lo pendiente y no adoptes.
+
+### Sin sesión interactiva
+
+Si no puedes preguntar: con el perfil `new`, adopta con las opciones recomendadas; con cualquier otro, muestra el inventario y para.
+
+## 4. Adopta
+
+1. Escribe las respuestas en un fichero del scratchpad (fuera del repo): `{"answers": {"<id>": {"option": "…", …}}}`.
+2. `mth init --answers <fichero> --marketplace-repo <owner>/claude-methodology --github`. Valida las respuestas contra el inventario, genera `methodology.toml` y el ADR de adopción, y abre `chore/adopt-methodology` con un único commit. Si rechaza el JSON, corrige la respuesta que indique; no edites el inventario.
+3. En la misma rama, y en commits `chore(methodology)` o `docs`, haz lo no determinista que pidieron las respuestas:
+   - `convertir` / `archivar` specs o ADR;
+   - retirar de CLAUDE.md las líneas contradictorias (`instrucciones: metodologia`);
+   - renombrar los agentes que colisionan (`colision: renombrar`) y actualizar sus referencias;
+   - crear el workflow de CI (`ci: crear`);
+   - añadir `mth check-msg "$1"` al gestor de hooks, si lo hay.
+4. `mth doctor` sin ✗ y `mth trace` sin errores (los avisos de legado son normales en una adopción gradual).
+5. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
+
+## 5. Cierra
+
+Un mensaje final con tres listas: lo que se aplica tal cual, lo adaptado a este repo y dónde está registrado (el ADR de adopción y el PR).
 
 ## Fork de otro proyecto
 
-Si el repo contiene la historia de un upstream (remoto `upstream`, tags y ficheros ajenos), no uses la plantilla: escribe la configuración en un fichero **fuera del repo** y adopta con `mth init --config <fichero>`. Claves imprescindibles: `paths.*` bajo un directorio propio, `paths.claude_md = ".claude/CLAUDE.md"`, `commits.external_refs = ["refs/remotes/upstream/main"]`, `release.tag_prefix` propio y `trace.include` limitado a lo propio. Las sincronizaciones con upstream se hacen por merge en una rama `sync/`, nunca por cherry-pick: un cherry-pick crea commits nuevos que sí se validarían como propios.
+`mth survey` lo detecta por el remoto `upstream`, y `mth init --answers` fija `paths.claude_md = ".claude/CLAUDE.md"` y `commits.external_refs`. Lo demás se ajusta con respuestas `otro` en la pregunta que corresponda: `paths.*` bajo un directorio propio, `release.tag_prefix` propio y `trace.include` limitado a lo propio. Las sincronizaciones con upstream se hacen por merge en una rama `sync/`, nunca por cherry-pick, porque un cherry-pick crea commits nuevos que sí se validarían como propios.
 
 ## Diagnóstico
 

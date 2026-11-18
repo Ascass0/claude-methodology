@@ -19,13 +19,12 @@ from datetime import date
 from pathlib import Path
 
 from .errors import MthError
+from . import lang
 from .ids import IdRegistry
 
-SECTIONS = ("Añadido", "Cambiado", "Obsoleto", "Eliminado", "Corregido", "Seguridad")
 BUMPS = ("patch", "minor", "major")
 MARKER = "<!-- mth:releases -->"
 DEFAULT_BUMP = {"feat": "minor", "fix": "patch", "hotfix": "patch", "security": "patch"}
-DEFAULT_SECTION = {"feat": "Añadido", "fix": "Corregido", "hotfix": "Corregido", "security": "Seguridad"}
 _PLACEHOLDER = re.compile(r"<[^>\n]+>")
 _FRONT = re.compile(r"^---\n(?P<meta>.*?)\n---\n(?P<body>.*)$", re.DOTALL)
 
@@ -38,11 +37,11 @@ class Fragment:
     sections: dict[str, list[str]] = field(default_factory=dict)
 
 
-def template(kind: str, refs: list[str]) -> str:
+def template(kind: str, refs: list[str], vocab: lang.Vocabulary = lang.ES) -> str:
     bump = DEFAULT_BUMP.get(kind, "patch")
-    section = DEFAULT_SECTION.get(kind, "Cambiado")
+    section = vocab.default_section.get(kind, vocab.fallback_section)
     return (f"---\nbump: {bump}\nrefs: {', '.join(refs)}\n---\n"
-            f"### {section}\n- <describe el cambio para quien usa el proyecto>\n")
+            f"### {section}\n- {vocab.fragment_placeholder}\n")
 
 
 def parse(path: Path) -> Fragment:
@@ -78,7 +77,8 @@ def parse(path: Path) -> Fragment:
     return frag
 
 
-def validate(frag: Fragment, registry: IdRegistry, refs_required: bool) -> list[str]:
+def validate(frag: Fragment, registry: IdRegistry, refs_required: bool,
+             vocab: lang.Vocabulary = lang.ES) -> list[str]:
     """Content errors of a parsed fragment (empty list = valid)."""
     name, errors = frag.path.name, []
     if frag.bump not in BUMPS:
@@ -91,8 +91,8 @@ def validate(frag: Fragment, registry: IdRegistry, refs_required: bool) -> list[
     if not frag.sections:
         errors.append(f"{name}: no tiene ninguna sección")
     for section, bullets in frag.sections.items():
-        if section not in SECTIONS:
-            errors.append(f"{name}: sección '{section}' no válida ({', '.join(SECTIONS)})")
+        if section not in vocab.changelog_sections:
+            errors.append(f"{name}: sección '{section}' no válida ({', '.join(vocab.changelog_sections)})")
         if not bullets:
             errors.append(f"{name}: la sección '{section}' está vacía")
         if any(_PLACEHOLDER.search(b) for b in bullets):
@@ -117,10 +117,11 @@ def highest_bump(fragments: list[Fragment]) -> str:
     return max((f.bump for f in fragments), key=BUMPS.index)
 
 
-def render(version: str, fragments: list[Fragment], today: date | None = None) -> str:
+def render(version: str, fragments: list[Fragment], today: date | None = None,
+           vocab: lang.Vocabulary = lang.ES) -> str:
     """Release section in Keep a Changelog format."""
     lines = [f"## [{version}] - {(today or date.today()).isoformat()}"]
-    for section in SECTIONS:
+    for section in vocab.changelog_sections:
         bullets = [f"- {b}" + (f" ({', '.join(f.refs)})" if f.refs else "")
                    for f in fragments for b in f.sections.get(section, [])]
         if bullets:

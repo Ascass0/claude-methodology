@@ -5,7 +5,7 @@ description: Publica una versión (development → main con merge commit, tag Se
 
 # Versiones
 
-`mth` es el comando del contexto de sesión (`$MTH`). La publicación es autónoma con la CI en verde.
+`mth` es el comando del contexto de sesión (`$MTH`). La publicación es autónoma con la CI en verde (con `autonomy.level` `until-pr` o `supervised`, el guard pide antes la confirmación de la persona).
 
 ## Versión desde development
 
@@ -13,8 +13,8 @@ Cuándo: hay fragmentos en `changes/`, las features integradas funcionan en conj
 
 1. `mth changes preview`: muestra la versión calculada (mayor `bump` de los fragmentos) y el changelog resultante. Corrige los fragmentos en una rama `chore/` si hace falta.
 2. `mth release`:
-   - Tests y `mth trace` sobre `development`.
-   - Crea `release/vX.Y.Z`, incorpora los fragmentos al `CHANGELOG.md` y los borra (commit `chore(release)`).
+   - Tests y `mth trace` sobre `development`; si hay `release.version_files`, comprueba que cada fichero existe y que su patrón aparece exactamente una vez (si no, falla sin modificar nada).
+   - Crea `release/vX.Y.Z`, incorpora los fragmentos al `CHANGELOG.md`, los borra y actualiza la versión en los `release.version_files` (commit `chore(release)`).
    - PR a `main` → CI → merge commit → etiqueta anotada `vX.Y.Z` → release de GitHub.
    - PR de vuelta a `development` → merge → borra la rama de release.
 
@@ -23,7 +23,9 @@ Cuándo: hay fragmentos en `changes/`, las features integradas funcionan en conj
 1. `mth branch hotfix <slug> [--spec …]` (desde `main`).
 2. Test de regresión y fix; fragmento con `bump: patch`.
 3. Revisión (skill `mth-review`).
-4. `mth hotfix finish`: mismos gates que una integración, versión patch, publicación en `main` y merge de vuelta a `development`.
+4. `mth hotfix finish`: mismos gates que una integración, versión patch (con la misma comprobación y actualización de `release.version_files`), publicación en `main` y merge de vuelta a `development`.
+
+`mth doctor` muestra la versión que declara cada fichero de `release.version_files` (✓ coincide con la última etiqueta, ⚠ desfasada, ✗ ausente o patrón no único).
 
 ## Si falla a mitad
 

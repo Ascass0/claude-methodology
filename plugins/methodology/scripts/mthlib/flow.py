@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import branches, changelog, commits, review
+from . import branches, changelog, commits, review, versions
 from .config import Config
 from .errors import MthError
 from .gh import GitHub
@@ -20,9 +20,9 @@ from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
 from .proc import run_shell
+from .trace import Finding, partition
 from .trace import check as trace_check
 
-TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 _MAX_LISTED = 50
 
 
@@ -65,8 +65,22 @@ class Ctx:
 
 
 # -- shared gates -------------------------------------------------------------
-def _gate_trace(ctx: Ctx) -> None:
+def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
+    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base)."""
     findings = trace_check(ctx.cfg, ctx.git.files())
+    base = ctx.cfg["trace"]["legacy_base"]
+    return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
+
+
+def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:
+    base = ctx.cfg["trace"]["legacy_base"][:7]
+    return f"⚠ {len(legacy)} hallazgos en contenido legado (anterior a {base}): mth trace --legacy los lista"
+
+
+def _gate_trace(ctx: Ctx) -> None:
+    findings, legacy = run_trace(ctx)
+    if legacy:
+        warn(legacy_summary(ctx, legacy))
     if findings:
         listing = "\n".join(f"  - {f}" for f in findings[:50])
         more = f"\n  … y {len(findings) - 50} más" if len(findings) > 50 else ""
@@ -110,7 +124,7 @@ def _fragment(ctx: Ctx, info: branches.BranchInfo) -> changelog.Fragment | None:
     frag = changelog.parse(ctx.path("changes") / branches.fragment_name(info))
     refs_required = info.kind in ctx.cfg["commits"]["require_refs"] or info.kind == "hotfix"
     registry = ctx.registry()
-    errors = changelog.validate(frag, registry, refs_required)
+    errors = changelog.validate(frag, registry, refs_required, ctx.cfg.vocab)
     spec_kind = ctx.cfg["trace"]["spec_kind"]
     if info.kind == "feat" and not any(registry.kind_of(r) == spec_kind for r in frag.refs):
         errors.append(f"{frag.path.name}: una feature debe referenciar su spec ({spec_kind}) en refs")
@@ -221,7 +235,7 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None) -> str:
     if kind in cfg["changes"]["required_for"]:
         frag_path = ctx.path("changes") / branches.fragment_name(info)
         frag_path.parent.mkdir(parents=True, exist_ok=True)
-        frag_path.write_text(changelog.template(kind, refs), encoding="utf-8")
+        frag_path.write_text(changelog.template(kind, refs, cfg.vocab), encoding="utf-8")
         say(f"· Fragmento creado: {frag_path.relative_to(ctx.root)} (complétalo antes de integrar)")
     g.push(name)
     ctx.tracer.event("branch.start", branch=name, base=base, spec=spec)
@@ -335,18 +349,30 @@ def _finish_integration(ctx: Ctx, branch: str, target: str) -> None:
 
 
 # -- release & hotfix -----------------------------------------------------------
+def _version_files(ctx: Ctx) -> list[versions.VersionFile]:
+    return versions.from_config(ctx.cfg["release"]["version_files"])
+
+
+def _check_version_files(ctx: Ctx) -> None:
+    for item in _version_files(ctx):
+        versions.read(ctx.root, item)
+
+
 def _apply_release(ctx: Ctx, version: str, fragments: list[changelog.Fragment]) -> None:
     """Fold fragments into the changelog and commit it on the current branch."""
     log_path = ctx.path("changelog")
     if not log_path.is_file():
         raise MthError(f"No existe {log_path.name}.", hint="mth init lo crea.")
-    section = changelog.render(version, fragments)
+    bumped = versions.write(ctx.root, _version_files(ctx), version)  # SPEC-0003: checked before any write
+    section = changelog.render(version, fragments, vocab=ctx.cfg.vocab)
     log_path.write_text(changelog.insert(log_path.read_text(encoding="utf-8"), section), encoding="utf-8")
     for frag in fragments:
         ctx.git.out("rm", "-q", str(frag.path.relative_to(ctx.root)))
-    ctx.git.out("add", str(log_path.relative_to(ctx.root)))
+    ctx.git.out("add", str(log_path.relative_to(ctx.root)), *bumped)
     refs = list(dict.fromkeys(r for f in fragments for r in f.refs))
     body = f"Fold {len(fragments)} changelog fragment(s) into {log_path.name} for v{version}."
+    if bumped:
+        body += f"\n\nSet version {version} in {', '.join(bumped)}."
     message = commits.build("chore", "release", f"v{version}", body, refs)
     with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as fh:
         fh.write(message)
@@ -412,11 +438,12 @@ def release(ctx: Ctx) -> None:
         if not fragments:
             raise MthError("No hay fragmentos en changes/: nada que publicar.")
         registry = ctx.registry()
-        errors = [e for f in fragments for e in changelog.validate(f, registry, False)]
+        errors = [e for f in fragments for e in changelog.validate(f, registry, False, cfg.vocab)]
         if errors:
             raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
         _gate_trace(ctx)
         _gate_tests(ctx)
+        _check_version_files(ctx)
         version = changelog.next_version(g.latest_version(cfg.tag_prefix), changelog.highest_bump(fragments))
         head = f"release/v{version}"
         g.out("checkout", "-b", head)
@@ -443,6 +470,7 @@ def hotfix_finish(ctx: Ctx) -> None:
         frag = _fragment(ctx, info)
         if frag.bump != "patch":
             raise MthError("Un hotfix solo publica versiones patch (bump: patch).")
+        _check_version_files(ctx)
         _gate_trace(ctx)
         _review(ctx, info, branch)
         _gate_tests(ctx)
@@ -480,7 +508,7 @@ def new_doc(ctx: Ctx, kind: str, title: str, category: str | None) -> Path:
     else:
         folder = ctx.path("specs")
     path = folder / f"{ident}-{slug}.md"
-    content = (TEMPLATES / f"{kind}.md").read_text(encoding="utf-8")
+    content = (cfg.vocab.templates / f"{kind}.md").read_text(encoding="utf-8")
     content = (content.replace("{{ID}}", ident).replace("{{TITLE}}", title.strip())
                .replace("{{DATE}}", date.today().isoformat())
                .replace("{{CATEGORY}}", category or ""))
