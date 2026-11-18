@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, lang, versions
+from . import __version__, lang, versions, work
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -49,6 +49,7 @@ DEFAULTS: dict[str, Any] = {
     "language": {"docs": "es"},
     "hooks": {"commit_msg": "own"},
     "autonomy": {"level": "full"},
+    "work": {"dirs": []},
 }
 
 # Model aliases understood by Claude Code's Agent tool (ADR-0002).
@@ -78,6 +79,7 @@ _SCHEMA: dict[str, Any] = {
     "language": {"docs": str},
     "hooks": {"commit_msg": str},
     "autonomy": {"level": str},
+    "work": {"dirs": list},
 }
 
 # SPEC-0009: an unknown key is usually one from a newer plugin, not a typo.
@@ -179,6 +181,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
     if not _TAG_PREFIX.match(data["release"]["tag_prefix"]):
         raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
     versions.validate(data["release"]["version_files"])
+    work.validate(data["work"]["dirs"])
     if data["hooks"]["commit_msg"] not in HOOK_MODES:
         raise MthError(f"'hooks.commit_msg' = '{data['hooks']['commit_msg']}' debe ser uno de {', '.join(HOOK_MODES)}.")
     if data["autonomy"]["level"] not in AUTONOMY_LEVELS:
