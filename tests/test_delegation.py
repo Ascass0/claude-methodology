@@ -143,6 +143,8 @@ class RepoTestCase(unittest.TestCase):
         | T-02 | 1 | `src/b/**` | AC-02 |
         | T-03 | 2 | `src/c.py` | AC-03 |
     """
+    header = "| Tarea | Oleada | Ficheros | Criterios |"
+    config = 'version = 1\n[commands]\ntest = ""\n[review]\nagents = ["verificador"]\n'
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -150,9 +152,8 @@ class RepoTestCase(unittest.TestCase):
         self.work.mkdir()
         self.env = {**os.environ, **GIT_ENV}
         self.git("init", "-q", "-b", "feat/demo")
-        self.write(".claude/methodology.toml",
-                   'version = 1\n[commands]\ntest = ""\n[review]\nagents = ["verificador"]\n')
-        self.write(f"specs/features/{SPEC_ID}-demo.md", spec_text(self.rows))
+        self.write(".claude/methodology.toml", self.config)
+        self.write(f"specs/features/{SPEC_ID}-demo.md", spec_text(self.rows, header=self.header))
         self.write("src/a.py", "a = 1\n")
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "initial")
@@ -206,8 +207,8 @@ class PlanCommandTests(RepoTestCase):
         # verifies: SPEC-0001/AC-01
         out = self.mth("plan", "check", SPEC_ID)
         self.assertIn("3 tareas en 2 oleadas", out)
-        self.assertIn("Oleada 1: T-01, T-02", out)
-        self.assertIn("Oleada 2: T-03", out)
+        self.assertIn("Oleada 1: T-01 (sonnet), T-02 (sonnet)", out)
+        self.assertIn("Oleada 2: T-03 (sonnet)", out)
 
 
 class WaveVerifyTests(RepoTestCase):

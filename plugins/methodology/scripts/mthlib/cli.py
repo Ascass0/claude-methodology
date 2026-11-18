@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -128,43 +129,117 @@ def _spec_text(ctx: Ctx, spec_id: str) -> tuple[str, str]:
     return rel, (ctx.root / rel).read_text(encoding="utf-8")
 
 
-def _cmd_plan(args: argparse.Namespace) -> int:
-    ctx = _ctx("plan")
-    rel, text = _spec_text(ctx, args.spec)
+_MODEL_ARG = re.compile(r"^(T-\d{2})=([a-z]+)$")
+
+
+def _plan_tasks(ctx: Ctx, spec_id: str) -> tuple[str, list[plan.Task]]:
+    """Valid tasks of the spec's plan; prints every problem and fails when there are any."""
+    rel, text = _spec_text(ctx, spec_id)
     if not plan.has_plan(text):
-        raise MthError(f"{args.spec} no tiene sección '## {plan.SECTION}'.",
+        raise MthError(f"{spec_id} no tiene sección '## {plan.SECTION}'.",
                        hint="Añade el plan a la spec (skill mth-spec) antes de delegar.")
-    tasks, problems = plan.check(text)
+    tasks, problems = plan.check(text, ctx.cfg["models"]["ladder"])
     for p in problems:
         print(f"✗ {rel}:{p.line}: {p.message}")
     if problems:
-        say(f"{len(problems)} errores en el plan de {args.spec}")
-        return EXIT_ERROR
+        raise MthError(f"{len(problems)} errores en el plan de {spec_id}.")
+    return rel, tasks
+
+
+def _model_overrides(values: list[str] | None, wave_tasks: set[str], ladder: list[str]) -> dict[str, str]:
+    """Parse ``--model T-NN=<alias>``; any invalid value aborts before verifying (SPEC-0002)."""
+    out: dict[str, str] = {}
+    for value in values or []:
+        m = _MODEL_ARG.match(value)
+        if not m:
+            raise MthError(f"--model mal formado: '{value}'.", hint="Formato: --model T-NN=<alias>.")
+        task, model = m.groups()
+        if model not in ladder:
+            raise MthError(f"--model {value}: '{model}' no está en models.ladder ({', '.join(ladder)}).")
+        if task not in wave_tasks:
+            raise MthError(f"--model {value}: {task} no pertenece a la oleada.")
+        out[task] = model
+    return out
+
+
+def _cmd_plan_stats(ctx: Ctx, spec: str | None) -> int:
+    path = ctx.git.git_dir() / "mth" / "trace.jsonl"
+    if not path.is_file():
+        say("No hay datos: la traza aún no registra tareas verificadas.")
+        return 0
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        rows, unreadable = plan.stats(fh.readlines(), spec)
+    if unreadable:
+        warn(f"{unreadable} líneas ilegibles de la traza ignoradas")
+    if not rows:
+        say("No hay datos: la traza no registra tareas verificadas" + (f" de {spec}." if spec else "."))
+        return 0
+    order = {m: i for i, m in enumerate(ctx.cfg["models"]["ladder"])}
+    rows.sort(key=lambda r: (order.get(r.model, len(order)), r.model))
+    print(f"{'Modelo':<8} {'Intentos':>8} {'ok':>4} {'Fallidos':>8} {'% ok':>6}")
+    for r in rows:
+        print(f"{r.model:<8} {r.attempts:>8} {r.ok:>4} {r.failed:>8} {r.ok_rate:>5.0f}%")
+    return 0
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    ctx = _ctx("plan")
+    models = ctx.cfg["models"]
+    if args.action == "stats":
+        if args.spec:
+            raise MthError("plan stats no admite una spec posicional.", hint="Usa --spec SPEC-NNNN.")
+        return _cmd_plan_stats(ctx, args.only_spec)
+    if not args.spec:
+        raise MthError(f"plan {args.action} necesita el ID de la spec.")
+    _, tasks = _plan_tasks(ctx, args.spec)
     if args.action == "check":
         by_wave = plan.waves(tasks)
         say(f"✓ Plan de {args.spec} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
         for wave, items in by_wave.items():
-            print(f"  Oleada {wave}: {', '.join(t.id for t in items)}")
+            print(f"  Oleada {wave}: " + ", ".join(f"{t.id} ({t.effective_model(models['task'])})" for t in items))
+        return 0
+    if args.action == "model":
+        task = next((t for t in tasks if t.id == args.task), None)
+        if task is None:
+            raise MthError(f"{args.task or '(sin tarea)'} no es una tarea del plan de {args.spec}.")
+        model = task.effective_model(models["task"])
+        print(plan.next_model(models["ladder"], model) if args.retry else model)
         return 0
     if args.wave is None or not args.manifest:
         raise MthError("plan verify necesita --wave y al menos un --manifest.")
+    in_wave = {t.id: t for t in tasks if t.wave == args.wave}
+    overrides = _model_overrides(args.model, set(in_wave), models["ladder"])
     manifests, errors = [], []
     for source in args.manifest:
         m, errs = plan.load_manifest(Path(source))
         errors += errs
         if m is not None:
             manifests.append(m)
-    wave_errors, warnings = plan.verify_wave(tasks, args.wave, manifests, ctx.git.worktree_changes())
-    errors += wave_errors
-    for w in warnings:
+    result = plan.verify_wave(tasks, args.wave, manifests, ctx.git.worktree_changes())
+    errors += result.errors
+    for task_id, (outcome, digest) in sorted(result.outcomes.items()):
+        model = overrides.get(task_id) or in_wave[task_id].effective_model(models["task"])
+        ctx.tracer.event("plan.task", spec=args.spec, task=task_id, wave=args.wave, model=model,
+                         result=outcome, manifest=digest)
+    for w in result.warnings:
         warn(w)
     for e in errors:
         print(f"✗ {e}")
-    ctx.tracer.event("plan.verify", spec=args.spec, wave=args.wave, errors=len(errors), warnings=len(warnings))
+    ctx.tracer.event("plan.verify", spec=args.spec, wave=args.wave, errors=len(errors), warnings=len(result.warnings))
     if errors:
         say(f"Oleada {args.wave} de {args.spec} rechazada: {len(errors)} errores")
         return EXIT_ERROR
-    say(f"✓ Oleada {args.wave} de {args.spec} verificada" + (f" ({len(warnings)} desvíos por resolver)" if warnings else ""))
+    suffix = f" ({len(result.warnings)} desvíos por resolver)" if result.warnings else ""
+    say(f"✓ Oleada {args.wave} de {args.spec} verificada{suffix}")
+    return 0
+
+
+def _cmd_models(_: argparse.Namespace) -> int:
+    models = _ctx("models").cfg["models"]
+    print(f"Escalera de reintento: {' → '.join(models['ladder'])}")
+    for role, label in (("task", "Tareas del plan sin modelo"), ("review", "Revisores"),
+                        ("documenter", "Documentador")):
+        print(f"{label}: {models[role]}")
     return 0
 
 
@@ -220,11 +295,16 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--report", help="informe completo del revisor; su última línea es 'BLOQUEANTES: <n>'")
     s.add_argument("--summary", default="")
 
-    s = sub.add_parser("plan", help="valida el plan de trabajo de una spec o verifica una oleada")
-    s.add_argument("action", choices=["check", "verify"])
-    s.add_argument("spec", help="ID de la spec (SPEC-NNNN)")
+    s = sub.add_parser("plan", help="plan de trabajo: validar, verificar una oleada, modelo de una tarea, métricas")
+    s.add_argument("action", choices=["check", "verify", "model", "stats"])
+    s.add_argument("spec", nargs="?", help="ID de la spec (SPEC-NNNN)")
+    s.add_argument("task", nargs="?", help="ID de la tarea (plan model)")
     s.add_argument("--wave", type=int, help="oleada a verificar")
     s.add_argument("--manifest", action="append", help="manifiesto JSON de una tarea (repetible)")
+    s.add_argument("--model", action="append", help="modelo usado en una tarea: T-NN=<alias> (repetible)")
+    s.add_argument("--retry", action="store_true", help="plan model: modelo del reintento")
+    s.add_argument("--spec", dest="only_spec", help="plan stats: solo esta spec")
+    sub.add_parser("models", help="escalera de modelos y nivel de cada rol")
 
     sub.add_parser("sync", help="integra la rama destino en la actual (merge)")
     s = sub.add_parser("integrate", help="integra la rama actual en su destino por PR")
@@ -267,6 +347,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_review(args)
     if c == "plan":
         return _cmd_plan(args)
+    if c == "models":
+        return _cmd_models(args)
     if c == "status":
         return _cmd_status(args)
     ctx = _ctx(c)

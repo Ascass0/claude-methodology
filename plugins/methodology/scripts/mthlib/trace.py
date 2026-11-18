@@ -115,7 +115,7 @@ class Tracer:
         out = []
         for path, text in texts.items():
             if path.startswith(specs_dir) and path.endswith(".md") and plan.has_plan(text):
-                out += [Finding(path, p.line, f"plan de trabajo: {p.message}") for p in plan.check(text)[1]]
+                out += [Finding(path, p.line, f"plan de trabajo: {p.message}") for p in plan.check(text, self.cfg["models"]["ladder"])[1]]
         return out
 
     def _duplicates(self) -> list[Finding]:

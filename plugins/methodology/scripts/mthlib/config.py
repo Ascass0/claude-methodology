@@ -43,7 +43,13 @@ DEFAULTS: dict[str, Any] = {
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
               "adr_kind": "ADR", "include": ["**"], "exclude": []},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v"},
+    "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
+               "review": "sonnet", "documenter": "sonnet"},
 }
+
+# Model aliases understood by Claude Code's Agent tool (ADR-0002).
+MODEL_ALIASES = ("haiku", "sonnet", "opus", "fable")
+MODEL_ROLES = ("task", "review", "documenter")
 
 # Expected type of every leaf key. Tables not listed here are rejected.
 _SCHEMA: dict[str, Any] = {
@@ -62,6 +68,7 @@ _SCHEMA: dict[str, Any] = {
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
               "adr_kind": str, "include": list, "exclude": list},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str},
+    "models": {"ladder": list, "task": str, "review": str, "documenter": str},
 }
 
 _EXTRA_NAME = re.compile(r"^[a-z]+$")
@@ -153,6 +160,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
             raise MthError(f"'branches.extra.{name}.flow' debe ser 'feature' o 'hotfix'.")
     if not _TAG_PREFIX.match(data["release"]["tag_prefix"]):
         raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
+    _check_models(data["models"])
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):
         raise MthError("'review.agents' debe ser una lista de nombres únicos.")
@@ -161,6 +169,19 @@ def _check_semantics(data: dict[str, Any]) -> None:
             raise MthError(f"'review.paths.{agent}' no corresponde a ningún agente de review.agents.")
         if not isinstance(patterns, list) or not patterns or not all(isinstance(p, str) and p for p in patterns):
             raise MthError(f"'review.paths.{agent}' debe ser una lista no vacía de globs.")
+
+
+def _check_models(models: dict[str, Any]) -> None:
+    ladder = models["ladder"]
+    if not ladder or not all(isinstance(m, str) for m in ladder) or len(set(ladder)) != len(ladder):
+        raise MthError("'models.ladder' debe ser una lista no vacía de alias sin repetir.")
+    unknown = [m for m in ladder if m not in MODEL_ALIASES]
+    if unknown:
+        raise MthError(f"'models.ladder' contiene alias desconocidos: {', '.join(unknown)}.",
+                       hint=f"Alias admitidos: {', '.join(MODEL_ALIASES)}.")
+    for role in MODEL_ROLES:
+        if models[role] not in ladder:
+            raise MthError(f"'models.{role}' = '{models[role]}' no está en models.ladder.")
 
 
 def parse(root: Path, text: str, source: str = str(CONFIG_PATH)) -> Config:
