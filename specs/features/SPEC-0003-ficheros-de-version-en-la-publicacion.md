@@ -45,9 +45,9 @@ pattern = '"version": "(\d+\.\d+\.\d+)"'
 
 ### Publicación
 
-`mth release` (después de sus gates y antes de crear la rama de release) y `mth hotfix finish` (antes de sus gates, para no pedir revisión de un hotfix que no podría publicarse) comprueban cada entrada. El fichero debe existir y el patrón debe aparecer **exactamente una vez**. Si alguna entrada falla, no se publica y no se modifica nada.
+`mth release` (después de sus gates y antes de crear la rama de release) y `mth hotfix finish` (antes de sus gates, para no pedir revisión de un hotfix que no podría publicarse) comprueban cada entrada. El fichero debe existir, el patrón debe aparecer **exactamente una vez** y su grupo de captura debe participar en la coincidencia (un grupo opcional que no captura nada no dice dónde va la versión). Si alguna entrada falla, no se publica y no se modifica nada.
 
-En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión nueva, sin tocar el resto del fichero. El cuerpo del commit lista los ficheros actualizados. Si la captura ya es la versión nueva (una publicación reanudada), el fichero no cambia.
+En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión nueva, sin tocar el resto del fichero: ni el contenido ni los finales de línea (un fichero con CRLF sigue teniendo CRLF). El cuerpo del commit lista los ficheros actualizados. Si la captura ya es la versión nueva (una publicación reanudada), el fichero no cambia.
 
 ### Diagnóstico
 
@@ -64,6 +64,7 @@ En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión
 | Entrada sin `path` o `pattern`, con claves de más, ruta absoluta o con `..`, regex inválida, sin grupo o con varios, o duplicada | Carga de la configuración | Fail-fast: ningún comando se ejecuta; el error nombra la entrada |
 | El fichero no existe | `mth release`, `mth hotfix finish`, `mth doctor` | Publicación: error antes de crear rama o commit. Doctor: ✗ |
 | El patrón no aparece o aparece más de una vez | `mth release`, `mth hotfix finish`, `mth doctor` | Lo mismo, indicando cuántas coincidencias hay |
+| El grupo de captura es opcional y no participa en la coincidencia | `mth release`, `mth hotfix finish`, `mth doctor` | Lo mismo que un patrón que no aparece: error antes de modificar nada; doctor: ✗ |
 | La versión declarada no coincide con la última etiqueta | `mth doctor` | ⚠ con las dos versiones; no bloquea, porque entre versiones es un aviso |
 
 ## Criterios de aceptación
@@ -74,6 +75,8 @@ En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión
 - **AC-04**: `mth hotfix finish` actualiza los ficheros declarados con la versión patch en su commit `chore(release)`.
 - **AC-05**: Si un fichero declarado no existe o su patrón aparece cero o más de una vez, `mth release` falla antes de crear la rama de release y no modifica ningún fichero.
 - **AC-06**: `mth doctor` marca con ✓ cada fichero cuya versión coincide con la última etiqueta, con ⚠ uno desfasado y con ✗ uno que no existe o cuyo patrón no aparece exactamente una vez.
+- **AC-07**: Al sustituir la versión, el resto del fichero se conserva byte a byte, incluidos los finales de línea CRLF.
+- **AC-08**: Si el grupo de captura no participa en la coincidencia, leer o escribir los ficheros de versión falla sin modificar ninguno.
 
 ## Notas
 
