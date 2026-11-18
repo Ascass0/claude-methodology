@@ -29,20 +29,31 @@ Si la spec no existe, escríbela en la propia rama como primer commit: contexto,
 
 Tú mantienes la spec, el plan y las decisiones. La implementación especializada la delegas en los agentes `dev-*` del repo (`.claude/agents/`) cuyo ámbito cubra la tarea; su `description` dice cuál. Si ninguno encaja, implementas tú.
 
-1. **Plan:** divide la spec en tareas con ficheros **disjuntos**. Solo se lanzan en paralelo tareas que no tocan los mismos ficheros.
-2. **Encargo** a cada agente, autocontenido (no ve esta conversación):
+Delegar tiene un coste de coordinación: si el trabajo es pequeño, implementa tú. Si delegas dos o más tareas, el reparto va en la spec:
+
+1. **Plan:** sección `## Plan de trabajo` de la spec (formato en la skill `mth-spec`). Cada tarea tiene sus ficheros permitidos y sus criterios. Las tareas de una misma oleada no comparten ficheros y no deben dejarte ninguna decisión de diseño. Lo que dependa de otra tarea va en la oleada siguiente. `mth plan check SPEC-NNNN` sin errores antes de lanzar nada; el plan se commitea con la spec.
+2. **Encargo** a cada agente de la oleada, en paralelo y autocontenido (no ve esta conversación):
 
    ```
    Encargo para <dev-agente>
-   - Rama: <rama> (base <destino>)
-   - Spec: <ID y sección>. Criterios de esta tarea: <AC-NN / afirmaciones>
+   - Rama: <rama> (base <destino>). Tarea: <T-NN> de <SPEC-NNNN>
+   - Spec: <ruta y sección>. Criterios de esta tarea: <AC-NN>
    - Modos de fallo a cubrir: <de la spec>
-   - Alcance: puede tocar <ficheros/módulos>; fuera de alcance: <...>
+   - Ficheros permitidos (solo estos): <de la fila del plan>
    - Restricciones: <ADR, flags, convenciones>. Principios: <ruta de PRINCIPLES.md>
    - Hecho cuando: <tests concretos pasan>
+   - No hagas commits ni toques git. Si necesitas decidir algo que la spec no fija, no lo decidas: status "blocked" y la pregunta en "questions".
+   - Termina devolviendo SOLO este JSON (todos los campos, ninguno más):
+     {"task": "<T-NN>", "status": "done | blocked | failed",
+      "files": ["<ficheros creados, modificados o borrados>"], "criteria": ["<AC-NN cubiertos>"],
+      "tests": [{"name": "<test>", "result": "pass | fail"}],
+      "decisions": [], "deviations": [], "questions": []}
    ```
-3. **Manifiesto de vuelta:** cambios, tests y resultado, criterios cubiertos, decisiones, desvíos y preguntas. Revisa el diff real (`git diff`), no solo el manifiesto. Si hay PREGUNTAS o DESVÍOS, resuélvelos (corrigiendo la spec si procede) antes de seguir.
-4. **Commits temáticos** tú (skill `mth-commit`): los agentes nunca hacen commits ni tocan git.
+3. **Manifiestos:** guarda la respuesta JSON de cada agente tal cual en un fichero del scratchpad (fuera del repo). Nunca la edites para que pase.
+4. **Verificación de la oleada**, con sus cambios sin confirmar: `mth plan verify SPEC-NNNN --wave N --manifest <f1> --manifest <f2> …`. Comprueba que cada tarea terminó, cubrió sus criterios con tests en verde, no salió de sus ficheros y que no hay cambios sin dueño ni afirmaciones falsas. Revisa además el diff real (`git diff`).
+   - **No ejecutada / no completada** (agente caído, fuera de tiempo, manifiesto inválido, `blocked` o `failed`): relánzala **una sola vez**. Si vuelve a fallar, impleméntala tú o rehaz el plan (corrige la spec en un commit), y anótalo en el PR.
+   - **Desvíos** (⚠): resuélvelos antes de confirmar, corrigiendo la spec si procede.
+5. **Commits temáticos** tú (skill `mth-commit`) al cerrar cada oleada; la siguiente oleada empieza con el árbol limpio. Los agentes nunca hacen commits ni tocan git.
 
 Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, parsimonia, excepciones solo donde se actúa, trazas con ID de correlación, docstrings mínimos, referencias `ADR-NNNN` en decisiones no obvias.
 

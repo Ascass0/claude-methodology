@@ -6,13 +6,13 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, branches, changelog, commits, guard, review, session, setup
+from . import __version__, branches, changelog, commits, guard, plan, review, session, setup
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
 from .git import Git
 from .ids import IdRegistry
-from .log import Tracer, say
+from .log import Tracer, say, warn
 from .trace import check as trace_check
 
 EXIT_ERROR = 1
@@ -93,11 +93,14 @@ def _cmd_review(args: argparse.Namespace) -> int:
     if args.action == "record":
         if args.agent not in agents:
             raise MthError(f"'{args.agent}' no está en review.agents ({', '.join(agents) or 'vacío'}).")
-        if args.blocking < 0:
-            raise MthError("--blocking no puede ser negativo.")
-        review.record(ctx.git.git_dir(), branch, sha, args.agent, args.blocking, args.summary)
-        ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, blocking=args.blocking)
-        say(f"✓ Revisión de {args.agent} registrada para {sha[:8]} ({args.blocking} bloqueantes)")
+        try:
+            blocking = review.blocking_from_report(Path(args.report), args.agent)
+        except MthError:
+            ctx.tracer.event("review.not_run", branch=branch, sha=sha, agent=args.agent)
+            raise
+        review.record(ctx.git.git_dir(), branch, sha, args.agent, blocking, args.summary)
+        ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, blocking=blocking)
+        say(f"✓ Revisión de {args.agent} registrada para {sha[:8]} ({blocking} bloqueantes)")
         return 0
     info = branches.parse(branch, ctx.cfg)
     needed = required_reviewers(ctx, info) if info else []
@@ -111,6 +114,57 @@ def _cmd_review(args: argparse.Namespace) -> int:
     skipped = [a for a in agents if a not in needed]
     if needed and skipped:
         say(f"No aplican a estos cambios: {', '.join(skipped)}")
+    return 0
+
+
+def _spec_text(ctx: Ctx, spec_id: str) -> tuple[str, str]:
+    """Relative path and text of the spec that defines ``spec_id``."""
+    registry = ctx.registry()
+    spec_kind = ctx.cfg["trace"]["spec_kind"]
+    places = registry.definitions.get(spec_id)
+    if registry.kind_of(spec_id) != spec_kind or not places:
+        raise MthError(f"{spec_id} no es una spec definida.", hint="Comprueba el ID con mth trace.")
+    rel = places[0][0]
+    return rel, (ctx.root / rel).read_text(encoding="utf-8")
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    ctx = _ctx("plan")
+    rel, text = _spec_text(ctx, args.spec)
+    if not plan.has_plan(text):
+        raise MthError(f"{args.spec} no tiene sección '## {plan.SECTION}'.",
+                       hint="Añade el plan a la spec (skill mth-spec) antes de delegar.")
+    tasks, problems = plan.check(text)
+    for p in problems:
+        print(f"✗ {rel}:{p.line}: {p.message}")
+    if problems:
+        say(f"{len(problems)} errores en el plan de {args.spec}")
+        return EXIT_ERROR
+    if args.action == "check":
+        by_wave = plan.waves(tasks)
+        say(f"✓ Plan de {args.spec} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
+        for wave, items in by_wave.items():
+            print(f"  Oleada {wave}: {', '.join(t.id for t in items)}")
+        return 0
+    if args.wave is None or not args.manifest:
+        raise MthError("plan verify necesita --wave y al menos un --manifest.")
+    manifests, errors = [], []
+    for source in args.manifest:
+        m, errs = plan.load_manifest(Path(source))
+        errors += errs
+        if m is not None:
+            manifests.append(m)
+    wave_errors, warnings = plan.verify_wave(tasks, args.wave, manifests, ctx.git.worktree_changes())
+    errors += wave_errors
+    for w in warnings:
+        warn(w)
+    for e in errors:
+        print(f"✗ {e}")
+    ctx.tracer.event("plan.verify", spec=args.spec, wave=args.wave, errors=len(errors), warnings=len(warnings))
+    if errors:
+        say(f"Oleada {args.wave} de {args.spec} rechazada: {len(errors)} errores")
+        return EXIT_ERROR
+    say(f"✓ Oleada {args.wave} de {args.spec} verificada" + (f" ({len(warnings)} desvíos por resolver)" if warnings else ""))
     return 0
 
 
@@ -163,8 +217,14 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("review", help="registra o consulta revisiones del HEAD")
     s.add_argument("action", choices=["record", "status"])
     s.add_argument("agent", nargs="?")
-    s.add_argument("--blocking", type=int, default=0)
+    s.add_argument("--report", help="informe completo del revisor; su última línea es 'BLOQUEANTES: <n>'")
     s.add_argument("--summary", default="")
+
+    s = sub.add_parser("plan", help="valida el plan de trabajo de una spec o verifica una oleada")
+    s.add_argument("action", choices=["check", "verify"])
+    s.add_argument("spec", help="ID de la spec (SPEC-NNNN)")
+    s.add_argument("--wave", type=int, help="oleada a verificar")
+    s.add_argument("--manifest", action="append", help="manifiesto JSON de una tarea (repetible)")
 
     sub.add_parser("sync", help="integra la rama destino en la actual (merge)")
     s = sub.add_parser("integrate", help="integra la rama actual en su destino por PR")
@@ -202,9 +262,11 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "changes":
         return _cmd_changes(args)
     if c == "review":
-        if args.action == "record" and not (args.agent and args.summary):
-            raise MthError("review record necesita <agente> y --summary.")
+        if args.action == "record" and not (args.agent and args.summary and args.report):
+            raise MthError("review record necesita <agente>, --report y --summary.")
         return _cmd_review(args)
+    if c == "plan":
+        return _cmd_plan(args)
     if c == "status":
         return _cmd_status(args)
     ctx = _ctx(c)

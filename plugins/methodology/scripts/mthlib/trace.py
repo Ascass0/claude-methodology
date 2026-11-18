@@ -11,7 +11,7 @@ import unicodedata
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from . import globs
+from . import globs, plan
 from .config import Config
 from .ids import IdRegistry, read_text
 
@@ -106,7 +106,17 @@ class Tracer:
             findings += self._links(texts)
         if self.cfg["trace"]["acceptance"]:
             findings += self._acceptance(texts)
+        findings += self._plans(texts)
         return findings
+
+    def _plans(self, texts: dict[str, str]) -> list[Finding]:
+        """Work-plan errors of every spec that has a plan section (SPEC-0001)."""
+        specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
+        out = []
+        for path, text in texts.items():
+            if path.startswith(specs_dir) and path.endswith(".md") and plan.has_plan(text):
+                out += [Finding(path, p.line, f"plan de trabajo: {p.message}") for p in plan.check(text)[1]]
+        return out
 
     def _duplicates(self) -> list[Finding]:
         out = []

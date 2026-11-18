@@ -34,4 +34,7 @@ Comportamiento esperado, interfaces y datos. Enlaza los ADR que lo justifican.
 
 - **AC-01**: Comprobación verificable y automatizable.
 
+<!-- Si vas a delegar dos o más tareas en agentes dev-*, añade aquí la sección de nivel 2
+     "Plan de trabajo" con el formato de la skill mth-spec. -->
+
 ## Notas
