@@ -248,7 +248,8 @@ def _cmd_models(_: argparse.Namespace) -> int:
 
 
 def _cmd_survey(args: argparse.Namespace) -> int:
-    result = survey.run(Git.discover(Path.cwd()))
+    git = Git.discover(Path.cwd())
+    result = survey.reconfigure(git, load(git.root), args.only) if args.reconfigure else survey.run(git)
     if args.json:
         print(result.to_json())
         return 0
@@ -256,7 +257,7 @@ def _cmd_survey(args: argparse.Namespace) -> int:
     for key, value in result.signals.items():
         if value:
             print(f"· {key}: {value}")
-    print("Preguntas: " + ", ".join(f"{q['id']} ({q['evidence']})" for q in result.questions))
+    print("Preguntas: " + ", ".join(f"{q['id']} ({q.get('current') or q['evidence']})" for q in result.questions))
     for w in result.warnings:
         warn(w)
     return 0
@@ -282,6 +283,11 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--decline", action="store_true", help="desactiva el plugin en este repo (no versionado)")
     s = sub.add_parser("survey", help="inventario del repo antes de adoptar (solo lectura)")
     s.add_argument("--json", action="store_true", help="salida en JSON para la skill mth-init")
+    s.add_argument("--reconfigure", action="store_true", help="inventario de un repo adoptado (skill mth-reconfigure)")
+    s.add_argument("--only", help="preguntas o bloques separados por comas (con --reconfigure)")
+    s = sub.add_parser("reconfigure", help="aplica las respuestas de una reestructuración en una rama")
+    s.add_argument("--answers", required=True, help="respuestas de la reestructuración (JSON, skill mth-reconfigure)")
+    s.add_argument("--only", help="las mismas preguntas o bloques que en mth survey --reconfigure")
     sub.add_parser("doctor", help="comprueba la adopción")
     s = sub.add_parser("github", help="aplica ajustes de merge y ruleset en GitHub")
 
@@ -358,7 +364,12 @@ def _dispatch(args: argparse.Namespace) -> int:
             setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config, args.answers)
         return 0
     if c == "survey":
+        if args.only and not args.reconfigure:
+            raise MthError("--only solo se usa con --reconfigure.")
         return _cmd_survey(args)
+    if c == "reconfigure":
+        setup.reconfigure(Path.cwd(), args.answers, args.only)
+        return 0
     if c == "doctor":
         return EXIT_ERROR if setup.doctor(Path.cwd()) else 0
     if c == "github":

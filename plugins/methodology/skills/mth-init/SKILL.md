@@ -8,6 +8,8 @@ model: opus
 
 `mth` es el comando del contexto de sesión (`$MTH`). La adopción la conduce Opus porque es la tarea con más criterio del ciclo: entender cómo trabaja ya el repo y adaptar la metodología sin romperlo (ADR-0003 de claude-methodology). Lo determinista lo hace `mth`: el inventario y la traducción de respuestas a configuración.
 
+Si el repo ya tiene `.claude/methodology.toml` y la persona quiere cambiar cómo se aplica la metodología o rehacer la entrevista, usa la skill `mth-reconfigure`.
+
 ## 1. Inventario
 
 1. Árbol limpio y remoto con `main`. Si no, díselo a la persona y para.
