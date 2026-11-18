@@ -1,6 +1,6 @@
 # SPEC-0003 · Ficheros de versión en la publicación
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: —
 - Sustituye a: —
