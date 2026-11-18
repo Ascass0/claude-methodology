@@ -67,6 +67,16 @@ Un revisor que pide simplificar algo que existe por seguridad o por un modo de f
 - **Mínimo privilegio.** Cada componente tiene solo los permisos, credenciales y accesos que necesita. [criterio]
 - **Determinismo.** Lo que puede resolverse con código determinista NO DEBE delegarse en un modelo de lenguaje. [criterio]
 
+### SOLID
+
+SOLID es la práctica de diseño que DEBE seguirse en clases, módulos y componentes. Se aplica con proporcionalidad: la parsimonia sigue prohibiendo la extensibilidad especulativa, y una función o un script pequeño no necesitan interfaces.
+
+- **S · Responsabilidad única.** Cada clase o módulo DEBE tener una sola razón para cambiar: responde ante un único actor o aspecto (dominio, persistencia, presentación, transporte). Si dos cambios independientes obligan a tocar el mismo módulo, se separa. [criterio]
+- **O · Abierto/cerrado.** Cuando existen al menos dos variantes reales de un comportamiento, o la spec las exige, el código DEBE admitir una variante nueva añadiendo una implementación, sin modificar a quienes lo usan. Antes de eso NO DEBE crearse el punto de extensión: se modifica el código directamente. [criterio]
+- **L · Sustitución de Liskov.** Toda implementación de un contrato (subclase, implementación de una interfaz, doble de prueba) DEBE poder sustituir a cualquier otra sin que quien lo usa lo note: no exige precondiciones más fuertes, no ofrece garantías más débiles, no lanza errores ajenos al contrato y no deja métodos sin implementar. Cuando un contrato tiene varias implementaciones, DEBERÍA existir un test de contrato que pasen todas. [criterio]
+- **I · Segregación de interfaces.** Las interfaces DEBEN ser pequeñas y definirse según lo que necesita quien las usa: ningún consumidor depende de métodos que no usa. Concreta la regla de bajo acoplamiento. [criterio]
+- **D · Inversión de dependencias.** La lógica de dominio DEBE definir las abstracciones que necesita (repositorios, relojes, clientes, notificadores) y la infraestructura las implementa: las dependencias del código apuntan hacia el dominio, nunca del dominio a la infraestructura. La implementación concreta se elige en la raíz de composición, como exige la regla de dependencias explícitas. [criterio]
+
 ## 3. Errores y excepciones
 
 - **Captura específica** donde se pueda actuar: reintentar, compensar, liberar recursos o pasar a un estado seguro. [criterio]
@@ -105,7 +115,7 @@ Se traza el flujo normal y el de errores.
 - **Nombres que revelan intención.** Los identificadores DEBEN decir qué representan en el dominio y para qué sirven. NO DEBEN usarse nombres de una letra (salvo índices y lambdas de una línea), abreviaturas crípticas, sufijos numéricos (`data2`, `result_new`) ni genéricos (`data`, `info`, `tmp`, `manager`, `helper`) fuera de ámbitos de pocas líneas. Los booleanos se nombran como predicados (`is_valid`, `has_access`). [criterio]
 - **Sin duplicación de conocimiento (DRY).** Una regla de negocio, una validación, una constante o un formato DEBEN vivir en un único sitio. Se abstrae a partir de la tercera repetición, o antes si la duplicación ya ha causado un bug. Dos fragmentos parecidos que cambian por motivos distintos no son duplicación y NO DEBEN unificarse a la fuerza: el acoplamiento que crea una abstracción equivocada es peor que la copia. [criterio]
 
-Los antipatrones **STUPID** (Singleton, Tight coupling, Untestability, Premature optimization, Indescriptive naming, Duplication) son la violación de seis reglas: dependencias explícitas, bajo acoplamiento, testable por diseño y optimización con evidencia (apartado 2), y nombres que revelan intención y sin duplicación de conocimiento (este apartado). Un revisor que los detecte DEBE citar la regla incumplida.
+Los antipatrones **STUPID** (Singleton, Tight coupling, Untestability, Premature optimization, Indescriptive naming, Duplication) son la violación de seis reglas: dependencias explícitas, bajo acoplamiento, testable por diseño y optimización con evidencia (apartado 2), y nombres que revelan intención y sin duplicación de conocimiento (este apartado). Son el reverso de la buena práctica, que es [SOLID](#solid). Un revisor que los detecte DEBE citar la regla incumplida.
 
 ## 6. Tests
 

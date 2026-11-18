@@ -9,6 +9,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 ## [0.4.0] - 2026-11-18
 
 ### Añadido
+- SOLID como práctica de diseño obligatoria en clases, módulos y componentes (apartado 2 de `PRINCIPLES.md`), aplicada con proporcionalidad: los puntos de extensión solo se crean con variantes reales.
 - Principios contra los antipatrones STUPID: dependencias explícitas sin estado global oculto, bajo acoplamiento, testable por diseño y optimización con evidencia (apartado 2 de `PRINCIPLES.md`); nombres que revelan intención y sin duplicación de conocimiento (apartado 5). Las reglas base de sesión los resumen.
 
 ## [0.3.1] - 2026-11-10
