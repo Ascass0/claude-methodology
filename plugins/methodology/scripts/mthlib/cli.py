@@ -7,14 +7,13 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, branches, changelog, commits, guard, plan, review, session, setup
+from . import __version__, branches, changelog, commits, flow, guard, plan, review, session, setup
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
 from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
-from .trace import check as trace_check
 
 EXIT_ERROR = 1
 EXIT_BUG = 70
@@ -52,12 +51,16 @@ def _cmd_check_msg(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_trace(_: argparse.Namespace) -> int:
+def _cmd_trace(args: argparse.Namespace) -> int:
     ctx = _ctx("trace")
-    findings = trace_check(ctx.cfg, ctx.git.files())
+    findings, legacy = flow.run_trace(ctx)
     for f in findings:
         print(f"✗ {f}")
     say("✓ Trazabilidad OK" if not findings else f"{len(findings)} hallazgos")
+    if legacy:
+        say(flow.legacy_summary(ctx, legacy))
+        for f in legacy if args.legacy else []:
+            print(f"⚠ {f}")
     return EXIT_ERROR if findings else 0
 
 
@@ -284,7 +287,8 @@ def _parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("check-msg", help="valida un mensaje (hook commit-msg)")
     s.add_argument("file")
-    sub.add_parser("trace", help="comprueba referencias, enlaces y criterios de aceptación")
+    s = sub.add_parser("trace", help="comprueba referencias, enlaces y criterios de aceptación")
+    s.add_argument("--legacy", action="store_true", help="lista también los hallazgos en contenido legado")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])

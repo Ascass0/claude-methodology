@@ -20,6 +20,7 @@ from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
 from .proc import run_shell
+from .trace import Finding, partition
 from .trace import check as trace_check
 
 _MAX_LISTED = 50
@@ -64,8 +65,22 @@ class Ctx:
 
 
 # -- shared gates -------------------------------------------------------------
-def _gate_trace(ctx: Ctx) -> None:
+def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
+    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base)."""
     findings = trace_check(ctx.cfg, ctx.git.files())
+    base = ctx.cfg["trace"]["legacy_base"]
+    return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
+
+
+def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:
+    base = ctx.cfg["trace"]["legacy_base"][:7]
+    return f"⚠ {len(legacy)} hallazgos en contenido legado (anterior a {base}): mth trace --legacy los lista"
+
+
+def _gate_trace(ctx: Ctx) -> None:
+    findings, legacy = run_trace(ctx)
+    if legacy:
+        warn(legacy_summary(ctx, legacy))
     if findings:
         listing = "\n".join(f"  - {f}" for f in findings[:50])
         more = f"\n  … y {len(findings) - 50} más" if len(findings) > 50 else ""

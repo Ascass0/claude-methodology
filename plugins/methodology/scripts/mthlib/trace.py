@@ -176,13 +176,13 @@ class Tracer:
         vocab = self.cfg.vocab
         status_re = re.compile(rf"^-\s*{re.escape(vocab.status_label)}:\s*([a-záéíóú]+)", re.IGNORECASE | re.MULTILINE)
 
-        covered: set[tuple[str, str]] = set()
+        covered: dict[tuple[str, str], tuple[str, int]] = {}
         out = []
         for path, text in texts.items():
             if globs.match_any(path, self.cfg["paths"]["tests"]):
                 for lineno, line in enumerate(text.splitlines(), 1):
                     for m in verifies.finditer(line):
-                        covered.add((m.group(1), m.group(2).upper()))
+                        covered.setdefault((m.group(1), m.group(2).upper()), (path, lineno))
 
         declared: set[tuple[str, str]] = set()
         for path, text in texts.items():
@@ -206,10 +206,16 @@ class Tracer:
                     if (spec_id, ac) not in covered:
                         out.append(Finding(path, lineno,
                                            f"{spec_id}/{ac} no tiene ningún test con 'verifies: {spec_id}/{ac}'"))
-        for spec_id, ac in sorted(covered - declared):
-            out.append(Finding(self.cfg["paths"]["specs"], 0,
-                               f"un test verifica {spec_id}/{ac}, que no existe en la spec"))
+        for spec_id, ac in sorted(set(covered) - declared):
+            path, lineno = covered[(spec_id, ac)]
+            out.append(Finding(path, lineno, f"un test verifica {spec_id}/{ac}, que no existe en la spec"))
         return out
+
+
+def partition(findings: list[Finding], legacy_files: set[str]) -> tuple[list[Finding], list[Finding]]:
+    """Split findings into errors and those located in legacy files (SPEC-0005)."""
+    errors = [f for f in findings if f.path not in legacy_files]
+    return errors, [f for f in findings if f.path in legacy_files]
 
 
 def check(cfg: Config, files: list[str]) -> list[Finding]:

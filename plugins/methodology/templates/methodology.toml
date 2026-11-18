@@ -86,6 +86,9 @@ spec_kind = "SPEC"
 adr_kind = "ADR"
 include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
 exclude = []
+# Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde entonces son avisos
+# (mth trace --legacy los lista); lo que se toca después cumple todas las reglas. "" = desactivado.
+legacy_base = ""
 
 [release]
 github_release = true

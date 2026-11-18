@@ -1,6 +1,6 @@
 # SPEC-0005 · Modo legado en la trazabilidad
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0003
 - Sustituye a: —
