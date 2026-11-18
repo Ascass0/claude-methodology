@@ -325,7 +325,7 @@ def doctor(start: Path) -> int:
     try:
         cfg = load(git.root)
     except MthError as exc:
-        report(False, f"Configuración: {exc.message}")
+        report(False, f"Configuración: {exc.message}" + (f"\n  → {exc.hint}" if exc.hint else ""))  # SPEC-0009
         return problems
     report(True, f"Configuración válida ({CONFIG_PATH})")
     git.remote = cfg.remote
