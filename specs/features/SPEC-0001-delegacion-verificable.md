@@ -56,7 +56,7 @@ Reglas:
 - La cabecera de la tabla tiene exactamente las columnas `Tarea | Oleada | Ficheros | Criterios`, en ese orden. La tabla es la primera de la sección.
 - `Tarea`: `T-NN` (dos dígitos), única en la spec.
 - `Oleada`: entero ≥ 1. Las tareas de una oleada se ejecutan en paralelo; una oleada empieza cuando la anterior está verificada y confirmada.
-- `Ficheros`: uno o más elementos entre comillas invertidas, separados por comas. Cada uno es una ruta relativa a la raíz del repo o un glob (`*`, `**`, `?`) para ficheros cuyo nombre no se conoce de antemano. Nada de rutas absolutas ni `..`.
+- `Ficheros`: uno o más elementos entre comillas invertidas, separados por comas. Cada uno es una ruta relativa a la raíz del repo o un glob (`*`, `**`, `?`) para ficheros cuyo nombre no se conoce de antemano. Nada de rutas absolutas, con `..` ni sin normalizar (`./a`, `a//b`, `a/`): se rechazan en vez de normalizarse, porque dos formas de escribir un mismo fichero burlarían la comprobación de solapamiento.
 - `Criterios`: uno o más `AC-NN` separados por comas, todos declarados en la propia spec.
 - Cada criterio de la spec está asignado al menos a una tarea.
 - Dos tareas de la misma oleada no comparten ficheros. Entre globs la comprobación es conservadora (fail-safe): se consideran solapados salvo que sus prefijos literales (hasta el primer comodín) no puedan coincidir.
@@ -127,7 +127,7 @@ Informa de todos los problemas a la vez y termina con error si hay alguno. Los `
 ## Criterios de aceptación
 
 - **AC-01**: `mth plan check` acepta un plan válido y lista sus tareas agrupadas por oleada.
-- **AC-02**: `mth plan check` rechaza, con su línea, un plan mal formado: cabecera distinta, tarea con ID inválido o repetido, oleada no entera o menor que 1, celda de ficheros vacía o con texto fuera de las comillas invertidas, ruta absoluta o con `..`, y más de 50 tareas.
+- **AC-02**: `mth plan check` rechaza, con su línea, un plan mal formado: cabecera distinta, tarea con ID inválido o repetido, oleada no entera o menor que 1, celda de ficheros vacía o con texto fuera de las comillas invertidas, ruta absoluta, con `..` o sin normalizar, y más de 50 tareas.
 - **AC-03**: `mth plan check` rechaza dos tareas de la misma oleada que comparten un fichero, por ruta exacta, por un glob que cubre una ruta o por dos globs con prefijos compatibles, y acepta el mismo fichero en oleadas distintas.
 - **AC-04**: `mth plan check` rechaza un criterio que la spec no declara y un criterio de la spec que ninguna tarea tiene asignado.
 - **AC-05**: `mth trace` informa de los errores del plan de cualquier spec que tenga la sección `Plan de trabajo` y no dice nada de las specs sin ella.
