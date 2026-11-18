@@ -81,13 +81,15 @@ class ReconfigureTests(unittest.TestCase):
     git = test_mth.EndToEndTests.git
     mth = test_mth.EndToEndTests.mth
 
-    EXTRA = '\n[work]\ndirs = ["bench"]\n'
+    EXTRA = '\n[work]\ndirs = ["bench"]\n\n[ids.RFC]\npattern = \'RFC-\\d{3}\'\ndefined_in = ["rfcs/**/*.md"]\n'
 
     def setUp(self):
         self.setUp_e2e()
         self.mth("init")
         cfg = self.work / ".claude/methodology.toml"
+        self.base = self.git("rev-parse", "HEAD")  # an existing commit for trace.legacy_base
         cfg.write_text(cfg.read_text().replace('test = ""', 'test = "true"')
+                       .replace('legacy_base = ""', f'legacy_base = "{self.base}"')
                        .replace("[review.paths]\n", '[review.paths]\nverificador = ["src/**"]\n') + self.EXTRA)
         test_mth._write(self.work / ADOPTION_ADR, "# ADR-0001 · Adopción de claude-methodology\n")
         self.git("add", "-A")
@@ -102,7 +104,7 @@ class ReconfigureTests(unittest.TestCase):
         return (self.work / ".claude/methodology.toml").read_text(encoding="utf-8")
 
     def answers(self, data: dict) -> str:
-        path = self.tmp / "answers.json"
+        path = self.tmp / f"answers-{len(list(self.tmp.glob('answers-*.json')))}.json"  # one file per call
         path.write_text(json.dumps({"answers": data}), encoding="utf-8")
         return str(path)
 
@@ -127,6 +129,8 @@ class ReconfigureTests(unittest.TestCase):
         self.assertEqual(data["work"]["dirs"], ["bench"])
         self.assertEqual(data["review"]["paths"], {"verificador": ["src/**"]})
         self.assertEqual(data["commands"]["test"], "true")
+        self.assertEqual(data["ids"]["RFC"], {"pattern": r"RFC-\d{3}", "defined_in": ["rfcs/**/*.md"]})
+        self.assertEqual(data["ids"]["SPEC"]["pattern"], r"SPEC-\d{4}")
         files = self.git("show", "--name-only", "--format=", f"origin/{BRANCH}").splitlines()
         adr = next(f for f in files if "reestructuracion-de-claude-methodology" in f)
         text = self.git("show", f"origin/{BRANCH}:{adr}")
@@ -163,8 +167,18 @@ class ReconfigureTests(unittest.TestCase):
         self.assertIn("ya existe", self.mth("reconfigure", "--answers",
                                             self.answers({"autonomia": {"option": "supervised"}}),
                                             "--only", "autonomia", ok=False))
+        self.git("push", "-q", "origin", BRANCH)
         self.git("branch", "-D", BRANCH)
+        self.assertIn("ya existe", self.mth("reconfigure", "--answers",
+                                            self.answers({"autonomia": {"option": "supervised"}}),
+                                            "--only", "autonomia", ok=False))  # only on the remote
+        self.git("push", "-q", "origin", "--delete", BRANCH)
         self.unchanged()
+        (self.work / ".claude/methodology.toml").rename(self.tmp / "saved.toml")
+        out = self.mth("reconfigure", "--answers", self.answers({"autonomia": {"option": "supervised"}}), ok=False)
+        self.assertIn("no ha adoptado la metodología", out)
+        self.assertIn("mth-init", out)
+        (self.tmp / "saved.toml").rename(self.work / ".claude/methodology.toml")
 
     def test_nothing_to_change_unless_a_migration_is_requested(self):
         # verifies: SPEC-0011/AC-06
@@ -179,14 +193,16 @@ class ReconfigureTests(unittest.TestCase):
 
     def test_scope_and_reviewers(self):
         # verifies: SPEC-0011/AC-07
-        development = self.git("rev-parse", "origin/development")
-        self.mth("reconfigure", "--answers", self.answers({"alcance": {"option": "gradual"}}), "--only", "alcance")
-        self.assertEqual(tomllib.loads(self.config_text())["trace"]["legacy_base"], development)
-        self.mth("integrate", "--title", "chore(methodology): reconfigure claude-methodology", "--summary", "Alcance.")
-        self.mth("reconfigure", "--answers", self.answers({"alcance": {"option": "gradual"}}), "--only", "alcance",
-                 ok=False)  # the base is kept: nothing to change
+        gradual = self.answers({"alcance": {"option": "gradual"}})
+        out = self.mth("reconfigure", "--answers", gradual, "--only", "alcance", ok=False)
+        self.assertIn("nada que cambiar", out)  # an existing base is kept
+        self.assertEqual(tomllib.loads(self.config_text())["trace"]["legacy_base"], self.base)
         self.mth("reconfigure", "--answers", self.answers({"alcance": {"option": "completa"}}), "--only", "alcance")
         self.assertEqual(tomllib.loads(self.config_text())["trace"]["legacy_base"], "")
+        self.mth("integrate", "--title", "chore(methodology): reconfigure claude-methodology", "--summary", "Alcance.")
+        development = self.git("rev-parse", "origin/development")
+        self.mth("reconfigure", "--answers", gradual, "--only", "alcance")  # no base: the development commit
+        self.assertEqual(tomllib.loads(self.config_text())["trace"]["legacy_base"], development)
         self.mth("integrate", "--title", "chore(methodology): reconfigure claude-methodology", "--summary", "Alcance.")
         self.mth("branch", "chore", "agent")
         test_mth._write(self.work / ".claude/agents/seguridad.md", "---\nname: seguridad\n---\n")
