@@ -33,3 +33,13 @@ def match(path: str, pattern: str) -> bool:
 
 def match_any(path: str, patterns: list[str]) -> bool:
     return any(match(path, p) for p in patterns)
+
+
+def valid_path(path: str) -> bool:
+    """Normalised relative POSIX path (or glob) that stays inside the repository.
+
+    ``./a``, ``a//b`` or ``a/`` are rejected rather than normalised: two
+    spellings of one file would defeat the overlap check.
+    """
+    parts = path.split("/")
+    return bool(path) and "\\" not in path and all(p not in ("", ".", "..") for p in parts)

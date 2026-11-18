@@ -124,16 +124,6 @@ def _cells(line: str) -> list[str]:
     return [c.strip() for c in body.split("|")]
 
 
-def valid_path(path: str) -> bool:
-    """Normalised relative POSIX path (or glob) that stays inside the repository.
-
-    ``./a``, ``a//b`` or ``a/`` are rejected rather than normalised: two
-    spellings of one file would defeat the overlap check.
-    """
-    parts = path.split("/")
-    return bool(path) and "\\" not in path and all(p not in ("", ".", "..") for p in parts)
-
-
 def _parse_files(cell: str, line: int, problems: list[Problem]) -> tuple[str, ...]:
     items = [s.strip() for s in _CODE_SPAN.findall(cell)]
     rest = _CODE_SPAN.sub("", cell)
@@ -142,7 +132,7 @@ def _parse_files(cell: str, line: int, problems: list[Problem]) -> tuple[str, ..
     if not items:
         problems.append(Problem(line, "la tarea no declara ficheros"))
     for item in items:
-        if not valid_path(item):
+        if not globs.valid_path(item):
             problems.append(Problem(line, f"ruta no permitida (vacía, absoluta, con '..' o sin normalizar): '{item}'"))
     return tuple(items)
 
@@ -320,7 +310,7 @@ def load_manifest(path: Path) -> tuple[Manifest | None, list[str]]:
         if not _is_str_list(data[key]):
             errors.append(f"{src}: '{key}' debe ser una lista de cadenas")
     if _is_str_list(data["files"]):
-        errors += [f"{src}: ruta no permitida en 'files': '{f}'" for f in data["files"] if not valid_path(f)]
+        errors += [f"{src}: ruta no permitida en 'files': '{f}'" for f in data["files"] if not globs.valid_path(f)]
     tests = data["tests"]
     valid_tests = isinstance(tests, list) and all(
         isinstance(t, dict) and set(t) == {"name", "result"} and isinstance(t["name"], str)
