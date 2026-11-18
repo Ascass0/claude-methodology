@@ -66,10 +66,13 @@ class PlanCheckTests(unittest.TestCase):
             "repetida": spec_text("| T-01 | 1 | `a` | AC-01, AC-02 |\n| T-01 | 2 | `b` | AC-03 |"),
             "oleada inválida": spec_text("| T-01 | x | `a` | AC-01, AC-02, AC-03 |"),
             "oleada inválida ": spec_text("| T-01 | 0 | `a` | AC-01, AC-02, AC-03 |"),
+            " oleada inválida": spec_text("| T-01 | ² | `a` | AC-01, AC-02, AC-03 |"),
             "no declara ficheros": spec_text("| T-01 | 1 |  | AC-01, AC-02, AC-03 |"),
             "comillas invertidas": spec_text("| T-01 | 1 | src/a.py | AC-01, AC-02, AC-03 |"),
             "ruta no permitida": spec_text("| T-01 | 1 | `/etc/passwd` | AC-01, AC-02, AC-03 |"),
             "ruta no permitida ": spec_text("| T-01 | 1 | `../x.py` | AC-01, AC-02, AC-03 |"),
+            " ruta no permitida": spec_text("| T-01 | 1 | `./src/a.py` | AC-01, AC-02, AC-03 |"),
+            "  ruta no permitida": spec_text("| T-01 | 1 | `src//a.py` | AC-01, AC-02, AC-03 |"),
         }
         for expected, text in cases.items():
             with self.subTest(expected=expected):
@@ -80,7 +83,8 @@ class PlanCheckTests(unittest.TestCase):
     def test_too_many_tasks(self):
         # verifies: SPEC-0001/AC-02
         rows = "\n".join(f"| T-{i:02d} | {i} | `f{i}` | AC-01 |" for i in range(1, 52))
-        self.assertTrue(any("máximo 50" in m for m in messages(spec_text(rows, criteria="- **AC-01**: a.\n"))))
+        problems = plan.check(spec_text(rows, criteria="- **AC-01**: a.\n"))[1]
+        self.assertTrue(any("máximo 50" in p.message and p.line > 0 for p in problems), problems)
 
     def test_overlap_in_same_wave(self):
         # verifies: SPEC-0001/AC-03
@@ -92,7 +96,8 @@ class PlanCheckTests(unittest.TestCase):
         for left, right in cases:
             with self.subTest(left=left, right=right):
                 rows = f"| T-01 | 1 | {left} | AC-01, AC-02 |\n| T-02 | 1 | {right} | AC-03 |"
-                self.assertTrue(any("pueden tocar el mismo fichero" in m for m in messages(spec_text(rows))))
+                self.assertTrue(any("T-01 y T-02" in m and "pueden tocar el mismo fichero" in m
+                                    for m in messages(spec_text(rows))))
 
     def test_no_overlap_across_waves_or_disjoint_globs(self):
         # verifies: SPEC-0001/AC-03
@@ -206,6 +211,22 @@ class PlanCommandTests(RepoTestCase):
 
 
 class WaveVerifyTests(RepoTestCase):
+    def test_nothing_to_verify(self):
+        # Failure mode of SPEC-0001: spec without plan, undefined ID or missing wave.
+        self.write("specs/features/" + OTHER_ID + "-plain.md", f"# {OTHER_ID} · Plain\n\n- **AC-01**: x.\n")
+        self.write("specs/adr/ADR-" + "0007-x.md", "# ADR-" + "0007 · X\n")
+        manifests = self.wave_one()
+        cases = {
+            OTHER_ID: "no tiene sección '## Plan de trabajo'",
+            "SPEC-" + "0099": "no es una spec definida",
+            "ADR-" + "0007": "no es una spec definida",
+        }
+        for spec_id, expected in cases.items():
+            with self.subTest(spec_id=spec_id):
+                out = self.mth("plan", "verify", spec_id, "--wave", "1", "--manifest", manifests[0], ok=False)
+                self.assertIn(expected, out)
+        self.assertIn("El plan no tiene oleada 7", self.verify(manifests, ok=False, wave="7"))
+
     def test_accepts_matching_wave(self):
         # verifies: SPEC-0001/AC-06
         out = self.verify(self.wave_one(), ok=True)
@@ -248,6 +269,9 @@ class WaveVerifyTests(RepoTestCase):
             with self.subTest(expected=expected):
                 out = self.verify([*self.wave_one(), manifest], ok=False)
                 self.assertIn(expected, out)
+        valid = self.wave_one()
+        out = self.verify([str(bad_json), valid[1]], ok=False)
+        self.assertIn("T-01 no ejecutada", out)
         out = self.verify([*self.wave_one(), self.manifest("dup", task="T-02", files=["src/b/new.py"],
                                                           criteria=["AC-02"])], ok=False)
         self.assertIn("manifiesto duplicado de T-02", out)
@@ -271,6 +295,21 @@ class WaveVerifyTests(RepoTestCase):
         self.git("checkout", "--", "src/a.py")
         out = self.verify(manifests, ok=False)
         self.assertIn("declara 'src/a.py', que no tiene cambios", out)
+
+    def test_deleted_and_renamed_files_are_changes(self):
+        self.write("src/b/old.py", "o = 1\n")
+        self.write("src/b/gone.py", "g = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "old")
+        manifests = self.wave_one()
+        self.git("mv", "src/b/old.py", "src/b/moved.py")
+        os.remove(self.work / "src/b/gone.py")
+        out = self.verify(manifests, ok=False)
+        for path in ("src/b/moved.py", "src/b/old.py", "src/b/gone.py"):
+            self.assertIn(f"cambio que ningún manifiesto declara: '{path}'", out)
+        t2 = self.manifest("t2", task="T-02", criteria=["AC-02"],
+                           files=["src/b/new.py", "src/b/moved.py", "src/b/old.py", "src/b/gone.py"])
+        self.verify([manifests[0], t2], ok=True)
 
     def test_done_manifest_must_be_complete(self):
         # verifies: SPEC-0001/AC-10

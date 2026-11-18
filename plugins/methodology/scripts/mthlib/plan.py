@@ -34,6 +34,7 @@ _AC_ID = re.compile(r"^AC-\d{2,3}$")
 _AC_DECLARED = re.compile(r"\*\*(AC-\d{2,3})\*\*")
 _CODE_SPAN = re.compile(r"`([^`]*)`")
 _WILDCARD = re.compile(r"[*?]")
+_WAVE = re.compile(r"^[0-9]+$")
 
 _STR_LISTS = ("files", "criteria", "decisions", "deviations", "questions")
 _FIELDS = {"task", "status", "tests", *_STR_LISTS}
@@ -113,9 +114,13 @@ def _cells(line: str) -> list[str]:
 
 
 def valid_path(path: str) -> bool:
-    """Relative POSIX path (or glob) that stays inside the repository."""
-    return bool(path) and not path.startswith("/") and "\\" not in path \
-        and ".." not in path.split("/")
+    """Normalised relative POSIX path (or glob) that stays inside the repository.
+
+    ``./a``, ``a//b`` or ``a/`` are rejected rather than normalised: two
+    spellings of one file would defeat the overlap check.
+    """
+    parts = path.split("/")
+    return bool(path) and "\\" not in path and all(p not in ("", ".", "..") for p in parts)
 
 
 def _parse_files(cell: str, line: int, problems: list[Problem]) -> tuple[str, ...]:
@@ -127,7 +132,7 @@ def _parse_files(cell: str, line: int, problems: list[Problem]) -> tuple[str, ..
         problems.append(Problem(line, "la tarea no declara ficheros"))
     for item in items:
         if not valid_path(item):
-            problems.append(Problem(line, f"ruta no permitida (vacía, absoluta o con '..'): '{item}'"))
+            problems.append(Problem(line, f"ruta no permitida (vacía, absoluta, con '..' o sin normalizar): '{item}'"))
     return tuple(items)
 
 
@@ -141,7 +146,7 @@ def _parse_rows(rows: list[tuple[int, str]], problems: list[Problem]) -> list[Ta
         task_id, wave_raw, files_raw, criteria_raw = cells
         if not _TASK_ID.match(task_id):
             problems.append(Problem(lineno, f"ID de tarea inválido: '{task_id}' (formato T-NN)"))
-        wave = int(wave_raw) if wave_raw.isdigit() else 0
+        wave = int(wave_raw) if _WAVE.match(wave_raw) else 0
         if wave < 1:
             problems.append(Problem(lineno, f"oleada inválida: '{wave_raw}' (entero ≥ 1)"))
         files = _parse_files(files_raw, lineno, problems)
@@ -301,7 +306,7 @@ def load_manifest(path: Path) -> tuple[Manifest | None, list[str]]:
     if errors:
         return None, errors
     return Manifest(source=src, task=data["task"], status=data["status"],
-                    files=tuple(f.removeprefix("./") for f in data["files"]),
+                    files=tuple(data["files"]),
                     criteria=tuple(data["criteria"]),
                     tests=tuple((t["name"], t["result"]) for t in tests),
                     deviations=tuple(data["deviations"]), questions=tuple(data["questions"])), []
