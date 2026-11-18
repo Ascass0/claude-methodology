@@ -456,6 +456,7 @@ def hotfix_finish(ctx: Ctx) -> None:
         frag = _fragment(ctx, info)
         if frag.bump != "patch":
             raise MthError("Un hotfix solo publica versiones patch (bump: patch).")
+        _check_version_files(ctx)
         _gate_trace(ctx)
         _review(ctx, info, branch)
         _gate_tests(ctx)

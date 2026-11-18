@@ -139,6 +139,26 @@ class VersionFileFlowTests(unittest.TestCase):
         self.assertIn("✗ Fichero de versión: El patrón de versión de package.json aparece 0 veces",
                       self.mth("doctor", ok=False))
 
+    def test_hotfix_refuses_a_missing_version_file_before_its_gates(self):
+        # verifies: SPEC-0003/AC-05
+        self.adopt()
+        self.add_fragment()
+        self.mth("release")
+        self.mth("branch", "hotfix", "leak")
+        self.mth("doc", "spec", "--title", "Leak")
+        frag = self.work / "changes/hotfix-leak.md"
+        frag.write_text(frag.read_text().replace("<describe el cambio para quien usa el proyecto>", "Fuga."))
+        (self.work / "package.json").unlink()
+        self.git("add", "-A")
+        self.mth("commit", "--type", "fix", "--summary", "close leaked handle", "--body", "Close on exit.",
+                 "--refs", "SPEC-0001")
+        out = self.mth("hotfix", "finish", ok=False)  # no review recorded: the file check comes first
+        self.assertIn("No existe el fichero de versión package.json", out)
+        self.assertNotIn("Faltan revisiones", out)
+        self.assertIn("✗ Fichero de versión: No existe el fichero de versión package.json",
+                      self.mth("doctor", ok=False))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
     def test_release_refuses_a_missing_version_file(self):
         # verifies: SPEC-0003/AC-05
         self.adopt(ENTRY + '[[release.version_files]]\npath = "VERSION"\npattern = "(.+)"\n')
