@@ -72,17 +72,17 @@ def _cmd_changes(args: argparse.Namespace) -> int:
         if path.exists():
             raise MthError(f"{path.name} ya existe.")
         folder.mkdir(parents=True, exist_ok=True)
-        path.write_text(changelog.template(info.kind, _split_refs(args.refs)), encoding="utf-8")
+        path.write_text(changelog.template(info.kind, _split_refs(args.refs), ctx.cfg.vocab), encoding="utf-8")
         say(f"✓ {path.relative_to(ctx.root)}")
         return 0
     fragments = changelog.load_all(folder)
     registry = ctx.registry()
-    errors = [e for f in fragments for e in changelog.validate(f, registry, False)]
+    errors = [e for f in fragments for e in changelog.validate(f, registry, False, ctx.cfg.vocab)]
     for e in errors:
         print(f"✗ {e}")
     if args.action == "preview" and fragments and not errors:
         version = changelog.next_version(ctx.git.latest_version(ctx.cfg.tag_prefix), changelog.highest_bump(fragments))
-        print(changelog.render(version, fragments))
+        print(changelog.render(version, fragments, vocab=ctx.cfg.vocab))
     say(f"{len(fragments)} fragmentos, {len(errors)} errores")
     return EXIT_ERROR if errors else 0
 
@@ -135,10 +135,11 @@ _MODEL_ARG = re.compile(r"^(T-\d{2})=([a-z]+)$")
 def _plan_tasks(ctx: Ctx, spec_id: str) -> tuple[str, list[plan.Task]]:
     """Valid tasks of the spec's plan; prints every problem and fails when there are any."""
     rel, text = _spec_text(ctx, spec_id)
-    if not plan.has_plan(text):
-        raise MthError(f"{spec_id} no tiene sección '## {plan.SECTION}'.",
+    vocab = ctx.cfg.vocab
+    if not plan.has_plan(text, vocab):
+        raise MthError(f"{spec_id} no tiene sección '## {vocab.plan_section}'.",
                        hint="Añade el plan a la spec (skill mth-spec) antes de delegar.")
-    tasks, problems = plan.check(text, ctx.cfg["models"]["ladder"])
+    tasks, problems = plan.check(text, ctx.cfg["models"]["ladder"], vocab)
     for p in problems:
         print(f"✗ {rel}:{p.line}: {p.message}")
     if problems:

@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import branches
+from . import branches, lang
 from .config import load
 from .errors import MthError
 from .git import Git
@@ -43,6 +43,13 @@ def _state(cwd: Path) -> list[str]:
     return lines
 
 
+def _docs_language(cwd: Path) -> str:
+    try:
+        return load(Git.discover(cwd).root).vocab.name
+    except MthError:
+        return lang.ES.name
+
+
 def main() -> int:
     """Print context for Claude. Never fails: a broken hook must not block the session."""
     try:
@@ -52,7 +59,8 @@ def main() -> int:
         if env_file:
             with open(env_file, "a", encoding="utf-8") as fh:
                 fh.write(f"export MTH='{cmd}'\n")
-        print(core.replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md")))
+        print(core.replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md"))
+              .replace("{{DOCS_LANGUAGE}}", _docs_language(Path.cwd())))
         print("\n".join(_state(Path.cwd())))
     except Exception as exc:  # noqa: BLE001 — hook boundary.
         print(f"[claude-methodology] contexto no disponible: {exc}", file=sys.stderr)

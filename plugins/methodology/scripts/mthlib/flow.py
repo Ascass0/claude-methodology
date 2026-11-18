@@ -22,7 +22,6 @@ from .log import Tracer, say, warn
 from .proc import run_shell
 from .trace import check as trace_check
 
-TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
 _MAX_LISTED = 50
 
 
@@ -110,7 +109,7 @@ def _fragment(ctx: Ctx, info: branches.BranchInfo) -> changelog.Fragment | None:
     frag = changelog.parse(ctx.path("changes") / branches.fragment_name(info))
     refs_required = info.kind in ctx.cfg["commits"]["require_refs"] or info.kind == "hotfix"
     registry = ctx.registry()
-    errors = changelog.validate(frag, registry, refs_required)
+    errors = changelog.validate(frag, registry, refs_required, ctx.cfg.vocab)
     spec_kind = ctx.cfg["trace"]["spec_kind"]
     if info.kind == "feat" and not any(registry.kind_of(r) == spec_kind for r in frag.refs):
         errors.append(f"{frag.path.name}: una feature debe referenciar su spec ({spec_kind}) en refs")
@@ -221,7 +220,7 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None) -> str:
     if kind in cfg["changes"]["required_for"]:
         frag_path = ctx.path("changes") / branches.fragment_name(info)
         frag_path.parent.mkdir(parents=True, exist_ok=True)
-        frag_path.write_text(changelog.template(kind, refs), encoding="utf-8")
+        frag_path.write_text(changelog.template(kind, refs, cfg.vocab), encoding="utf-8")
         say(f"· Fragmento creado: {frag_path.relative_to(ctx.root)} (complétalo antes de integrar)")
     g.push(name)
     ctx.tracer.event("branch.start", branch=name, base=base, spec=spec)
@@ -350,7 +349,7 @@ def _apply_release(ctx: Ctx, version: str, fragments: list[changelog.Fragment]) 
     if not log_path.is_file():
         raise MthError(f"No existe {log_path.name}.", hint="mth init lo crea.")
     bumped = versions.write(ctx.root, _version_files(ctx), version)  # SPEC-0003: checked before any write
-    section = changelog.render(version, fragments)
+    section = changelog.render(version, fragments, vocab=ctx.cfg.vocab)
     log_path.write_text(changelog.insert(log_path.read_text(encoding="utf-8"), section), encoding="utf-8")
     for frag in fragments:
         ctx.git.out("rm", "-q", str(frag.path.relative_to(ctx.root)))
@@ -424,7 +423,7 @@ def release(ctx: Ctx) -> None:
         if not fragments:
             raise MthError("No hay fragmentos en changes/: nada que publicar.")
         registry = ctx.registry()
-        errors = [e for f in fragments for e in changelog.validate(f, registry, False)]
+        errors = [e for f in fragments for e in changelog.validate(f, registry, False, cfg.vocab)]
         if errors:
             raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
         _gate_trace(ctx)
@@ -494,7 +493,7 @@ def new_doc(ctx: Ctx, kind: str, title: str, category: str | None) -> Path:
     else:
         folder = ctx.path("specs")
     path = folder / f"{ident}-{slug}.md"
-    content = (TEMPLATES / f"{kind}.md").read_text(encoding="utf-8")
+    content = (cfg.vocab.templates / f"{kind}.md").read_text(encoding="utf-8")
     content = (content.replace("{{ID}}", ident).replace("{{TITLE}}", title.strip())
                .replace("{{DATE}}", date.today().isoformat())
                .replace("{{CATEGORY}}", category or ""))

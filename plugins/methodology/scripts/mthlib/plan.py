@@ -18,12 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from . import globs
+from . import globs, lang
 from .config import DEFAULTS
 
-SECTION = "Plan de trabajo"
-COLUMNS = ["Tarea", "Oleada", "Ficheros", "Criterios"]
-MODEL_COLUMN = "Modelo"
 DEFAULT_LADDER: tuple[str, ...] = tuple(DEFAULTS["models"]["ladder"])
 OUTCOMES = ("ok", "not_run", "not_completed", "rejected")
 MAX_TASKS = 50
@@ -32,7 +29,6 @@ STATUSES = ("done", "blocked", "failed")
 TEST_RESULTS = ("pass", "fail")
 
 _FENCE = re.compile(r"^\s*(```|~~~)")
-_SECTION_START = re.compile(rf"^##\s+{re.escape(SECTION)}\s*$")
 _SECTION_END = re.compile(r"^#{1,2}\s")
 _SEPARATOR = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
 _TASK_ID = re.compile(r"^T-\d{2}$")
@@ -90,11 +86,12 @@ class Manifest:
 
 # -- plan -------------------------------------------------------------------
 
-def _section(text: str) -> tuple[int, list[tuple[int, str]]] | None:
+def _section(text: str, vocab: lang.Vocabulary) -> tuple[int, list[tuple[int, str]]] | None:
     """Heading line and body lines of the plan section, or None when absent.
 
     Headings inside code fences do not open or close the section.
     """
+    start = re.compile(rf"^##\s+{re.escape(vocab.plan_section)}\s*$")
     heading: int | None = None
     lines: list[tuple[int, str]] = []
     in_fence = False
@@ -104,7 +101,7 @@ def _section(text: str) -> tuple[int, list[tuple[int, str]]] | None:
             in_fence = not in_fence
         is_prose = not (in_fence or is_fence)
         if heading is None:
-            if is_prose and _SECTION_START.match(line):
+            if is_prose and start.match(line):
                 heading = lineno
             continue
         if is_prose and _SECTION_END.match(line):
@@ -113,8 +110,8 @@ def _section(text: str) -> tuple[int, list[tuple[int, str]]] | None:
     return None if heading is None else (heading, lines)
 
 
-def has_plan(text: str) -> bool:
-    return _section(text) is not None
+def has_plan(text: str, vocab: lang.Vocabulary = lang.ES) -> bool:
+    return _section(text, vocab) is not None
 
 
 def _cells(line: str) -> list[str]:
@@ -162,13 +159,13 @@ def _parse_rows(rows: list[tuple[int, str]], width: int, problems: list[Problem]
     return tasks
 
 
-def parse(text: str) -> tuple[list[Task], list[Problem]]:
+def parse(text: str, vocab: lang.Vocabulary = lang.ES) -> tuple[list[Task], list[Problem]]:
     """Parse the plan section of a spec.
 
     Returns:
         The tasks and the format problems. No section = no tasks, no problems.
     """
-    section = _section(text)
+    section = _section(text, vocab)
     if section is None:
         return [], []
     heading, body = section
@@ -176,12 +173,13 @@ def parse(text: str) -> tuple[list[Task], list[Problem]]:
     table = [(n, l) for n, l in body if l.strip()]
     start = next((i for i, (_, l) in enumerate(table) if l.lstrip().startswith("|")), None)
     if start is None:
-        return [], [Problem(heading, "la sección Plan de trabajo no tiene tabla")]
+        return [], [Problem(heading, f"la sección {vocab.plan_section} no tiene tabla")]
     header_line, header = table[start]
     columns = _cells(header)
-    if columns not in (COLUMNS, [*COLUMNS, MODEL_COLUMN]):
-        problems.append(Problem(header_line, f"cabecera inválida: debe ser | {' | '.join(COLUMNS)} | "
-                                             f"(opcionalmente con | {MODEL_COLUMN} | al final)"))
+    expected = list(vocab.plan_columns)
+    if columns not in (expected, [*expected, vocab.model_column]):
+        problems.append(Problem(header_line, f"cabecera inválida: debe ser | {' | '.join(expected)} | "
+                                             f"(opcionalmente con | {vocab.model_column} | al final)"))
         return [], problems
     rows = []
     for lineno, line in table[start + 1:]:
@@ -220,9 +218,10 @@ def declared_criteria(text: str) -> list[str]:
     return list(dict.fromkeys(_AC_DECLARED.findall(text)))
 
 
-def check(text: str, ladder: Sequence[str] = DEFAULT_LADDER) -> tuple[list[Task], list[Problem]]:
+def check(text: str, ladder: Sequence[str] = DEFAULT_LADDER,
+          vocab: lang.Vocabulary = lang.ES) -> tuple[list[Task], list[Problem]]:
     """Parse and validate the plan of a spec against its own criteria and the model ladder."""
-    tasks, problems = parse(text)
+    tasks, problems = parse(text, vocab)
     if not tasks:
         return tasks, problems
     for t in tasks:

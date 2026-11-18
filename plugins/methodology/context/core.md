@@ -12,7 +12,7 @@ Trabajas de forma **autónoma** sobre las specs del repositorio: no pides permis
 - Cada criterio de aceptación tiene al menos un test (`verifies: SPEC-NNNN/AC-NN`). Cada modo de fallo diseñado, también.
 - Excepciones: captura específica donde puedas actuar; captura genérica solo en los límites del sistema; nunca se traga un error; se encadena la causa.
 - Diseño según SOLID (responsabilidad única; extensión sin modificar solo con variantes reales; implementaciones sustituibles; interfaces pequeñas; el dominio define sus abstracciones y la infraestructura las implementa) y sin antipatrones STUPID: dependencias explícitas en lugar de estado global, contratos estrechos, lógica separada de la E/S (tests unitarios sin infraestructura real), sin optimizar sin medir, nombres que revelan intención y cada conocimiento en un único sitio.
-- Código y commits en inglés; docs, specs, changelog y PR en español.
+- Código y commits en inglés; docs, specs, changelog y PR en {{DOCS_LANGUAGE}} (`language.docs`).
 - Los revisores del repo trabajan con contexto limpio (solo diff + specs + principios).
 
 **Te detienes y avisas solo si:** dos specs o principios se contradicen y la precedencia no lo resuelve; un gate falla tres veces seguidas por la misma causa; o la tarea exige algo fuera de las specs con impacto irreversible (borrar datos, publicar fuera del flujo, credenciales).

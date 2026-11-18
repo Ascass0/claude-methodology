@@ -1,6 +1,6 @@
 # SPEC-0008 · Idioma de la documentación configurable
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0005
 - Sustituye a: —

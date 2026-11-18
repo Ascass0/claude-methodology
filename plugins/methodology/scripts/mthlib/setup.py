@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import changelog, commits, versions
+from . import changelog, commits, lang, versions
 from .config import CONFIG_PATH, load, parse
 from .errors import MthError
 from .gh import GitHub
@@ -55,18 +55,18 @@ def install_hook(git: Git) -> str:
 
 
 # -- scaffolding ----------------------------------------------------------------
-def _claude_block(paths: dict) -> str:
-    text = (TEMPLATES / "claude-block.md").read_text(encoding="utf-8")
+def _claude_block(paths: dict, vocab: lang.Vocabulary) -> str:
+    text = (vocab.templates / "claude-block.md").read_text(encoding="utf-8")
     for key, value in paths.items():
         text = text.replace("{{" + key.upper() + "}}", str(value))
     return text.strip()
 
 
-def upsert_claude_md(root: Path, paths: dict) -> None:
+def upsert_claude_md(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> None:
     """Insert or refresh the methodology block in ``paths.claude_md`` (other content untouched)."""
     path = root / paths["claude_md"]
     path.parent.mkdir(parents=True, exist_ok=True)
-    block = _claude_block(paths)
+    block = _claude_block(paths, vocab)
     current = path.read_text(encoding="utf-8") if path.exists() else ""
     if BLOCK_START in current and BLOCK_END in current:
         head, rest = current.split(BLOCK_START, 1)
@@ -77,10 +77,10 @@ def upsert_claude_md(root: Path, paths: dict) -> None:
     path.write_text(new, encoding="utf-8")
 
 
-def _ensure_changelog(path: Path) -> None:
+def _ensure_changelog(path: Path, vocab: lang.Vocabulary) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
-        path.write_text((TEMPLATES / "CHANGELOG.md").read_text(encoding="utf-8"), encoding="utf-8")
+        path.write_text((vocab.templates / "CHANGELOG.md").read_text(encoding="utf-8"), encoding="utf-8")
         return
     text = path.read_text(encoding="utf-8")
     if changelog.MARKER in text:
@@ -156,8 +156,8 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
         folder.mkdir(parents=True, exist_ok=True)
         if not any(folder.iterdir()):
             (folder / ".gitkeep").touch()
-    _ensure_changelog(root / cfg["paths"]["changelog"])
-    upsert_claude_md(root, cfg["paths"])
+    _ensure_changelog(root / cfg["paths"]["changelog"], cfg.vocab)
+    upsert_claude_md(root, cfg["paths"], cfg.vocab)
     if marketplace_repo:
         _merge_settings(root, marketplace_repo)
     install_hook(git)

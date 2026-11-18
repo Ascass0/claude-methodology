@@ -102,7 +102,7 @@ Se traza el flujo normal y el de errores.
 
 ## 5. Código
 
-- **Idioma:** identificadores, comentarios, docstrings y mensajes de commit en inglés. [criterio]
+- **Idioma:** identificadores, comentarios, docstrings y mensajes de commit en inglés, sea cual sea el idioma de la documentación. [criterio]
 - **Documentación en el código**, siguiendo el estándar del lenguaje (PEP 257 con estilo Google en Python, JSDoc/TSDoc, Javadoc, Doxygen, rustdoc…):
   - Cada función o método público DEBE tener una definición mínima: qué hace (una línea), parámetros, valor de retorno, excepciones que lanza y efectos laterales relevantes. [criterio]
   - Si el lenguaje tiene tipos, los tipos van en la firma y NO DEBEN repetirse en la documentación. [criterio]
@@ -137,7 +137,7 @@ Además:
 - La documentación DEBE actualizarse en la misma rama que el cambio que la motiva. Una feature sin sus docs no está hecha. [criterio]
 - Una única fuente de verdad: se enlaza, no se duplica. [criterio]
 - Los enlaces internos DEBEN ser relativos, válidos y apuntar dentro del repositorio. Lo que vive en otro repositorio se enlaza con URL absoluta. [script: `mth trace`]
-- Docs, specs, ADR, changelog y descripciones de PR en español. [criterio]
+- Docs, specs, ADR, changelog y descripciones de PR en el idioma de `language.docs`: español (por defecto) o inglés. `mth` reconoce solo las palabras clave y plantillas de ese idioma (ADR-0005 de claude-methodology). [script en las palabras clave; criterio en el resto]
 - Se sigue el estándar aplicable: Keep a Changelog, SemVer, MADR para ADR, Conventional Commits. [script en los tres últimos]
 
 ## 8. Seguridad
