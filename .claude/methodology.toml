@@ -5,7 +5,7 @@ remote = "origin"
 
 [commands]
 # Comando de tests. Obligatorio: usa "" solo mientras el repo no tenga tests.
-test = ""
+test = "sh tests/run.sh"
 # Comprobación rápida antes de cada commit (lint, tipos). "" = ninguna.
 precommit = ""
 
@@ -77,7 +77,7 @@ acceptance = true     # los AC de specs "implementada" deben tener test
 spec_kind = "SPEC"
 adr_kind = "ADR"
 include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
-exclude = []
+exclude = ["tests/test_mth.py"]  # fixtures write example IDs into temporary repos
 
 [release]
 github_release = true
