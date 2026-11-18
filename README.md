@@ -93,6 +93,22 @@ Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs,
 | `autonomy.level` | `full` (por defecto), `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, ramas, commits y push). Ver [SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md) y [ADR-0004](specs/adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) |
 | `language.docs` | Idioma de docs, specs, ADR, changelog y PR: `es` (por defecto) o `en`. Código y commits, siempre en inglés. Ver [SPEC-0008](specs/features/SPEC-0008-idioma-de-la-documentacion-configurable.md) |
 | `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
+| `work.dirs` | Subdirectorios propios del repo en `.work/`, además de los de serie. Ver [Directorio de trabajo local](#directorio-de-trabajo-local) |
+
+### Directorio de trabajo local
+
+Cada repo adoptado tiene `.work/` en su raíz: ahí deja Claude lo que produce mientras trabaja y no es parte del repo. Se excluye de git con una línea `/.work/` en `.git/info/exclude`, así que el plugin no modifica ningún fichero versionado ([SPEC-0010](specs/features/SPEC-0010-directorio-de-trabajo-local.md), [ADR-0006](specs/adr/process/ADR-0006-directorio-de-trabajo-local-excluido-de-git.md)).
+
+| Subdirectorio | Contenido |
+|---|---|
+| `plans/` | planes de trabajo, manifiestos de agentes y borradores de diseño |
+| `merge-request/` | títulos, resúmenes y cuerpos de PR |
+| `security-report/` | informes de seguridad |
+| `reviews/` | informes completos de los revisores |
+| `notes/` | notas de sesión que se conservan |
+| `tmp/` | temporales desechables: se pueden borrar en cualquier momento |
+
+El hook de sesión lo crea y lo excluye en cada sesión (también `mth init` al adoptar), y `mth doctor` lo comprueba. Si git ya versiona algo bajo `.work/`, no se toca y `doctor` lo marca con ✗. El guard bloquea los `git add` forzados que lo incluirían (`git add -f .work/…`, `git add -f .`, `git add -f -A`). La exclusión es de cada clon: no viaja con el repo, pero cada sesión la restablece.
 
 ### Uso en un fork
 
@@ -130,6 +146,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | SemVer y etiquetas | `mth release` calcula la versión del mayor `bump`; etiqueta anotada |
 | `main ⊆ development` | El merge de vuelta integra `main` en `development` tras cada versión |
 | Adopción sin conflictos silenciosos | `mth survey` + entrevista de `mth-init` + `mth init --answers`; sin adoptar, el plugin no actúa |
+| Artefactos de trabajo fuera del repo | `.work/` excluido en `.git/info/exclude` por el hook de sesión y `mth init`; guard ante `git add` forzado; `mth doctor` |
 | Trazabilidad de las operaciones | `.git/mth/trace.jsonl` (eventos JSON con ID de ejecución) |
 | Diseño, excepciones, parsimonia, docs en código | Principios + revisores del repo (criterio) |
 

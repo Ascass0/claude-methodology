@@ -29,7 +29,7 @@ Bloqueante = incumple una regla DEBE, un criterio de aceptación, o introduce un
 Termina con: BLOQUEANTES: <n>
 ```
 
-Guarda el informe completo de cada revisor, tal cual, en un fichero del scratchpad (fuera del repo). Su última línea es `BLOQUEANTES: <n>`.
+Guarda el informe completo de cada revisor, tal cual, en `.work/reviews/<rama>-<agente>.md` (local, excluido de git). Su última línea es `BLOQUEANTES: <n>`.
 
 **Revisor que no termina** (se cae, agota el tiempo o su informe no acaba en `BLOQUEANTES: <n>`): no ha revisado. Nunca cuenta como "sin hallazgos". Relánzalo una vez con el mismo encargo; si vuelve a fallar, detente y avisa (PRINCIPLES §11).
 
