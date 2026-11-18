@@ -2,7 +2,9 @@
 
 It only reads. It classifies the repository in a profile and decides which
 interview questions are needed: the base questions of the profile plus the
-ones each detected signal triggers.
+ones each detected signal triggers. An adopted repository gets the
+reconfiguration inventory instead: every applicable question with its current
+value (SPEC-0011, ADR-0007).
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config import CONFIG_PATH
+from .config import CONFIG_PATH, Config
 from .errors import MthError
 from .git import Git
 
@@ -21,6 +23,14 @@ PLUGIN_AGENTS = Path(__file__).resolve().parents[2] / "agents"
 QUESTIONS = ("alcance", "ramas", "commits", "versiones", "specs", "decisiones", "tests", "revisores",
              "colision", "instrucciones", "autonomia", "idioma", "ci", "modelos")
 PROFILES = ("new", "existing", "methodology", "fork")
+RECONFIGURE = "reconfigure"
+# Thematic blocks of the reconfiguration form (SPEC-0011): every question in exactly one.
+GROUPS: dict[str, tuple[str, ...]] = {
+    "flujo": ("ramas", "commits", "versiones", "ci"),
+    "documentacion": ("alcance", "specs", "decisiones", "idioma", "instrucciones"),
+    "calidad": ("tests", "revisores", "colision"),
+    "agente": ("autonomia", "modelos"),
+}
 BASE: dict[str, tuple[str, ...]] = {
     "new": ("autonomia", "idioma", "modelos"),
     "existing": ("alcance", "autonomia", "modelos"),
@@ -252,3 +262,71 @@ def run(git: Git) -> Survey:
     found, warnings = signals(git)
     profile = profile_of(found)
     return Survey(profile, found, questions(profile, found), warnings)
+
+
+def select(only: str | None) -> set[str]:
+    """Question IDs named by ``--only`` (IDs or block names, comma separated); every question if None.
+
+    Raises:
+        MthError: An unknown name.
+    """
+    if only is None:
+        return set(QUESTIONS)
+    chosen: set[str] = set()
+    for name in (n.strip() for n in only.split(",") if n.strip()):
+        if name in GROUPS:
+            chosen |= set(GROUPS[name])
+        elif name in QUESTIONS:
+            chosen.add(name)
+        else:
+            raise MthError(f"--only: '{name}' no es una pregunta ni un bloque.",
+                           hint=f"Bloques: {', '.join(GROUPS)}. Preguntas: {', '.join(QUESTIONS)}.")
+    return chosen
+
+
+def current(cfg: Config, qid: str) -> str:
+    """The present value of the keys that question ``qid`` decides."""
+    d = cfg.data
+    spec_kind, adr_kind = d["trace"]["spec_kind"], d["trace"]["adr_kind"]
+    values = {
+        "alcance": f"trace.legacy_base = {d['trace']['legacy_base'][:7] or '(vacío: adopción completa)'}",
+        "ramas": f"branches.development = {cfg.development}",
+        "commits": f"hooks.commit_msg = {d['hooks']['commit_msg']}",
+        "versiones": f"release.tag_prefix = {cfg.tag_prefix}; version_files: "
+                     + (", ".join(v["path"] for v in d["release"]["version_files"]) or "ninguno"),
+        "specs": f"paths.specs = {d['paths']['specs']}; ids.{spec_kind} = {d['ids'][spec_kind]['pattern']}",
+        "decisiones": f"paths.adr = {d['paths']['adr']}; ids.{adr_kind} = {d['ids'][adr_kind]['pattern']}",
+        "tests": f"commands.test = {cfg.test_command or '(vacío)'}",
+        "revisores": f"review.agents = {', '.join(d['review']['agents']) or '(ninguno)'}",
+        "colision": f"review.agents = {', '.join(d['review']['agents']) or '(ninguno)'}",
+        "instrucciones": f"paths.claude_md = {d['paths']['claude_md']}",
+        "autonomia": f"autonomy.level = {d['autonomy']['level']}",
+        "idioma": f"language.docs = {d['language']['docs']}",
+        "ci": f"ci.required = {str(d['ci']['required']).lower()}",
+        "modelos": f"models.ladder = {', '.join(d['models']['ladder'])}; task = {d['models']['task']}; "
+                   f"review = {d['models']['review']}",
+    }
+    return values[qid]
+
+
+def reconfigure(git: Git, cfg: Config, only: str | None = None) -> Survey:
+    """Inventory of an adopted repository: every applicable question with its current value.
+
+    Raises:
+        MthError: The repository has not adopted the methodology, ``only`` names something
+            unknown or leaves no applicable question.
+    """
+    if not (git.root / CONFIG_PATH).exists():
+        raise MthError("El repositorio no ha adoptado la metodología.", hint="Usa la skill mth-init.")
+    chosen = select(only)
+    found, warnings = signals(git)
+    triggered = {q["id"]: q["evidence"] for q in questions("existing", found) if "base del perfil" not in q["evidence"]}
+    out = []
+    for qid in QUESTIONS:
+        if qid not in chosen or (qid == "colision" and not found["agent_collisions"]):
+            continue
+        evidence = triggered.get(qid, "reestructuración")
+        out.append({"id": qid, "evidence": evidence, "current": current(cfg, qid)})
+    if not out:
+        raise MthError("--only no deja ninguna pregunta aplicable en este repo.")
+    return Survey(RECONFIGURE, found, out, warnings)

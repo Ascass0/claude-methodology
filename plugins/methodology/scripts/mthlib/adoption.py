@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import lang
-from .config import AUTONOMY_LEVELS, _merge
+from .config import AUTONOMY_LEVELS, DEFAULTS, _merge
 from .errors import MthError
 from .survey import Survey
 
@@ -48,6 +48,10 @@ MODEL_PRESETS = {
     "ahorro": {"ladder": ["haiku", "sonnet"], "task": "haiku", "review": "sonnet", "documenter": "haiku"},
 }
 _KIND = re.compile(r"^[A-Z]+$")
+# Answers that leave work for Opus in the branch, beyond the configuration (SPEC-0011).
+MIGRATIONS = {("specs", "convertir"), ("specs", "archivar"), ("decisiones", "convertir"),
+              ("decisiones", "archivar"), ("colision", "renombrar"), ("instrucciones", "metodologia"),
+              ("ci", "crear")}
 
 
 @dataclass
@@ -56,6 +60,10 @@ class Decision:
     option: str
     effect: str
     note: str = ""
+
+    @property
+    def migration(self) -> bool:
+        return (self.question, self.option) in MIGRATIONS
 
 
 @dataclass
@@ -148,6 +156,40 @@ def build(template: str, survey: Survey, answers: dict[str, dict[str, Any]], mai
         data["commits"]["external_refs"] = [f"refs/remotes/upstream/{main}"]
         plan.decisions.append(Decision("perfil", "fork", "paths.claude_md = .claude/CLAUDE.md; "
                                        f"commits.external_refs = refs/remotes/upstream/{main}"))
+    _decide(plan, survey, answers, base, reconfigure=False)
+    return plan
+
+
+@dataclass(frozen=True)
+class Change:
+    key: str
+    before: Any
+    after: Any
+
+
+def rebuild(current: dict[str, Any], raw: dict[str, Any], survey: Survey, answers: dict[str, dict[str, Any]],
+            base: str) -> tuple[Plan, dict[str, Any], list[Change]]:
+    """Apply validated answers on top of the current configuration (SPEC-0011).
+
+    Args:
+        current: Merged, validated configuration (``Config.data``).
+        raw: Tables of the configuration file as written, so defaults stay implicit.
+        survey: Reconfiguration inventory.
+        answers: Validated answers.
+        base: Commit of ``development`` (``trace.legacy_base`` for a gradual scope without one).
+
+    Returns:
+        The plan (merged data and decisions), the tables to write and the changed keys.
+
+    Raises:
+        MthError: An answer cannot be applied.
+    """
+    plan = Plan(copy.deepcopy(current))
+    _decide(plan, survey, answers, base, reconfigure=True)
+    return plan, _prune(plan.data, raw, DEFAULTS), diff(current, plan.data)
+
+
+def _decide(plan: Plan, survey: Survey, answers: dict[str, dict[str, Any]], base: str, reconfigure: bool) -> None:
     for qid in survey.asked():
         answer = answers[qid]
         option = answer["option"]
@@ -156,18 +198,48 @@ def build(template: str, survey: Survey, answers: dict[str, dict[str, Any]], mai
             effect = ", ".join(sorted(_flatten(answer.get("config", {})))) or "sin cambios de configuración"
             plan.decisions.append(Decision(qid, OTHER, effect, answer.get("note", "")))
             continue
-        effect = _apply(plan.data, qid, option, answer, found, base)
+        effect = _apply(plan.data, qid, option, answer, survey.signals, base, reconfigure)
         note = "; ".join(answer.get("exceptions", [])) if qid == "instrucciones" else ""
         plan.decisions.append(Decision(qid, option, effect, note))
-    return plan
+
+
+def _prune(data: dict[str, Any], raw: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """Keys of ``data`` that were written in ``raw`` or differ from ``defaults`` (defaults stay implicit)."""
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        default = defaults.get(key) if isinstance(defaults, dict) else None
+        if key != "ids" and isinstance(value, dict) and isinstance(default, dict):
+            inner = _prune(value, raw.get(key, {}) if isinstance(raw.get(key), dict) else {}, default)
+            if inner or key in raw:
+                out[key] = inner
+        elif key in raw or value != default:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def diff(before: dict[str, Any], after: dict[str, Any], prefix: str = "") -> list[Change]:
+    """Leaf keys whose value changes (``ids`` tables compared as a whole per kind)."""
+    changes = []
+    for key in sorted(set(before) | set(after)):
+        old, new = before.get(key), after.get(key)
+        if isinstance(old, dict) and isinstance(new, dict):
+            changes += diff(old, new, f"{prefix}{key}.")
+        elif old != new:
+            changes.append(Change(f"{prefix}{key}", old, new))
+    return changes
 
 
 def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
-           found: dict[str, Any], base: str) -> str:
+           found: dict[str, Any], base: str, reconfigure: bool = False) -> str:
     if qid == "alcance":
         if option == "gradual":
+            if reconfigure and data["trace"].get("legacy_base"):
+                return f"trace.legacy_base = {data['trace']['legacy_base'][:7]} (se conserva)"
             data["trace"]["legacy_base"] = base
             return f"trace.legacy_base = {base[:7]}"
+        if reconfigure:
+            data["trace"]["legacy_base"] = ""
+            return "trace.legacy_base vacío: todo el contenido cumple las reglas"
         return "todo el contenido cumple las reglas desde la adopción"
     if qid == "ramas":
         data["branches"]["development"] = answer.get("branch", "development")
@@ -176,6 +248,11 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
         data.setdefault("hooks", {})["commit_msg"] = "replace" if option == "sustituir" else "chain"
         return f"hooks.commit_msg = {data['hooks']['commit_msg']}"
     if qid == "versiones":
+        if reconfigure and option == "continuar":  # keep the numbering; version_files only when answered
+            if "version_files" in answer:
+                data["release"]["version_files"] = answer["version_files"]
+            files = ", ".join(v.get("path", "?") for v in data["release"]["version_files"] if isinstance(v, dict))
+            return f"release.tag_prefix = {data['release']['tag_prefix']}" + (f"; version_files: {files}" if files else "")
         if option == "continuar":
             tags = found["tags"]
             if tags and not tags["prefix"]:
@@ -203,6 +280,8 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
         data["commands"]["test"] = answer.get("command", "")
         return f"commands.test = {data['commands']['test'] or '(vacío)'}"
     if qid == "revisores":
+        if reconfigure:  # SPEC-0011: the answer is the whole list
+            data["review"]["agents"] = []
         agents = data["review"]["agents"]
         agents += [a for a in answer["agents"] if isinstance(a, str) and a not in agents]
         return f"review.agents = {', '.join(agents)}"
@@ -333,3 +412,61 @@ def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, tod
 
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ") or "—"
+
+
+_RECONFIGURE_TEXT = {
+    "es": {"title": "Reestructuración de claude-methodology", "status": "Estado", "accepted": "aceptado",
+           "date": "Fecha", "category": "Categoría", "context": "Contexto", "decision": "Decisión",
+           "alternatives": "Alternativas consideradas", "consequences": "Consecuencias",
+           "intro": "Se revisa la configuración de la metodología con la skill `mth-reconfigure` "
+                    "(preguntas: {questions}).",
+           "previous": "Modifica las decisiones registradas en {previous}.",
+           "body": "Decisiones tomadas en la reestructuración:",
+           "table": "| Pregunta | Opción | Efecto | Nota |",
+           "changes": "Cambios en `.claude/methodology.toml`:",
+           "changes_table": "| Clave | Antes | Después |", "no_changes": "La configuración no cambia.",
+           "pending": "Migraciones que se hacen en la rama de la reestructuración:",
+           "others": "Las demás opciones de cada pregunta, descritas en la skill `mth-init` de claude-methodology.",
+           "keep": "- Lo que no se preguntó conserva su valor.",
+           "change": "- Cambiar una decisión exige un ADR que sustituya a este."},
+    "en": {"title": "Reconfiguration of claude-methodology", "status": "Status", "accepted": "accepted",
+           "date": "Date", "category": "Category", "context": "Context", "decision": "Decision",
+           "alternatives": "Alternatives considered", "consequences": "Consequences",
+           "intro": "The methodology configuration is reviewed with the `mth-reconfigure` skill "
+                    "(questions: {questions}).",
+           "previous": "It modifies the decisions recorded in {previous}.",
+           "body": "Decisions taken in the reconfiguration:",
+           "table": "| Question | Option | Effect | Note |",
+           "changes": "Changes in `.claude/methodology.toml`:",
+           "changes_table": "| Key | Before | After |", "no_changes": "The configuration does not change.",
+           "pending": "Migrations done in the reconfiguration branch:",
+           "others": "The other options of each question, described in the `mth-init` skill of claude-methodology.",
+           "keep": "- Whatever was not asked keeps its value.",
+           "change": "- Changing a decision requires an ADR that supersedes this one."},
+}
+
+
+def reconfigure_adr_text(ident: str, previous: str | None, plan: Plan, changes: list[Change],
+                         vocab: lang.Vocabulary, today: date | None = None) -> str:
+    """Reconfiguration ADR of the target repository, in its documentation language (SPEC-0011)."""
+    t = _RECONFIGURE_TEXT[vocab.code]
+    questions = ", ".join(f"`{d.question}`" for d in plan.decisions)
+    rows = [f"| `{d.question}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |" for d in plan.decisions]
+    change_rows = [f"| `{c.key}` | {_cell(_shown(c.before))} | {_cell(_shown(c.after))} |" for c in changes]
+    pending = [f"- `{d.question}: {d.option}` — {d.effect}" for d in plan.decisions if d.migration]
+    return "\n".join([
+        f"# {ident} · {t['title']}", "",
+        f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
+        f"- {t['category']}: methodology", "",
+        f"## {t['context']}", "", t["intro"].format(questions=questions),
+        *(["", t["previous"].format(previous=previous)] if previous else []), "",
+        f"## {t['decision']}", "", t["body"], "", t["table"], "|---|---|---|---|", *rows, "",
+        *([t["changes"], "", t["changes_table"], "|---|---|---|", *change_rows] if changes else [t["no_changes"]]), "",
+        *([t["pending"], "", *pending, ""] if pending else []),
+        f"## {t['alternatives']}", "", t["others"], "",
+        f"## {t['consequences']}", "", t["keep"], t["change"], "",
+    ])
+
+
+def _shown(value: Any) -> str:
+    return "—" if value is None else f"`{json.dumps(value, ensure_ascii=False)}`"

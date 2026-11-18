@@ -21,18 +21,21 @@ from pathlib import Path
 from .config import AUTONOMY_LEVELS, CONFIG_PATH, load
 from .errors import MthError
 from .git import Git
+from .work import WORK_DIR
 
 _SPLIT = re.compile(r"\|\||&&|;|\||\n")
 BLOCK = 2  # Claude Code: exit code 2 blocks the tool call and shows stderr to the model.
 _MTH_SPELLINGS = ("$MTH", "${MTH}")
 _MTH_NAMES = ("mth", "mth.py")
+_WHOLE_TREE = {"", ".", ":/", ":/.", "*", ":/*"}  # after removing "./"
 
 # Commands each autonomy level asks the person to confirm (cumulative).
 _UNTIL_PR = {("mth", "integrate"), ("mth", "release"), ("mth", "hotfix finish")}
 CONFIRM: dict[str, set[tuple[str, str]]] = {
     "full": set(),
     "until-pr": _UNTIL_PR,
-    "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("git", "commit"), ("git", "push")},
+    "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("mth", "reconfigure"),
+                               ("git", "commit"), ("git", "push")},
 }
 assert set(CONFIRM) == set(AUTONOMY_LEVELS)
 
@@ -102,6 +105,17 @@ def confirmation(command: str, autonomy: str) -> str | None:
     return None
 
 
+def _forces_work_dir(args: list[str]) -> bool:
+    """A forced ``git add`` whose pathspecs reach ``.work/`` (it would add excluded files)."""
+    force = any(a == "--force" or (a.startswith("-") and not a.startswith("--") and "f" in a[1:]) for a in args)
+    if not force:
+        return False
+    if any(a in ("-A", "--all") or (a.startswith("-") and not a.startswith("--") and "A" in a[1:]) for a in args):
+        return True
+    paths = [a.removeprefix("./") for a in args if not a.startswith("-")]
+    return any(p in _WHOLE_TREE or p.rstrip("/") == WORK_DIR or p.startswith(f"{WORK_DIR}/") for p in paths)
+
+
 def violation(command: str, protected: set[str], current: str | None) -> str | None:
     """Reason why ``command`` must be blocked, or None."""
     for segment in _SPLIT.split(command):
@@ -132,6 +146,8 @@ def violation(command: str, protected: set[str], current: str | None) -> str | N
             refspecs = [a for a in args if not a.startswith("-")][1:]
             if any(r.split(":")[-1] in protected for r in refspecs) or (not refspecs and on_protected):
                 return f"no se hace push directo a {'/'.join(sorted(protected))}: usa mth integrate"
+        if sub == "add" and _forces_work_dir(args):
+            return f"{WORK_DIR}/ es local y no se versiona (SPEC-0010)"
         if sub == "rebase" and not ({"--abort", "--quit"} & set(args)):
             return "rebase reescribe historia: usa `mth sync` (merge)"
         if sub == "pull" and ({"--rebase", "-r"} & set(args) or any(a.startswith("--rebase=") for a in args)):

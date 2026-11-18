@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import branches
+from . import branches, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
@@ -37,7 +37,10 @@ def rules(cfg: Config | None, cmd: str) -> str:
     core = (PLUGIN_ROOT / "context" / "core.md").read_text(encoding="utf-8")
     autonomy = cfg["autonomy"]["level"] if cfg else "supervised"
     language = cfg.vocab.name if cfg else "español"
+    extra = cfg["work"]["dirs"] if cfg else []
+    work_extra = f"; y los propios del repo: {', '.join(f'`{d}/`' for d in extra)}" if extra else ""
     return (core.replace("{{AUTONOMY}}", AUTONOMY[autonomy]).replace("{{DOCS_LANGUAGE}}", language)
+            .replace("{{WORK_EXTRA}}", work_extra)
             .replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md")))
 
 
@@ -56,6 +59,10 @@ def _state(cwd: Path) -> list[str]:
     except MthError as exc:
         hook = "error"
         lines.append(f"⚠ Hook commit-msg: {exc.message} → {exc.hint or ''}".strip())
+    try:
+        work.ensure(git, cfg["work"]["dirs"])  # SPEC-0010
+    except MthError as exc:
+        lines.append(f"⚠ Directorio {work.WORK_DIR}/: {exc.message} → {exc.hint or ''}".strip())
     if hook == "foreign":
         lines.append("⚠ Hay un hook commit-msg ajeno: la validación de mensajes no está activa (mth doctor).")
     try:
