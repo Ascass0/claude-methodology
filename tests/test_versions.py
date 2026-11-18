@@ -77,6 +77,24 @@ class VersionFileWriteTests(unittest.TestCase):
             versions.read(self.root, self.items[0])
         self.assertIn("aparece 2 veces", ctx.exception.message)
 
+    def test_line_endings_are_kept(self):
+        # verifies: SPEC-0003/AC-07
+        crlf = PACKAGE.replace("\n", "\r\n").encode("utf-8")
+        (self.root / "package.json").write_bytes(crlf)
+        versions.write(self.root, self.items, "1.4.0")
+        self.assertEqual((self.root / "package.json").read_bytes(), crlf.replace(b'"0.0.0"', b'"1.4.0"'))
+
+    def test_capture_group_must_take_part_in_the_match(self):
+        # verifies: SPEC-0003/AC-08
+        (self.root / "lib.py").write_text('__version__ = ""\n', encoding="utf-8")
+        items = self.items + versions.from_config([{"path": "lib.py", "pattern": r'__version__ = "(\d+\.\d+\.\d+)?"'}])
+        for call in (lambda: versions.read(self.root, items[1]), lambda: versions.write(self.root, items, "1.4.0")):
+            with self.subTest(call=call), self.assertRaises(MthError) as ctx:
+                call()
+            self.assertIn("no captura nada", ctx.exception.message)
+        self.assertEqual((self.root / "lib.py").read_text(encoding="utf-8"), '__version__ = ""\n')
+        self.assertEqual((self.root / "package.json").read_text(encoding="utf-8"), PACKAGE)
+
 
 class VersionFileFlowTests(unittest.TestCase):
     """End to end against a local remote, with the harness of test_mth.EndToEndTests."""
