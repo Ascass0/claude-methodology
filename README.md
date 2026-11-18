@@ -89,7 +89,11 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Hijas integradas antes que la padre | `mth integrate` |
 | Merge commit, nunca squash ni rebase | `mth integrate` / `release` + guard + ajustes de GitHub |
 | Sin reescritura de historia | Guard (force-push, rebase, `--no-verify`, borrado de tags) + ruleset |
-| Revisión del HEAD final sin bloqueantes | `mth review record` (por SHA) + `mth integrate` |
+| Revisión del HEAD final sin bloqueantes | `mth review record --report` toma los bloqueantes del informe del revisor (por SHA) + `mth integrate` |
+| Un revisor que no termina no cuenta como aprobado | `mth review record`: un informe ausente, vacío, de más de 256 KiB o que no acaba en `BLOQUEANTES: <n>` no se registra y la revisión sigue pendiente |
+| Cada agente delegado solo toca su alcance | `mth plan verify`: los ficheros de cada manifiesto, dentro de los permitidos de su tarea; ningún cambio sin dueño ni declarado sin cambios reales |
+| Las tareas paralelas no se solapan | `mth plan check` / `mth trace`: dos tareas de la misma oleada no comparten ficheros (entre globs, en caso de duda, solapan) |
+| Un agente caído no cuenta como trabajo hecho | `mth plan verify`: una tarea sin manifiesto válido queda "no ejecutada" y la oleada no se acepta |
 | Tests en verde en cada integración | `mth integrate` / `release` / `hotfix finish` |
 | CI en verde | `gh pr checks` con espera, fail-safe si no hay CI y `ci.required` |
 | Changelog sin conflictos | Fragmentos por rama; `mth release` los agrega (Keep a Changelog) |
@@ -105,7 +109,9 @@ El plugin incluye dos agentes compartidos por todos los repos:
 - **`verificador`**: primer revisor de cada rama. Comprueba que cada criterio y cada modo de fallo de la spec están implementados y cubiertos por un test que de verdad lo comprueba, ejecuta los tests, confirma que un fix trae su test de regresión y detecta afirmaciones falsas en commits, changelog y docs.
 - **`documentador`**: actualiza docs, fragmento de changelog y los registros documentales que exija el repo, en español y sin duplicar fuentes de verdad.
 
-Cada repo añade en `.claude/agents/` sus **agentes de implementación** (`dev-*`), especializados por área, y sus revisores específicos. La sesión principal orquesta: divide la spec en tareas con ficheros disjuntos, entrega a cada `dev-*` un encargo autocontenido y recibe un manifiesto; los commits los hace siempre la sesión principal (skill `mth-develop`, paso 4).
+Cada repo añade en `.claude/agents/` sus **agentes de implementación** (`dev-*`), especializados por área, y sus revisores específicos. La sesión principal orquesta. Si delega dos o más tareas, el reparto es la sección `## Plan de trabajo` de la spec: tareas agrupadas en oleadas, con sus ficheros permitidos y sus criterios, que `mth plan check SPEC-NNNN` valida antes de lanzar nada. Las tareas de una oleada se ejecutan en paralelo; cada `dev-*` recibe un encargo autocontenido y devuelve un manifiesto JSON. Al cerrar la oleada, `mth plan verify SPEC-NNNN --wave N --manifest <fichero> …` contrasta los manifiestos con el plan y con los cambios reales del árbol de trabajo. Una tarea no ejecutada o no completada se relanza una sola vez; si vuelve a fallar, la sesión principal la implementa o rehace el plan. Los commits los hace siempre la sesión principal, al cerrar cada oleada. El formato del plan y del manifiesto está en [SPEC-0001](specs/features/SPEC-0001-delegacion-verificable.md) y la decisión, en [ADR-0001](specs/adr/process/ADR-0001-plan-y-manifiesto-verificados.md); el protocolo, en la skill `mth-develop`.
+
+Cada revisor termina su informe con la línea `BLOQUEANTES: <n>`. La sesión principal guarda el informe tal cual y lo registra con `mth review record <agente> --report <informe> --summary "…"`; el número de bloqueantes sale del informe, no se escribe a mano.
 
 Los revisores del repo se declaran en `review.agents` (en orden de precedencia). Con `[review.paths]`, un revisor de un área solo se exige cuando el diff la toca, lo que mantiene acotado el coste de cada integración. En Claude Code, los agentes de plugin pueden aparecer con el prefijo `methodology:`.
 
@@ -119,6 +125,7 @@ Si un repositorio necesita supervisión, añade un hook en ese repositorio (por 
 
 - **El guard no es una frontera de seguridad.** Analiza el texto del comando; un comando ofuscado lo evade. La imposición real sobre `main` y `development` es el ruleset de GitHub. Si el guard falla, deja pasar (fail-open documentado) para no paralizar al agente.
 - **Rulesets:** requieren permisos de administración y, en repositorios privados, un plan de GitHub que los incluya. Si no se pueden aplicar, `mth init --github` avisa y el flujo local sigue imponiendo las mismas reglas.
+- **Las tareas de una oleada comparten árbol de trabajo:** no se aíslan en worktrees, así que un agente puede ver ficheros a medio escribir por otro. Los cambios fuera de alcance se detectan al cerrar la oleada con `mth plan verify`, no al escribirlos.
 - **Las revisiones se registran en `.git/mth/`** (local): no viajan entre máquinas. Su resumen queda en la descripción del PR.
 - **No se puede verificar automáticamente** que un commit sea temático, que esté en inglés ni que una docstring sea suficiente: es criterio de quien desarrolla y de los revisores.
 - **Hook `commit-msg`:** script `sh`; no probado en Windows nativo.
@@ -127,7 +134,9 @@ Si un repositorio necesita supervisión, añade un hook en ese repositorio (por 
 ## Desarrollo del plugin
 
 ```
-python -m unittest discover -s tests -v
+sh tests/run.sh -v
 ```
+
+`tests/run.sh` ejecuta los tests con el primer Python ≥ 3.11 que encuentra (`MTH_PYTHON` lo fija).
 
 El test de extremo a extremo recorre adopción → feature con rama hija → revisión → CI en rojo y reanudación → release interrumpida y reanudada → hotfix, contra un remoto local y un `gh` simulado que produce merge commits reales.
