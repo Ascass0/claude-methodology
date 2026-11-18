@@ -39,6 +39,19 @@ Fija la versión del plugin por repositorio: un cambio de metodología se adopta
 
 > La sintaxis de marketplaces y `enabledPlugins` evoluciona; verifícala en la [documentación de plugins de Claude Code](https://docs.claude.com/en/docs/claude-code/plugins-reference).
 
+## Actualizar el plugin
+
+Una versión nueva acepta la configuración de las anteriores: las claves que añade son opcionales y sus valores por defecto mantienen el comportamiento previo. Al revés no ocurre lo mismo. Un plugin antiguo rechaza las claves que no conoce, porque ignorarlas sería inseguro: un plugin que no entendiera `autonomy.level = "supervised"` trabajaría sin supervisión ([SPEC-0009](specs/features/SPEC-0009-actualizacion-del-plugin-con-configuracion-mas-nueva.md)).
+
+Orden seguro en un equipo:
+
+1. Cada persona actualiza el plugin (`/plugin`) y abre una sesión nueva de Claude Code. La sesión en curso sigue usando la versión con la que arrancó: el contexto, el guard y la ruta de `mth` se fijan al iniciar.
+2. Cuando todo el equipo esté actualizado, las claves nuevas se añaden a `.claude/methodology.toml` en un PR.
+
+Si alguien se adelanta, quien siga con la versión anterior verá `Clave desconocida en la configuración: '<clave>' (claude-methodology X.Y.Z no la reconoce)`. Ningún comando `mth` se ejecuta y su hook `commit-msg` rechaza los commits hasta que actualice. Las versiones anteriores a la 0.6.0 muestran solo "Revisa la ortografía".
+
+Actualizar no toca ficheros versionados del repo. Las ramas a medias, los fragmentos y las revisiones registradas siguen valiendo. El hook `commit-msg` apunta a la carpeta de la versión instalada y el hook de sesión lo reinstala en cada sesión nueva. Si se hace un commit tras actualizar y antes de abrir sesión, y la versión antigua ya no está en la caché, el hook lo rechaza con `claude-methodology no encontrado`: basta con abrir una sesión nueva.
+
 ## Adopción en un repositorio
 
 Mientras un repositorio no tiene `.claude/methodology.toml`, el plugin está inactivo: el hook de sesión solo avisa de que se puede adoptar y el guard no bloquea nada ([SPEC-0004](specs/features/SPEC-0004-adopcion-guiada.md), [ADR-0003](specs/adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md)).
