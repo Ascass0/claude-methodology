@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import versions
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -42,7 +43,7 @@ DEFAULTS: dict[str, Any] = {
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
               "adr_kind": "ADR", "include": ["**"], "exclude": []},
-    "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v"},
+    "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
 }
@@ -67,7 +68,7 @@ _SCHEMA: dict[str, Any] = {
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
               "adr_kind": str, "include": list, "exclude": list},
-    "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str},
+    "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
 }
 
@@ -160,6 +161,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
             raise MthError(f"'branches.extra.{name}.flow' debe ser 'feature' o 'hotfix'.")
     if not _TAG_PREFIX.match(data["release"]["tag_prefix"]):
         raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
+    versions.validate(data["release"]["version_files"])
     _check_models(data["models"])
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import branches, changelog, commits, review
+from . import branches, changelog, commits, review, versions
 from .config import Config
 from .errors import MthError
 from .gh import GitHub
@@ -335,18 +335,30 @@ def _finish_integration(ctx: Ctx, branch: str, target: str) -> None:
 
 
 # -- release & hotfix -----------------------------------------------------------
+def _version_files(ctx: Ctx) -> list[versions.VersionFile]:
+    return versions.from_config(ctx.cfg["release"]["version_files"])
+
+
+def _check_version_files(ctx: Ctx) -> None:
+    for item in _version_files(ctx):
+        versions.read(ctx.root, item)
+
+
 def _apply_release(ctx: Ctx, version: str, fragments: list[changelog.Fragment]) -> None:
     """Fold fragments into the changelog and commit it on the current branch."""
     log_path = ctx.path("changelog")
     if not log_path.is_file():
         raise MthError(f"No existe {log_path.name}.", hint="mth init lo crea.")
+    bumped = versions.write(ctx.root, _version_files(ctx), version)  # SPEC-0003: checked before any write
     section = changelog.render(version, fragments)
     log_path.write_text(changelog.insert(log_path.read_text(encoding="utf-8"), section), encoding="utf-8")
     for frag in fragments:
         ctx.git.out("rm", "-q", str(frag.path.relative_to(ctx.root)))
-    ctx.git.out("add", str(log_path.relative_to(ctx.root)))
+    ctx.git.out("add", str(log_path.relative_to(ctx.root)), *bumped)
     refs = list(dict.fromkeys(r for f in fragments for r in f.refs))
     body = f"Fold {len(fragments)} changelog fragment(s) into {log_path.name} for v{version}."
+    if bumped:
+        body += f"\n\nSet version {version} in {', '.join(bumped)}."
     message = commits.build("chore", "release", f"v{version}", body, refs)
     with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as fh:
         fh.write(message)
@@ -417,6 +429,7 @@ def release(ctx: Ctx) -> None:
             raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
         _gate_trace(ctx)
         _gate_tests(ctx)
+        _check_version_files(ctx)
         version = changelog.next_version(g.latest_version(cfg.tag_prefix), changelog.highest_bump(fragments))
         head = f"release/v{version}"
         g.out("checkout", "-b", head)
@@ -443,6 +456,7 @@ def hotfix_finish(ctx: Ctx) -> None:
         frag = _fragment(ctx, info)
         if frag.bump != "patch":
             raise MthError("Un hotfix solo publica versiones patch (bump: patch).")
+        _check_version_files(ctx)
         _gate_trace(ctx)
         _review(ctx, info, branch)
         _gate_tests(ctx)

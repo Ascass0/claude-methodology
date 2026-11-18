@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import changelog, commits
+from . import changelog, commits, versions
 from .config import CONFIG_PATH, load, parse
 from .errors import MthError
 from .gh import GitHub
@@ -249,6 +249,15 @@ def doctor(start: Path) -> int:
     log_path = git.root / cfg["paths"]["changelog"]
     report(log_path.is_file() and changelog.MARKER in log_path.read_text(encoding="utf-8"),
            f"{cfg['paths']['changelog']} con marcador de versiones")
+    latest = ".".join(map(str, git.latest_version(cfg.tag_prefix)))
+    for item in versions.from_config(cfg["release"]["version_files"]):
+        try:
+            declared = versions.read(git.root, item)
+        except MthError as exc:
+            report(False, f"Fichero de versión: {exc.message}")
+            continue
+        report(declared == latest, f"Fichero de versión {item.path}: {declared}"
+               + ("" if declared == latest else f" (última etiqueta: {latest})"), blocking=False)
     claude_md = git.root / cfg["paths"]["claude_md"]
     report(claude_md.is_file() and BLOCK_START in claude_md.read_text(encoding="utf-8"),
            f"Bloque de la metodología en {cfg['paths']['claude_md']}")

@@ -92,3 +92,9 @@ github_release = true
 sign_tags = false
 # Prefijo de las etiquetas de versión. En un fork, uno propio ("fork-v") para no chocar con upstream.
 tag_prefix = "v"
+
+# Ficheros que declaran la versión del proyecto: mth release y mth hotfix finish
+# sustituyen el grupo de captura por la versión nueva; mth doctor avisa si se desfasan.
+# [[release.version_files]]
+# path = "package.json"
+# pattern = '"version": "(\d+\.\d+\.\d+)"'

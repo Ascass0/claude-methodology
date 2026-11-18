@@ -66,7 +66,7 @@ Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs,
 | `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
 | `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
-| `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) |
+| `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
 
 ### Uso en un fork
 
