@@ -20,7 +20,7 @@ mth integrate --title "feat(runner): ephemeral container per task" \
 ```
 
 - `--title`: cabecera Conventional Commits en inglés; será el asunto del merge commit.
-- `--summary` (o `--summary-file`): español; abre la descripción del PR.
+- `--summary` (o `--summary-file`): español; abre la descripción del PR. Un resumen largo se escribe en `.work/merge-request/<rama>.md` y se pasa con `--summary-file`.
 
 ## Qué hace el script (en este orden; si algo falla, no se toca el remoto)
 

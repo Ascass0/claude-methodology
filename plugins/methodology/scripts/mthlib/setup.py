@@ -7,7 +7,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import adoption, changelog, commits, lang, survey, versions
+from . import adoption, changelog, commits, lang, survey, versions, work
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
 from .errors import MthError
@@ -258,6 +258,10 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     finally:
         Path(fh.name).unlink(missing_ok=True)
     git.push(ADOPT_BRANCH)
+    try:
+        work.ensure(git, cfg["work"]["dirs"])  # SPEC-0010: local, so it never blocks the adoption
+    except MthError as exc:
+        warn(f"{exc.message} {exc.hint or ''}".strip())
     if github:
         configure_github(root, cfg.main, cfg.development)
     say(f"✓ Metodología adoptada en {ADOPT_BRANCH}. Revisa .claude/methodology.toml y "
@@ -309,6 +313,18 @@ def configure_github(root: Path, main: str, development: str) -> None:
 
 
 # -- doctor ---------------------------------------------------------------------
+def _report_work(report, status: work.Status) -> None:
+    name = f"Directorio de trabajo {work.WORK_DIR}/"
+    if status.blocked:
+        report(False, f"{name}: {status.blocked}")
+    elif status.ready:
+        report(True, f"{name} (local, excluido de git)")
+    else:
+        gaps = ([f"faltan {', '.join(status.missing)}"] if status.missing else []) + \
+               ([] if status.excluded else ["sin excluir de git"])
+        report(False, f"{name}: {'; '.join(gaps)} (lo prepara la próxima sesión)", blocking=False)
+
+
 def doctor(start: Path) -> int:
     """Check the repository adoption. Returns the number of blocking problems."""
     problems = 0
@@ -355,6 +371,7 @@ def doctor(start: Path) -> int:
             continue
         report(declared == latest, f"Fichero de versión {item.path}: {declared}"
                + ("" if declared == latest else f" (última etiqueta: {latest})"), blocking=False)
+    _report_work(report, work.inspect(git, cfg["work"]["dirs"]))
     claude_md = git.root / cfg["paths"]["claude_md"]
     report(claude_md.is_file() and BLOCK_START in claude_md.read_text(encoding="utf-8"),
            f"Bloque de la metodología en {cfg['paths']['claude_md']}")

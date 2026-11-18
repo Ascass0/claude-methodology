@@ -116,3 +116,8 @@ level = "full"
 [language]
 # Idioma de docs, specs, ADR, changelog y PR: "es" o "en". Código y commits, siempre en inglés.
 docs = "es"
+
+# Directorio de trabajo local .work/ (excluido de git en .git/info/exclude; nunca se versiona).
+# De serie: plans, merge-request, security-report, reviews, notes y tmp. Añade aquí los propios del repo.
+# [work]
+# dirs = ["benchmarks"]

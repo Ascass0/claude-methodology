@@ -14,6 +14,7 @@
 - Diseño según SOLID (responsabilidad única; extensión sin modificar solo con variantes reales; implementaciones sustituibles; interfaces pequeñas; el dominio define sus abstracciones y la infraestructura las implementa) y sin antipatrones STUPID: dependencias explícitas en lugar de estado global, contratos estrechos, lógica separada de la E/S (tests unitarios sin infraestructura real), sin optimizar sin medir, nombres que revelan intención y cada conocimiento en un único sitio.
 - Código y commits en inglés; docs, specs, changelog y PR en {{DOCS_LANGUAGE}} (`language.docs`).
 - Los revisores del repo trabajan con contexto limpio (solo diff + specs + principios).
+- Tus artefactos de trabajo van a `.work/` (local, excluido de git; nunca se versiona): `plans/` planes, manifiestos y borradores de diseño; `merge-request/` títulos y cuerpos de PR; `security-report/` informes de seguridad; `reviews/` informes de los revisores; `notes/` notas que se conservan entre sesiones; `tmp/` temporales desechables{{WORK_EXTRA}}. Nada de eso va al repo ni al scratchpad.
 
 **Te detienes y avisas solo si:** dos specs o principios se contradicen y la precedencia no lo resuelve; un gate falla tres veces seguidas por la misma causa; o la tarea exige algo fuera de las specs con impacto irreversible (borrar datos, publicar fuera del flujo, credenciales).
 

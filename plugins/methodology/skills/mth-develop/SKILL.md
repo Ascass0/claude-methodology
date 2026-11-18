@@ -50,7 +50,7 @@ Delegar tiene un coste de coordinación: si el trabajo es pequeño, implementa t
       "tests": [{"name": "<test>", "result": "pass | fail"}],
       "decisions": [], "deviations": [], "questions": []}
    ```
-4. **Manifiestos:** guarda la respuesta JSON de cada agente tal cual en un fichero del scratchpad (fuera del repo). Nunca la edites para que pase.
+4. **Manifiestos:** guarda la respuesta JSON de cada agente tal cual en `.work/plans/` (local, excluido de git). Nunca la edites para que pase.
 5. **Verificación de la oleada**, con sus cambios sin confirmar: `mth plan verify SPEC-NNNN --wave N --manifest <f1> --manifest <f2> … [--model T-NN=<alias> …]`. Pasa `--model` para cada tarea que no se ejecutó con su nivel planificado (por ejemplo, un reintento): así las métricas atribuyen bien cada intento. Comprueba que cada tarea terminó, cubrió sus criterios con tests en verde, no salió de sus ficheros y que no hay cambios sin dueño ni afirmaciones falsas. Revisa además el diff real (`git diff`).
    - **No ejecutada / no completada** (agente caído, fuera de tiempo, manifiesto inválido, `blocked` o `failed`): relánzala **una sola vez**, con el modelo de `mth plan model SPEC-NNNN T-NN --retry` (un nivel más en `models.ladder`). Si vuelve a fallar, impleméntala tú o rehaz el plan (corrige la spec en un commit), y anótalo en el PR.
    - **Desvíos** (⚠): resuélvelos antes de confirmar, corrigiendo la spec si procede.
