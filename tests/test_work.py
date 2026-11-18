@@ -98,6 +98,34 @@ class EnsureTests(WorkCase):
         self.assertIn(".work existe y no es un directorio", ctx.exception.message)
         self.assertEqual(self.exclude(), exclude)
 
+    def test_write_errors_are_reported_with_their_cause(self):
+        # verifies: SPEC-0010/AC-05
+        exclude = self.root / ".git/info/exclude"
+        exclude.unlink()
+        exclude.mkdir()  # writing the exclude file now fails with an OSError
+        with self.assertRaises(MthError) as ctx:
+            work.ensure(self.repo, [])
+        self.assertIn("No se puede preparar .work/", ctx.exception.message)
+        self.assertIsInstance(ctx.exception.__cause__, OSError)
+        test_mth._write(self.root / ".claude/methodology.toml", CONFIG)
+        out = session.context(self.root, "mth")
+        self.assertIn("⚠ Directorio .work/: No se puede preparar .work/", out)
+        self.assertIn("Fragmentos de changelog pendientes", out)
+
+    def test_worktrees_share_the_exclusion(self):
+        # verifies: SPEC-0010/AC-01
+        self.git("commit", "-q", "--allow-empty", "-m", "init")
+        linked = self.root.parent / (self.root.name + "-wt")
+        self.git("worktree", "add", "-q", str(linked), "-b", "other")
+        try:
+            work.ensure(Git.discover(linked), [])
+            self.assertIn("/.work/", self.exclude())
+            (linked / ".work/tmp/x").write_text("x\n", encoding="utf-8")
+            self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=linked, capture_output=True,
+                                            text=True, check=True).stdout, "")
+        finally:
+            shutil.rmtree(linked, ignore_errors=True)
+
 
 class ConfigTests(unittest.TestCase):
     def test_invalid_work_dirs_fail_fast(self):
@@ -149,6 +177,10 @@ class SessionAndDoctorTests(WorkCase):
         (self.root / ".work/tmp/x").write_text("x\n", encoding="utf-8")
         self.git("add", "-f", ".work/tmp/x")
         self.assertIn("✗ Directorio de trabajo .work/: git versiona ficheros bajo .work/: .work/tmp/x", self.doctor())
+        self.git("rm", "-q", "-r", "--cached", ".work")
+        shutil.rmtree(self.root / ".work")
+        (self.root / ".work").write_text("x\n", encoding="utf-8")
+        self.assertIn("✗ Directorio de trabajo .work/: .work existe y no es un directorio", self.doctor())
 
 
 class InitTests(unittest.TestCase):
