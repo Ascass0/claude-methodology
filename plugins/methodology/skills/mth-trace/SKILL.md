@@ -19,7 +19,7 @@ description: Comprueba la trazabilidad del repo (IDs de specs/ADR definidos y ú
 ## Convenciones que comprueba
 
 - Un ID se **define** en un encabezado markdown que empieza por él, dentro de los ficheros de `ids.<tipo>.defined_in`.
-- En el código, las referencias a decisiones son comentarios breves: `# ADR-0008: shared volume, not bind mounts`.
-- En los tests, la cobertura de AC: `# verifies: SPEC-0003/AC-02` (un test puede verificar varios).
+- En el código, las referencias a decisiones son comentarios breves: `# ADR-NNNN: shared volume, not bind mounts`.
+- En los tests, la cobertura de AC: `# verifies: SPEC-NNNN/AC-02` (un test puede verificar varios).
 
 Si el repo tiene un esquema de IDs propio, se declara en `[ids]`; contenido que no debe comprobarse se excluye en `trace.exclude`, justificándolo en el commit.
