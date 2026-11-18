@@ -84,3 +84,16 @@ github_release = true
 sign_tags = false
 # Prefijo de las etiquetas de versión. En un fork, uno propio ("fork-v") para no chocar con upstream.
 tag_prefix = "v"
+
+# Ficheros que declaran la versión del plugin: mth release los actualiza (SPEC-0003).
+[[release.version_files]]
+path = "plugins/methodology/.claude-plugin/plugin.json"
+pattern = '"version": "(\d+\.\d+\.\d+)"'
+
+[[release.version_files]]
+path = ".claude-plugin/marketplace.json"
+pattern = '"version": "(\d+\.\d+\.\d+)"'
+
+[[release.version_files]]
+path = "plugins/methodology/scripts/mthlib/__init__.py"
+pattern = '__version__ = "(\d+\.\d+\.\d+)"'
