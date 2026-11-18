@@ -25,7 +25,11 @@ def _state(cwd: Path) -> list[str]:
     except MthError as exc:
         return [f"Estado: {exc.message} → {exc.hint or ''}".strip()]
     lines = []
-    hook = install_hook(git)
+    try:
+        hook = install_hook(git, cfg["hooks"]["commit_msg"])
+    except MthError as exc:
+        hook = "error"
+        lines.append(f"⚠ Hook commit-msg: {exc.message} → {exc.hint or ''}".strip())
     if hook == "foreign":
         lines.append("⚠ Hay un hook commit-msg ajeno: la validación de mensajes no está activa (mth doctor).")
     try:

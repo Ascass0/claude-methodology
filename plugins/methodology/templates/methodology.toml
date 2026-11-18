@@ -101,3 +101,9 @@ tag_prefix = "v"
 # [[release.version_files]]
 # path = "package.json"
 # pattern = '"version": "(\d+\.\d+\.\d+)"'
+
+[hooks]
+# Qué hacer con un hook commit-msg ajeno: "own" lo deja intacto (la validación de mensajes no se
+# activa), "replace" lo guarda como commit-msg.pre-mth e instala el de mth, "chain" lo guarda como
+# commit-msg.local y lo ejecuta antes de validar. Un gestor de hooks (husky…) se configura a mano.
+commit_msg = "own"

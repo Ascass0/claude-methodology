@@ -26,32 +26,62 @@ PLUGIN = "methodology"
 
 
 # -- git hook -----------------------------------------------------------------
-def hook_script() -> str:
+CHAINED_HOOK = "commit-msg.local"
+REPLACED_HOOK = "commit-msg.pre-mth"
+
+
+def hook_script(chain: bool = False) -> str:
     mth = shlex.quote(str(MTH))
+    chained = ""
+    if chain:  # SPEC-0006: the repo's own hook runs first and can reject the message
+        chained = ('chained="$(dirname "$0")/' + CHAINED_HOOK + '"\n'
+                   'if [ ! -x "$chained" ]; then\n'
+                   f"  echo '✗ falta el hook encadenado {CHAINED_HOOK} o no es ejecutable: restáuralo o cambia hooks.commit_msg' >&2\n"
+                   "  exit 1\nfi\n"
+                   '"$chained" "$1" || exit $?\n')
     return ("#!/bin/sh\n" f"{HOOK_MARK}\n"
             f"if [ ! -f {mth} ]; then\n"
             "  echo '✗ claude-methodology no encontrado: abre una sesión de Claude Code o ejecuta mth doctor' >&2\n"
             "  exit 1\nfi\n"
+            f"{chained}"
             f'exec sh {mth} check-msg "$1"\n')
 
 
-def install_hook(git: Git) -> str:
-    """Install or refresh the commit-msg hook. Returns a status word.
+def install_hook(git: Git, mode: str = "own") -> str:
+    """Install or refresh the commit-msg hook according to ``hooks.commit_msg``. Returns a status word.
 
-    A foreign hook is never overwritten (reported as ``foreign``).
+    ``own`` never touches a foreign hook (``foreign``); ``replace`` keeps it as
+    ``commit-msg.pre-mth`` (``replaced``); ``chain`` keeps it as ``commit-msg.local``
+    and runs it first (``chained``).
+
+    Raises:
+        MthError: ``replace``/``chain`` on a versioned hooks directory, or the backup name is taken.
     """
-    path = git.hooks_dir() / "commit-msg"
-    desired = hook_script()
+    hooks = git.hooks_dir()
+    path = hooks / "commit-msg"
+    desired = hook_script(chain=mode == "chain")
+    status = "installed"
     if path.exists():
         current = path.read_text(encoding="utf-8", errors="replace")
-        if HOOK_MARK not in current:
+        if HOOK_MARK in current:
+            if current == desired:
+                return "current"
+        elif mode == "own":
             return "foreign"
-        if current == desired:
-            return "current"
+        else:
+            if hooks.resolve().is_relative_to(git.root.resolve()) and not hooks.resolve().is_relative_to(git.git_dir().resolve()):
+                raise MthError(f"El directorio de hooks ({hooks}) está versionado: lo gestiona otra herramienta.",
+                               hint='Añade `mth check-msg "$1"` al hook commit-msg de tu gestor de hooks.')
+            backup = hooks / (CHAINED_HOOK if mode == "chain" else REPLACED_HOOK)
+            if backup.exists():
+                raise MthError(f"No se puede guardar el hook commit-msg ajeno: {backup.name} ya existe.",
+                               hint="Revisa ese fichero y bórralo o renómbralo antes de volver a instalar.")
+            path.rename(backup)
+            status = "chained" if mode == "chain" else "replaced"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(desired, encoding="utf-8")
     path.chmod(0o755)
-    return "installed"
+    return status
 
 
 # -- scaffolding ----------------------------------------------------------------
@@ -160,7 +190,7 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     upsert_claude_md(root, cfg["paths"], cfg.vocab)
     if marketplace_repo:
         _merge_settings(root, marketplace_repo)
-    install_hook(git)
+    install_hook(git, cfg["hooks"]["commit_msg"])
 
     git.out("add", "-A")
     message = commits.build("chore", "methodology", "adopt claude-methodology",
@@ -242,8 +272,11 @@ def doctor(start: Path) -> int:
             report(git.remote_has(branch), f"Rama {branch} en el remoto")
     gh_ok = GitHub(git.root)._gh("auth", "status", check=False).returncode == 0 if _has_gh() else False
     report(gh_ok, "gh instalado y autenticado")
-    status = install_hook(git)
-    report(status != "foreign", f"Hook commit-msg: {status}")
+    try:
+        status = install_hook(git, cfg["hooks"]["commit_msg"])
+        report(status != "foreign", f"Hook commit-msg: {status}")
+    except MthError as exc:
+        report(False, f"Hook commit-msg: {exc.message}")
     for key in ("docs", "specs", "adr", "changes"):
         report((git.root / cfg["paths"][key]).is_dir(), f"Directorio {cfg['paths'][key]}/")
     log_path = git.root / cfg["paths"]["changelog"]
