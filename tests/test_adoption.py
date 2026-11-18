@@ -258,8 +258,9 @@ class AnswersTests(unittest.TestCase):
             with self.subTest(expected=expected), self.assertRaises(MthError) as ctx:
                 adoption.validate(inventory, answers)
             self.assertIn(expected, ctx.exception.message)
-        with self.assertRaises(MthError):
+        with self.assertRaises(MthError) as ctx:
             self.config(inventory, {**valid, "autonomia": {"option": "otro", "config": {"autonomy": {"level": "x"}}}})
+        self.assertIn("'autonomy.level' = 'x'", ctx.exception.message)
 
 
 class AdoptionFlowTests(unittest.TestCase):
@@ -278,12 +279,28 @@ class AdoptionFlowTests(unittest.TestCase):
     def test_rejected_answers_change_nothing(self):
         # verifies: SPEC-0004/AC-08
         (self.tmp / "bad.json").write_text("{not json", encoding="utf-8")
-        for path in (self.tmp / "bad.json", self.answers({"autonomia": {"option": "yolo"}})):
+        invalid_other = {"autonomia": {"option": "otro", "config": {"autonomy": {"level": "x"}}}}
+        for path in (self.tmp / "bad.json", self.answers({"autonomia": {"option": "yolo"}}), self.answers(invalid_other)):
             with self.subTest(path=path.name):
                 self.mth("init", "--answers", str(path), ok=False)
                 self.assertEqual(self.git("branch", "--list"), "* main")
                 self.assertEqual(self.git("status", "--porcelain"), "")
                 self.assertFalse((self.work / ".claude/methodology.toml").exists())
+
+    def test_init_preconditions(self):
+        # verifies: SPEC-0004/AC-08
+        path = self.answers()
+        (self.work / "dirty.txt").write_text("x", encoding="utf-8")
+        self.assertIn("cambios sin confirmar", self.mth("init", "--answers", str(path), ok=False).lower())
+        (self.work / "dirty.txt").unlink()
+        self.git("branch", "chore/adopt-methodology")
+        self.assertIn("ya existe", self.mth("init", "--answers", str(path), ok=False))
+        self.git("branch", "-D", "chore/adopt-methodology")
+        self.git("init", "-q", "--bare", str(self.tmp / "empty.git"), cwd=self.tmp)
+        self.git("remote", "set-url", "origin", str(self.tmp / "empty.git"))
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        self.assertIn("no tiene rama main", self.mth("init", "--answers", str(path), ok=False))
+        self.assertFalse((self.work / ".claude/methodology.toml").exists())
 
     def test_adoption_branch_with_config_and_adr(self):
         # verifies: SPEC-0004/AC-10

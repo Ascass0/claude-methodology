@@ -85,6 +85,27 @@ class LegacyTraceTests(unittest.TestCase):
         self.assertIn("⚠ docs/old.md:3: enlace roto: nada.md", out)
         self.assertIn("⚠ docs/touched.md:3: enlace roto: nada.md", out)
 
+    def test_gates_ignore_legacy_findings_and_refuse_an_unknown_base(self):
+        # verifies: SPEC-0005/AC-03
+        # verifies: SPEC-0005/AC-06
+        from mthlib import flow
+        from mthlib.config import load
+        from mthlib.git import Git
+        from mthlib.log import Tracer
+
+        def gate(legacy_base: str) -> None:
+            self.trace(legacy_base=legacy_base)  # writes the configuration
+            git = Git.discover(self.root)
+            flow._gate_trace(flow.Ctx(cfg=load(self.root), git=git, tracer=Tracer(git.git_dir(), "test")))
+        gate(self.base)  # only legacy findings: the gate passes
+        with self.assertRaises(MthError) as ctx:
+            gate("0" * 40)
+        self.assertIn("No existe el commit", ctx.exception.message)
+        test_mth._write(self.root / "docs/new.md", BROKEN)
+        with self.assertRaises(MthError) as ctx:
+            gate(self.base)
+        self.assertIn("Trazabilidad rota (1 hallazgos)", ctx.exception.message)
+
     def test_unknown_legacy_commit_fails(self):
         # verifies: SPEC-0005/AC-06
         missing = "0" * 40
