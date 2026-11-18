@@ -34,7 +34,8 @@ _UNTIL_PR = {("mth", "integrate"), ("mth", "release"), ("mth", "hotfix finish")}
 CONFIRM: dict[str, set[tuple[str, str]]] = {
     "full": set(),
     "until-pr": _UNTIL_PR,
-    "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("git", "commit"), ("git", "push")},
+    "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("mth", "reconfigure"),
+                               ("git", "commit"), ("git", "push")},
 }
 assert set(CONFIRM) == set(AUTONOMY_LEVELS)
 

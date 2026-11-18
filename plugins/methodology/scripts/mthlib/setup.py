@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 from . import adoption, changelog, commits, lang, survey, versions, work
@@ -22,6 +24,9 @@ HOOK_MARK = "# managed-by: claude-methodology"
 BLOCK_START = "<!-- claude-methodology:start -->"
 BLOCK_END = "<!-- claude-methodology:end -->"
 ADOPT_BRANCH = "chore/adopt-methodology"
+RECONFIGURE_BRANCH = "chore/reconfigure-methodology"  # SPEC-0011
+RECONFIGURED_HEADER = "# claude-methodology · regenerado por `mth reconfigure` (ver el ADR de reestructuración).\n"
+_METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration)-(de|of)-claude-methodology\.md$")
 MARKETPLACE = "claude-methodology"
 PLUGIN = "methodology"
 
@@ -276,6 +281,89 @@ def _write_adoption_adr(root: Path, cfg, git: Git, inventory: survey.Survey, pla
     slug = "adopcion-de-claude-methodology" if cfg.vocab.code == "es" else "adoption-of-claude-methodology"
     (folder / f"{ident}-{slug}.md").write_text(adoption.adr_text(ident, inventory, plan, cfg.vocab), encoding="utf-8")
     say(f"· ADR de adopción: {(folder / f'{ident}-{slug}.md').relative_to(root)}")
+
+
+def _chainable(git: Git) -> bool:
+    """A foreign commit-msg hook exists, or was already kept as the chained one."""
+    hooks = git.hooks_dir()
+    hook = hooks / "commit-msg"
+    foreign = hook.is_file() and HOOK_MARK not in hook.read_text(encoding="utf-8", errors="replace")
+    return foreign or (hooks / CHAINED_HOOK).is_file()
+
+
+def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None:
+    """Apply reconfiguration answers on a dedicated branch (SPEC-0011, ADR-0007).
+
+    Everything is validated before the branch is created: the answers against the
+    reconfiguration inventory, the resulting configuration and the hook mode.
+
+    Raises:
+        MthError: Not adopted, dirty tree, branch already exists, invalid answers or
+            configuration, missing integration branch, or nothing to change.
+    """
+    git = Git.discover(start)
+    root = git.root
+    if not (root / CONFIG_PATH).is_file():
+        raise MthError("El repositorio no ha adoptado la metodología.", hint="Usa la skill mth-init.")
+    cfg = load(root)
+    git.remote = cfg.remote
+    git.require_clean()
+    git.fetch()
+    if git.remote_has(RECONFIGURE_BRANCH) or git.local_has(RECONFIGURE_BRANCH):
+        raise MthError(f"La rama {RECONFIGURE_BRANCH} ya existe.", hint="Intégrala o bórrala antes de reestructurar.")
+    inventory = survey.reconfigure(git, cfg, only)
+    answers = adoption.load_answers(Path(answers_file).expanduser())
+    adoption.validate(inventory, answers)
+    text = (root / CONFIG_PATH).read_text(encoding="utf-8")
+    plan, tables, changes = adoption.rebuild(cfg.data, tomllib.loads(text), inventory, answers,
+                                             git.sha(git.remote_ref(cfg.development)))
+    config_text = RECONFIGURED_HEADER + adoption.dump_toml(tables)
+    new_cfg = parse(root, config_text, answers_file)  # validate before any mutation
+    check_hook_mode(git, new_cfg["hooks"]["commit_msg"])
+    if new_cfg["hooks"]["commit_msg"] == "chain" and not _chainable(git):
+        raise MthError("hooks.commit_msg = chain necesita un hook commit-msg ajeno que encadenar, y no hay ninguno.",
+                       hint="Responde 'sustituir' o conserva el modo actual: encadenar sin hook rechazaría todos los commits.")
+    pending = [d for d in plan.decisions if d.migration]
+    if not changes and not pending:
+        raise MthError("Las respuestas no cambian nada: nada que cambiar.", hint="La configuración ya es esa.")
+    if new_cfg.development != cfg.development and not git.remote_has(new_cfg.development):
+        if answers.get("ramas", {}).get("option") != "crear":
+            raise MthError(f"La rama {new_cfg.development} no existe en el remoto.",
+                           hint="Créala antes o responde 'crear'.")
+        git.out("branch", new_cfg.development, git.remote_ref(cfg.main))
+        git.push(new_cfg.development)
+        say(f"· Rama {new_cfg.development} creada desde {cfg.main}")
+
+    git.checkout_synced(cfg.development)
+    git.out("checkout", "-b", RECONFIGURE_BRANCH)
+    (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
+    previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / "methodology").glob("*.md")
+                      if (m := _METHODOLOGY_ADR.search(p.name)))
+    ident = IdRegistry(new_cfg, git.files()).next_id(new_cfg["trace"]["adr_kind"])
+    folder = root / new_cfg["paths"]["adr"] / "methodology"
+    folder.mkdir(parents=True, exist_ok=True)
+    slug = "reestructuracion-de-claude-methodology" if new_cfg.vocab.code == "es" else "reconfiguration-of-claude-methodology"
+    adr = folder / f"{ident}-{slug}.md"
+    adr.write_text(adoption.reconfigure_adr_text(ident, previous[-1] if previous else None, plan, changes, new_cfg.vocab), encoding="utf-8")
+    install_hook(git, new_cfg["hooks"]["commit_msg"])
+
+    git.out("add", "-A")
+    message = commits.build("chore", "methodology", "reconfigure claude-methodology",
+                            "Apply the answers of the reconfiguration interview on top of the current "
+                            "configuration and record the decisions.", [ident])
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as fh:
+        fh.write(message)
+    try:
+        git.out("commit", "-F", fh.name)
+    finally:
+        Path(fh.name).unlink(missing_ok=True)
+    git.push(RECONFIGURE_BRANCH)
+    say(f"· ADR de reestructuración: {adr.relative_to(root)}")
+    for change in changes:
+        say(f"· {change.key}: {change.before!r} → {change.after!r}")
+    for decision in pending:
+        warn(f"Migración pendiente en {RECONFIGURE_BRANCH}: {decision.question} ({decision.option}) — {decision.effect}")
+    say(f"✓ Reestructuración en {RECONFIGURE_BRANCH}. Haz las migraciones pendientes y después mth integrate.")
 
 
 def configure_github(root: Path, main: str, development: str) -> None:
