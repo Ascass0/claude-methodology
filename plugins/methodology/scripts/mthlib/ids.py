@@ -1,7 +1,7 @@
-"""Registry of traceable identifiers (SPEC-0001, ADR-0003, F-001...).
+"""Registry of traceable identifiers (SPEC-NNNN, ADR-NNNN, F-001...).
 
 An ID is *defined* where a markdown heading in one of its ``defined_in``
-files starts with it (``# ADR-0003 · Título`` or ``## F-001 · Runner``).
+files starts with it (``# ADR-NNNN · Título`` or ``## F-001 · Runner``).
 Everything else that mentions it is a *reference*.
 """
 from __future__ import annotations
@@ -67,7 +67,7 @@ class IdRegistry:
         return ident in self.definitions
 
     def next_id(self, kind: str) -> str:
-        """Next free identifier of ``kind`` (``SPEC-0007``).
+        """Next free identifier of ``kind`` (``SPEC-NNNN``).
 
         Raises:
             MthError: The pattern is not of the simple ``PREFIX\\d{N}`` form.

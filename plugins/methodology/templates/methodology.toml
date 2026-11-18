@@ -67,6 +67,14 @@ coder = ""
 documenter = "documentador"
 verifier = "verificador"
 
+[models]
+# Alias de la herramienta Agent de Claude Code: haiku, sonnet, opus, fable.
+# Escalera de reintento (de menor a mayor): una tarea fallida se relanza un nivel más arriba.
+ladder = ["haiku", "sonnet", "opus"]
+task = "sonnet"        # tareas del plan sin columna Modelo
+review = "sonnet"      # revisores
+documenter = "sonnet"  # rol documenter
+
 [ci]
 # Exigir CI en verde en cada PR (fail-safe: sin CI no se integra).
 required = true

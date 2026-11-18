@@ -190,7 +190,7 @@ feat|fix|chore/<slug> ──●──●──●  (desde development)
 
   Qué cambia y por qué, en prosa breve.
 
-  Refs: SPEC-0003, ADR-0007
+  Refs: SPEC-NNNN, ADR-NNNN
   ```
 
 - `feat`, `fix`, `refactor` y `perf` DEBEN referenciar una spec, un ADR o un issue. El resto PUEDE usar `Refs: n/a`. [script]

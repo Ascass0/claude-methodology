@@ -21,7 +21,7 @@ git add <rutas del tema>
 mth commit --type feat --scope runner \
   --summary "create and destroy one container per task" \
   --body "Each delegated task gets its own sandbox. Teardown runs on success, error, timeout and cancellation; the reaper removes leftovers by label." \
-  --refs SPEC-0003,ADR-0002
+  --refs SPEC-NNNN,ADR-NNNN
 ```
 
 - `--type`: feat, fix, refactor, perf, docs, test, build, ci, chore, revert.

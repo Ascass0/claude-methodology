@@ -20,6 +20,26 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
 - **Modos de fallo**: cada fila genera al menos un test.
 - **Fuera de alcance** explícito: evita que la feature crezca.
 - Enlaza los ADR que la justifican (`ADR-NNNN`).
+- **Plan de trabajo** (solo si vas a delegar dos o más tareas en agentes `dev-*`; skill `mth-develop`):
+
+  ```markdown
+  ## Plan de trabajo
+
+  | Tarea | Oleada | Ficheros | Criterios |
+  |---|---|---|---|
+  | T-01 | 1 | `src/parser.py`, `tests/test_parser.py` | AC-01, AC-02 |
+  | T-02 | 1 | `src/render/**` | AC-03 |
+  | T-03 | 2 | `src/cli.py`, `tests/test_cli.py` | AC-04 |
+  ```
+
+  - Encabezado de nivel 2 exactamente `## Plan de trabajo` y estas columnas, en este orden.
+  - `T-NN` únicos; oleada entera ≥ 1 (las tareas de una oleada van en paralelo; lo que depende de otra tarea va en una oleada posterior).
+  - Ficheros entre comillas invertidas: rutas relativas exactas; un glob solo para ficheros cuyo nombre no se conoce. Tests incluidos.
+  - Cada AC de la spec en al menos una tarea; ninguna tarea con criterios que la spec no declara.
+  - Dos tareas de la misma oleada nunca comparten ficheros. Entre globs, `mth` asume solapamiento salvo que sus prefijos literales sean distintos: usa rutas exactas.
+  - Ninguna decisión de diseño para quien implementa: si una tarea obliga a elegir un esquema, una API o cómo tratar un caso límite, fíjalo antes en la spec.
+  - Columna opcional `Modelo` al final de la cabecera (`| Tarea | Oleada | Ficheros | Criterios | Modelo |`), con un alias de `models.ladder`; vacía = `models.task`. Elige el nivel por dificultad: `haiku` para lo mecánico (renombrados, fragmentos, ajustes repetitivos con el patrón dado), `sonnet` para implementar con criterio dentro de una spec cerrada, `opus` solo si la tarea exige razonamiento que la spec no puede fijar del todo.
+  - Máximo 50 tareas. Valídalo con `mth plan check SPEC-NNNN` (también lo comprueba `mth trace`).
 
 ## Estados
 

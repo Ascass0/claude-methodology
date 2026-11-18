@@ -16,7 +16,7 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 ## Revisar
 
-Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Task con su nombre; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
+Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Agent con su nombre y el modelo `models.review` que muestra `mth models`; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
 
 ```
 Revisa la rama <rama> respecto a <destino>.
@@ -29,6 +29,10 @@ Bloqueante = incumple una regla DEBE, un criterio de aceptación, o introduce un
 Termina con: BLOQUEANTES: <n>
 ```
 
+Guarda el informe completo de cada revisor, tal cual, en un fichero del scratchpad (fuera del repo). Su última línea es `BLOQUEANTES: <n>`.
+
+**Revisor que no termina** (se cae, agota el tiempo o su informe no acaba en `BLOQUEANTES: <n>`): no ha revisado. Nunca cuenta como "sin hallazgos". Relánzalo una vez con el mismo encargo; si vuelve a fallar, detente y avisa (PRINCIPLES §11).
+
 ## Resolver
 
 - Corrige los bloqueantes. Los importantes, salvo que contradigan una regla de mayor precedencia (seguridad > fail-safe/fail-fast > corrección > trazabilidad > parsimonia > estilo); las sugerencias, a criterio.
@@ -40,8 +44,10 @@ Termina con: BLOQUEANTES: <n>
 Por cada agente, sobre el HEAD final:
 
 ```
-mth review record <agente> --blocking <n> --summary "<resumen en español en una línea>"
+mth review record <agente> --report <informe> --summary "<resumen en español en una línea>"
 mth review status
 ```
+
+`mth` toma los bloqueantes de la última línea del informe. Si el informe falta, está vacío o no termina en esa línea, no registra nada y la revisión sigue pendiente.
 
 `mth integrate` exige un registro con 0 bloqueantes de cada revisor para el HEAD actual, y copia los resúmenes al PR.

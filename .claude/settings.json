@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-methodology": {
+      "source": {
+        "source": "github",
+        "repo": "Ascass0/claude-methodology"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "methodology@claude-methodology": true
+  }
+}
