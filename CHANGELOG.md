@@ -6,6 +6,12 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.5.1] - 2026-11-18
+
+### Corregido
+- El plugin declara su versión real (0.5.1) en `plugin.json`, en el marketplace y en `mth --version`. La 0.5.0 se publicó declarando 0.4.0, así que Claude Code no ofrecía la actualización a quien ya tenía instalado el plugin: actualiza para recibir los cambios de la 0.5.0. (SPEC-0001, SPEC-0002)
+- El CHANGELOG incluye la sección de la 0.5.0 (delegación verificable y niveles de modelo), que faltaba. (SPEC-0001, SPEC-0002)
+
 ## [0.5.0] - 2026-11-18
 
 ### Añadido
