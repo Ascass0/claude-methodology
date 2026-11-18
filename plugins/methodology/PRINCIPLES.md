@@ -59,9 +59,23 @@ Un revisor que pide simplificar algo que existe por seguridad o por un modo de f
 - **Límites explícitos.** Toda operación externa DEBE tener timeout; toda entrada, un tamaño máximo; todo reintento, un número máximo con espera creciente. Nada espera para siempre ni crece sin límite. [criterio]
 - **Idempotencia.** Las operaciones que pueden repetirse tras un fallo (reintentos, reanudaciones, tareas programadas) DEBEN poder ejecutarse varias veces con el mismo resultado. [criterio]
 - **Parsimonia.** Lo más simple que funcione, pero no más simple. NO DEBEN añadirse abstracciones, configuración ni extensibilidad para necesidades que no existen hoy (YAGNI). La robustez exigida por un modo de fallo identificado no es complejidad innecesaria. [criterio]
+- **Dependencias explícitas, sin estado global oculto.** Un componente DEBE recibir lo que usa (por parámetro o constructor) en lugar de obtenerlo de un singleton, una variable global mutable o un registro estático. Que algo tenga una sola instancia se decide en la raíz de composición (el entrypoint), no dentro de la clase. Las constantes inmutables no son estado global. [criterio]
+- **Bajo acoplamiento.** Los módulos se comunican por contratos estrechos (funciones, interfaces, tipos de datos) y NO DEBEN depender de los detalles internos de otro. Cambiar la implementación de un componente sin cambiar su contrato NO DEBE obligar a tocar otros. Las dependencias externas (base de datos, red, reloj, sistema de ficheros, proveedores) se acceden a través de una frontera propia, no repartidas por la lógica. [criterio]
+- **Testable por diseño.** La lógica de dominio DEBE estar separada de la E/S, de modo que sus tests unitarios no necesiten base de datos, red ni servicios reales: los dobles de prueba se inyectan en las fronteras anteriores. Un código que solo puede probarse con la infraestructura real tiene un problema de diseño, no de tests. [criterio]
+- **Optimización con evidencia.** NO DEBE optimizarse el rendimiento a costa de claridad sin un requisito de rendimiento en la spec o una medición (profiling, benchmark) que demuestre el problema; la medición se cita en el commit. Elegir desde el principio una estructura de datos o un algoritmo de complejidad adecuada no es optimización prematura. [criterio]
 - **Estándares primero.** NO DEBE reinventarse lo que ya resuelve un estándar, la biblioteca estándar o una dependencia madura y mantenida. Se adapta al caso de uso; se documenta la desviación cuando existe. [criterio]
 - **Mínimo privilegio.** Cada componente tiene solo los permisos, credenciales y accesos que necesita. [criterio]
 - **Determinismo.** Lo que puede resolverse con código determinista NO DEBE delegarse en un modelo de lenguaje. [criterio]
+
+### SOLID
+
+SOLID es la práctica de diseño que DEBE seguirse en clases, módulos y componentes. Se aplica con proporcionalidad: la parsimonia sigue prohibiendo la extensibilidad especulativa, y una función o un script pequeño no necesitan interfaces.
+
+- **S · Responsabilidad única.** Cada clase o módulo DEBE tener una sola razón para cambiar: responde ante un único actor o aspecto (dominio, persistencia, presentación, transporte). Si dos cambios independientes obligan a tocar el mismo módulo, se separa. [criterio]
+- **O · Abierto/cerrado.** Cuando existen al menos dos variantes reales de un comportamiento, o la spec las exige, el código DEBE admitir una variante nueva añadiendo una implementación, sin modificar a quienes lo usan. Antes de eso NO DEBE crearse el punto de extensión: se modifica el código directamente. [criterio]
+- **L · Sustitución de Liskov.** Toda implementación de un contrato (subclase, implementación de una interfaz, doble de prueba) DEBE poder sustituir a cualquier otra sin que quien lo usa lo note: no exige precondiciones más fuertes, no ofrece garantías más débiles, no lanza errores ajenos al contrato y no deja métodos sin implementar. Cuando un contrato tiene varias implementaciones, DEBERÍA existir un test de contrato que pasen todas. [criterio]
+- **I · Segregación de interfaces.** Las interfaces DEBEN ser pequeñas y definirse según lo que necesita quien las usa: ningún consumidor depende de métodos que no usa. Concreta la regla de bajo acoplamiento. [criterio]
+- **D · Inversión de dependencias.** La lógica de dominio DEBE definir las abstracciones que necesita (repositorios, relojes, clientes, notificadores) y la infraestructura las implementa: las dependencias del código apuntan hacia el dominio, nunca del dominio a la infraestructura. La implementación concreta se elige en la raíz de composición, como exige la regla de dependencias explícitas. [criterio]
 
 ## 3. Errores y excepciones
 
@@ -98,6 +112,10 @@ Se traza el flujo normal y el de errores.
 - **Configuración fuera del código** y validada al arrancar (fail-fast). [criterio]
 - **Sin código muerto**, sin código comentado y sin `TODO` sin referencia a un issue o una spec. [criterio]
 - **Funciones pequeñas y con una responsabilidad.** Un nombre que necesita "y" describe dos funciones. [criterio]
+- **Nombres que revelan intención.** Los identificadores DEBEN decir qué representan en el dominio y para qué sirven. NO DEBEN usarse nombres de una letra (salvo índices y lambdas de una línea), abreviaturas crípticas, sufijos numéricos (`data2`, `result_new`) ni genéricos (`data`, `info`, `tmp`, `manager`, `helper`) fuera de ámbitos de pocas líneas. Los booleanos se nombran como predicados (`is_valid`, `has_access`). [criterio]
+- **Sin duplicación de conocimiento (DRY).** Una regla de negocio, una validación, una constante o un formato DEBEN vivir en un único sitio. Se abstrae a partir de la tercera repetición, o antes si la duplicación ya ha causado un bug. Dos fragmentos parecidos que cambian por motivos distintos no son duplicación y NO DEBEN unificarse a la fuerza: el acoplamiento que crea una abstracción equivocada es peor que la copia. [criterio]
+
+Los antipatrones **STUPID** (Singleton, Tight coupling, Untestability, Premature optimization, Indescriptive naming, Duplication) son la violación de seis reglas: dependencias explícitas, bajo acoplamiento, testable por diseño y optimización con evidencia (apartado 2), y nombres que revelan intención y sin duplicación de conocimiento (este apartado). Son el reverso de la buena práctica, que es [SOLID](#solid). Un revisor que los detecte DEBE citar la regla incumplida.
 
 ## 6. Tests
 
