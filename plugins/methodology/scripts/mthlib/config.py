@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import lang, versions
+from . import __version__, lang, versions
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -80,6 +80,10 @@ _SCHEMA: dict[str, Any] = {
     "autonomy": {"level": str},
 }
 
+# SPEC-0009: an unknown key is usually one from a newer plugin, not a typo.
+UNKNOWN_KEY_HINT = ("Si no es una errata, la clave es de una versión posterior del plugin: "
+                    "actualízalo con /plugin y abre una sesión nueva de Claude Code.")
+
 _EXTRA_NAME = re.compile(r"^[a-z]+$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _TAG_PREFIX = re.compile(r"^[A-Za-z][A-Za-z0-9._-]*$")
@@ -136,8 +140,8 @@ def _check_types(data: dict[str, Any], schema: dict[str, Any], prefix: str) -> N
     for key, value in data.items():
         path = f"{prefix}{key}"
         if key not in schema:
-            raise MthError(f"Clave desconocida en la configuración: '{path}'.",
-                           hint="Revisa la ortografía; las claves válidas están en la plantilla.")
+            raise MthError(f"Clave desconocida en la configuración: '{path}' "
+                           f"(claude-methodology {__version__} no la reconoce).", hint=UNKNOWN_KEY_HINT)
         expected = schema[key]
         if isinstance(expected, dict):
             if not isinstance(value, dict):
