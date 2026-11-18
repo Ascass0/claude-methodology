@@ -1,0 +1,86 @@
+# claude-methodology · configuración del repositorio
+# Referencia completa: README de claude-methodology.
+version = 1
+remote = "origin"
+
+[commands]
+# Comando de tests. Obligatorio: usa "" solo mientras el repo no tenga tests.
+test = ""
+# Comprobación rápida antes de cada commit (lint, tipos). "" = ninguna.
+precommit = ""
+
+[paths]
+docs = "docs"
+specs = "specs/features"
+adr = "specs/adr"
+changes = "changes"
+changelog = "CHANGELOG.md"
+# Fichero donde mth escribe su bloque de instrucciones para Claude.
+# En un fork, usa ".claude/CLAUDE.md" para no modificar el CLAUDE.md de upstream.
+claude_md = "CLAUDE.md"
+tests = ["tests/**", "test/**", "**/test_*.*", "**/*_test.*", "**/*.test.*", "**/*.spec.*"]
+
+# Identificadores trazables. Se definen en un encabezado markdown que empieza
+# por el ID dentro de `defined_in`. Si declaras [ids], sustituye a estos.
+[ids.SPEC]
+pattern = 'SPEC-\d{4}'
+defined_in = ["specs/features/**/*.md"]
+
+[ids.ADR]
+pattern = 'ADR-\d{4}'
+defined_in = ["specs/adr/**/*.md"]
+
+[branches]
+main = "main"
+development = "development"
+
+# Prefijos de rama propios del repo. flow = "feature" (desde development) o "hotfix" (desde main).
+# [branches.extra.sync]
+# flow = "feature"
+# [branches.extra.security]
+# flow = "hotfix"
+
+[commits]
+# Tipos que deben referenciar una spec, un ADR o un issue en el trailer Refs:.
+require_refs = ["feat", "fix", "refactor", "perf"]
+# Refs cuya historia es código externo (por ejemplo, "refs/remotes/upstream/main" en un fork):
+# sus commits no se validan ni se listan en los merges.
+external_refs = []
+
+[changes]
+# Ramas de primer nivel que deben aportar fragmento de changelog.
+required_for = ["feat", "fix", "hotfix"]
+
+[review]
+# Revisores en orden de precedencia: los del repo (.claude/agents/<nombre>.md) y los
+# compartidos del plugin (verificador). Ponlo primero: comprueba que la rama cumple su spec.
+agents = ["verificador"]
+required_for = ["feat", "fix", "hotfix"]
+
+# Revisores que solo aplican si el diff toca sus rutas (globs; '!' excluye, gana el último).
+[review.paths]
+# revisor-contratos = ["subagents/**", "schemas/**"]
+
+[roles]
+# Agentes para cada rol (vacío = Claude asume el rol). documentador y verificador vienen en el plugin.
+coder = ""
+documenter = "documentador"
+verifier = "verificador"
+
+[ci]
+# Exigir CI en verde en cada PR (fail-safe: sin CI no se integra).
+required = true
+
+[trace]
+links = true          # enlaces markdown relativos válidos y dentro del repo
+acceptance = true     # los AC de specs "implementada" deben tener test
+spec_kind = "SPEC"
+adr_kind = "ADR"
+include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
+exclude = []
+
+[release]
+github_release = true
+sign_tags = false
+# Prefijo de las etiquetas de versión. En un fork, uno propio ("fork-v") para no chocar con upstream.
+tag_prefix = "v"
