@@ -1,6 +1,6 @@
 # SPEC-0004 · Adopción guiada
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0003
 - Sustituye a: —
@@ -49,7 +49,7 @@ Señales que detecta:
 | `upstream` | Existe el remoto `upstream` |
 | `tags` | Etiquetas `<prefijo>X.Y.Z` y su prefijo más frecuente |
 | `specs` | Carpetas `specs/`, `spec/`, `rfcs/`, `rfc/`, `design/`, `docs/specs/`, `docs/rfcs/`, `docs/design/` con ficheros `.md`, y el patrón de ID más frecuente de sus encabezados (`[A-Z]+-\d+`) |
-| `adrs` | Carpetas `adr/`, `adrs/`, `decisions/`, `docs/adr/`, `docs/adrs/`, `docs/decisions/`, `doc/adr/` con ficheros `.md`, y su patrón de ID |
+| `adrs` | Carpetas `adr/`, `adrs/`, `decisions/`, `docs/adr/`, `docs/adrs/`, `docs/decisions/`, `doc/adr/`, `specs/adr/` con ficheros `.md`, y su patrón de ID. Sus ficheros no cuentan como specs |
 | `agents` | Ficheros `.claude/agents/*.md`, y los que tienen el nombre de un agente del plugin (`verificador`, `documentador`) |
 | `claude_dirs` | `.claude/skills/` o `.claude/commands/` con contenido |
 | `instructions` | `CLAUDE.md`, `.claude/CLAUDE.md` o `AGENTS.md` no vacíos |
@@ -73,7 +73,7 @@ Señales que detecta:
 | ID | Base de los perfiles | Se dispara además si |
 |---|---|---|
 | `alcance` | existing, methodology, fork | — |
-| `ramas` | — | no existe `development` en el remoto |
+| `ramas` | — | no existe `development` en el remoto (en un repo nuevo, `development` se crea sin preguntar) |
 | `commits` | — | `commit_hook` o `hook_managers` |
 | `versiones` | fork | `tags`, `release_tools` o `version_files` |
 | `specs` | — | `specs` |
@@ -118,6 +118,8 @@ JSON `{"answers": {"<id>": {"option": "<opción>", ...}}}`. Opciones y efecto:
 | `ci` | `sin-ci`, `crear` | `ci.required` = `false` / `true` |
 | `modelos` | `equilibrado`, `calidad`, `ahorro` | `models.ladder`, `models.review` |
 
+Lo que no se pregunta toma el valor que indica el inventario: `commands.test` es el único candidato si hay exactamente uno, `ci.required` es `true` si hay workflows, y `branches.main` es la rama principal del remoto. Con el perfil `fork`, además, `paths.claude_md = ".claude/CLAUDE.md"` y `commits.external_refs` con la rama principal de `upstream`.
+
 Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "..."}`. `config` son claves de `methodology.toml` que se fusionan con el resultado, y `note` es el texto de la persona, que se copia al ADR.
 
 `mth init --answers`:
@@ -125,7 +127,7 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 1. Repite el inventario y exige una respuesta válida para cada pregunta que el inventario pida. No admite respuestas a preguntas que no pide.
 2. Genera la configuración: la plantilla, más los efectos de cada respuesta, más las claves `config` de las respuestas `otro`. La valida antes de tocar nada.
 3. Hace lo mismo que `mth init`: crea la rama de adopción, escribe los ficheros e instala el hook según `hooks.commit_msg`.
-4. Escribe en la rama un ADR de adopción, `Adopción de claude-methodology`, en la carpeta de ADR configurada: el perfil, una tabla con cada pregunta, la opción elegida y su efecto, y las notas de las respuestas `otro` y de `instrucciones`.
+4. Escribe en la rama un ADR de adopción, `Adopción de claude-methodology`, en `<carpeta de ADR>/methodology/` y en el idioma de `language.docs`: el perfil, una tabla con cada pregunta, la opción elegida y su efecto, y las notas de las respuestas `otro` y de `instrucciones`.
 5. Hace un único commit `chore(methodology): adopt claude-methodology` y sube la rama. Opus completa después en la misma rama lo que no es determinista.
 
 `mth init` sin `--answers` sigue funcionando como hasta ahora (plantilla con valores por defecto).
@@ -153,7 +155,7 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 - **AC-06**: El inventario detecta specs y ADR con su patrón de ID, agentes y colisiones de nombre, gestores de hooks, herramientas de publicación, ficheros de versión, candidatos a comando de tests e idioma, y no modifica el repo.
 - **AC-07**: `mth survey` falla en un repo adoptado, y un fichero ilegible durante el inventario produce un aviso sin detener el resto.
 - **AC-08**: `mth init --answers` rechaza, sin modificar nada, un JSON inválido, una pregunta pedida sin responder, una pregunta no pedida, una opción o un parámetro desconocidos y unas claves `otro` que dejan la configuración inválida.
-- **AC-09**: `mth init --answers` genera la configuración con el efecto de cada opción de la tabla y con las claves de `otro` fusionadas.
+- **AC-09**: `mth init --answers` genera la configuración con el efecto de cada opción de la tabla, los valores del inventario para lo que no se pregunta, los ajustes del perfil `fork` y las claves de `otro` fusionadas.
 - **AC-10**: `mth init --answers` crea la rama de adopción con un único commit que incluye la configuración y el ADR de adopción, con el perfil, cada pregunta, su opción y las notas.
 - **AC-11**: El catálogo de la skill tiene una sección por cada ID de pregunta del inventario, con opciones que coinciden con las que acepta `mth init --answers`, y la skill declara `model: opus`.
 

@@ -7,7 +7,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, branches, changelog, commits, flow, guard, plan, review, session, setup
+from . import __version__, branches, changelog, commits, flow, guard, plan, review, session, setup, survey
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
@@ -247,6 +247,21 @@ def _cmd_models(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_survey(args: argparse.Namespace) -> int:
+    result = survey.run(Git.discover(Path.cwd()))
+    if args.json:
+        print(result.to_json())
+        return 0
+    print(f"Perfil: {result.profile}")
+    for key, value in result.signals.items():
+        if value:
+            print(f"· {key}: {value}")
+    print("Preguntas: " + ", ".join(f"{q['id']} ({q['evidence']})" for q in result.questions))
+    for w in result.warnings:
+        warn(w)
+    return 0
+
+
 def _cmd_status(_: argparse.Namespace) -> int:
     for line in session._state(Path.cwd()):
         print(line)
@@ -261,7 +276,12 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", help="adopta la metodología en el repo actual")
     s.add_argument("--marketplace-repo", help="owner/repo del marketplace claude-methodology")
     s.add_argument("--github", action="store_true", help="aplica ajustes de merge y ruleset en GitHub")
-    s.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
+    mode.add_argument("--answers", help="respuestas de la entrevista de adopción (JSON, skill mth-init)")
+    mode.add_argument("--decline", action="store_true", help="desactiva el plugin en este repo (no versionado)")
+    s = sub.add_parser("survey", help="inventario del repo antes de adoptar (solo lectura)")
+    s.add_argument("--json", action="store_true", help="salida en JSON para la skill mth-init")
     sub.add_parser("doctor", help="comprueba la adopción")
     s = sub.add_parser("github", help="aplica ajustes de merge y ruleset en GitHub")
 
@@ -332,8 +352,13 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "session":
         return session.main()
     if c == "init":
-        setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config)
+        if args.decline:
+            setup.decline(Path.cwd())
+        else:
+            setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config, args.answers)
         return 0
+    if c == "survey":
+        return _cmd_survey(args)
     if c == "doctor":
         return EXIT_ERROR if setup.doctor(Path.cwd()) else 0
     if c == "github":
