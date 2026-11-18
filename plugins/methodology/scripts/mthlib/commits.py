@@ -7,7 +7,7 @@ Example::
     Each delegated task gets its own sandbox; teardown runs on success,
     error, timeout and cancellation.
 
-    Refs: F-001, ADR-0003
+    Refs: F-001, ADR-NNNN
 """
 from __future__ import annotations
 

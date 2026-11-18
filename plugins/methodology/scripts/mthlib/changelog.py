@@ -6,7 +6,7 @@ deletes them. Fragment format::
 
     ---
     bump: minor
-    refs: SPEC-0003, ADR-0007
+    refs: SPEC-NNNN, ADR-NNNN
     ---
     ### Añadido
     - Descripción del cambio orientada a quien usa el proyecto.
