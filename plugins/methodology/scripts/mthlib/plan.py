@@ -11,15 +11,21 @@ that did not run.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from . import globs
+from .config import DEFAULTS
 
 SECTION = "Plan de trabajo"
 COLUMNS = ["Tarea", "Oleada", "Ficheros", "Criterios"]
+MODEL_COLUMN = "Modelo"
+DEFAULT_LADDER: tuple[str, ...] = tuple(DEFAULTS["models"]["ladder"])
+OUTCOMES = ("ok", "not_run", "not_completed", "rejected")
 MAX_TASKS = 50
 MAX_MANIFEST_BYTES = 256 * 1024
 STATUSES = ("done", "blocked", "failed")
@@ -49,6 +55,10 @@ class Task:
     files: tuple[str, ...]
     criteria: tuple[str, ...]
     line: int
+    model: str = ""  # declared in the plan; "" = take models.task (SPEC-0002)
+
+    def effective_model(self, default: str) -> str:
+        return self.model or default
 
     def allows(self, path: str) -> bool:
         """True when ``path`` is one of the task's files or matches one of its globs."""
@@ -75,6 +85,7 @@ class Manifest:
     tests: tuple[tuple[str, str], ...]
     deviations: tuple[str, ...]
     questions: tuple[str, ...]
+    digest: str  # SHA-256 of the manifest file: identifies one attempt in the metrics
 
 
 # -- plan -------------------------------------------------------------------
@@ -136,14 +147,15 @@ def _parse_files(cell: str, line: int, problems: list[Problem]) -> tuple[str, ..
     return tuple(items)
 
 
-def _parse_rows(rows: list[tuple[int, str]], problems: list[Problem]) -> list[Task]:
+def _parse_rows(rows: list[tuple[int, str]], width: int, problems: list[Problem]) -> list[Task]:
     tasks: list[Task] = []
     for lineno, line in rows:
         cells = _cells(line)
-        if len(cells) != len(COLUMNS):
-            problems.append(Problem(lineno, f"la fila tiene {len(cells)} columnas y deben ser {len(COLUMNS)}"))
+        if len(cells) != width:
+            problems.append(Problem(lineno, f"la fila tiene {len(cells)} columnas y deben ser {width}"))
             continue
-        task_id, wave_raw, files_raw, criteria_raw = cells
+        task_id, wave_raw, files_raw, criteria_raw = cells[:4]
+        model = cells[4] if width > 4 else ""
         if not _TASK_ID.match(task_id):
             problems.append(Problem(lineno, f"ID de tarea inválido: '{task_id}' (formato T-NN)"))
         wave = int(wave_raw) if _WAVE.match(wave_raw) else 0
@@ -156,7 +168,7 @@ def _parse_rows(rows: list[tuple[int, str]], problems: list[Problem]) -> list[Ta
         for c in criteria:
             if not _AC_ID.match(c):
                 problems.append(Problem(lineno, f"criterio inválido: '{c}' (formato AC-NN)"))
-        tasks.append(Task(task_id, wave, files, criteria, lineno))
+        tasks.append(Task(task_id, wave, files, criteria, lineno, model))
     return tasks
 
 
@@ -176,8 +188,10 @@ def parse(text: str) -> tuple[list[Task], list[Problem]]:
     if start is None:
         return [], [Problem(heading, "la sección Plan de trabajo no tiene tabla")]
     header_line, header = table[start]
-    if _cells(header) != COLUMNS:
-        problems.append(Problem(header_line, f"cabecera inválida: debe ser | {' | '.join(COLUMNS)} |"))
+    columns = _cells(header)
+    if columns not in (COLUMNS, [*COLUMNS, MODEL_COLUMN]):
+        problems.append(Problem(header_line, f"cabecera inválida: debe ser | {' | '.join(COLUMNS)} | "
+                                             f"(opcionalmente con | {MODEL_COLUMN} | al final)"))
         return [], problems
     rows = []
     for lineno, line in table[start + 1:]:
@@ -187,7 +201,7 @@ def parse(text: str) -> tuple[list[Task], list[Problem]]:
     if not rows or not _SEPARATOR.match(rows[0][1]):
         problems.append(Problem(header_line, "falta la fila separadora de la tabla"))
         return [], problems
-    tasks = _parse_rows(rows[1:], problems)
+    tasks = _parse_rows(rows[1:], len(columns), problems)
     if not tasks:
         problems.append(Problem(header_line, "el plan no tiene tareas"))
     return tasks, problems
@@ -216,11 +230,14 @@ def declared_criteria(text: str) -> list[str]:
     return list(dict.fromkeys(_AC_DECLARED.findall(text)))
 
 
-def check(text: str) -> tuple[list[Task], list[Problem]]:
-    """Parse and validate the plan of a spec against the spec's own criteria."""
+def check(text: str, ladder: Sequence[str] = DEFAULT_LADDER) -> tuple[list[Task], list[Problem]]:
+    """Parse and validate the plan of a spec against its own criteria and the model ladder."""
     tasks, problems = parse(text)
     if not tasks:
         return tasks, problems
+    for t in tasks:
+        if t.model and t.model not in ladder:
+            problems.append(Problem(t.line, f"{t.id}: modelo '{t.model}' fuera de models.ladder ({', '.join(ladder)})"))
     if len(tasks) > MAX_TASKS:
         problems.append(Problem(tasks[MAX_TASKS].line, f"el plan tiene {len(tasks)} tareas (máximo {MAX_TASKS})"))
     seen: dict[str, Task] = {}
@@ -250,6 +267,12 @@ def check(text: str) -> tuple[list[Task], list[Problem]]:
     return tasks, problems
 
 
+def next_model(ladder: Sequence[str], current: str) -> str:
+    """Model for the retry: one step up the ladder, or the top step again."""
+    index = list(ladder).index(current)
+    return ladder[min(index + 1, len(ladder) - 1)]
+
+
 def waves(tasks: list[Task]) -> dict[int, list[Task]]:
     out: dict[int, list[Task]] = {}
     for t in sorted(tasks, key=lambda t: (t.wave, t.id)):
@@ -277,7 +300,8 @@ def load_manifest(path: Path) -> tuple[Manifest | None, list[str]]:
     if size > MAX_MANIFEST_BYTES:
         return None, [f"{src}: ocupa {size} bytes (máximo {MAX_MANIFEST_BYTES})"]
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         return None, [f"{src}: no es JSON válido ({exc})"]
     except OSError as exc:
@@ -309,11 +333,48 @@ def load_manifest(path: Path) -> tuple[Manifest | None, list[str]]:
                     files=tuple(data["files"]),
                     criteria=tuple(data["criteria"]),
                     tests=tuple((t["name"], t["result"]) for t in tests),
-                    deviations=tuple(data["deviations"]), questions=tuple(data["questions"])), []
+                    deviations=tuple(data["deviations"]), questions=tuple(data["questions"]),
+                    digest=hashlib.sha256(raw).hexdigest()), []
 
 
-def verify_wave(tasks: list[Task], wave: int, manifests: list[Manifest],
-                changed: set[str]) -> tuple[list[str], list[str]]:
+@dataclass(frozen=True)
+class WaveResult:
+    """Outcome of :func:`verify_wave`.
+
+    ``outcomes`` maps every task of the wave to ``(outcome, manifest digest)``;
+    the wave is accepted only when ``errors`` is empty.
+    """
+
+    errors: list[str]
+    warnings: list[str]
+    outcomes: dict[str, tuple[str, str]]
+
+
+def _task_errors(task: Task, m: Manifest, changed: set[str]) -> list[str]:
+    errors: list[str] = []
+    if m.status == "done":
+        if m.questions:
+            errors.append(f"{task.id}: 'done' con preguntas abiertas: {'; '.join(m.questions)}")
+        missing = [c for c in task.criteria if c not in m.criteria]
+        extra = [c for c in m.criteria if c not in task.criteria]
+        if missing:
+            errors.append(f"{task.id}: no cubre {', '.join(missing)}")
+        if extra:
+            errors.append(f"{task.id}: declara criterios ajenos a la tarea: {', '.join(extra)}")
+        if not m.tests:
+            errors.append(f"{task.id}: no informa de ningún test")
+        failing = [name for name, result in m.tests if result == "fail"]
+        if failing:
+            errors.append(f"{task.id}: tests en rojo: {', '.join(failing)}")
+    for f in m.files:
+        if not task.allows(f):
+            errors.append(f"{task.id}: '{f}' está fuera de los ficheros de la tarea")
+        if f not in changed:
+            errors.append(f"{task.id}: declara '{f}', que no tiene cambios")
+    return errors
+
+
+def verify_wave(tasks: list[Task], wave: int, manifests: list[Manifest], changed: set[str]) -> WaveResult:
     """Compare the manifests of ``wave`` with the plan and the real changes.
 
     Args:
@@ -321,15 +382,13 @@ def verify_wave(tasks: list[Task], wave: int, manifests: list[Manifest],
         wave: Wave being closed.
         manifests: Valid manifests passed by the caller.
         changed: Files changed in the working tree with respect to HEAD.
-
-    Returns:
-        ``(errors, warnings)``. The wave is accepted only when ``errors`` is empty.
     """
     in_wave = {t.id: t for t in tasks if t.wave == wave}
     if not in_wave:
-        return [f"El plan no tiene oleada {wave}."], []
+        return WaveResult([f"El plan no tiene oleada {wave}."], [], {})
     errors: list[str] = []
     warnings: list[str] = []
+    outcomes: dict[str, tuple[str, str]] = {}
     by_task: dict[str, Manifest] = {}
     for m in manifests:
         if m.task not in in_wave:
@@ -343,30 +402,78 @@ def verify_wave(tasks: list[Task], wave: int, manifests: list[Manifest],
         m = by_task.get(task_id)
         if m is None:
             errors.append(f"{task_id} no ejecutada: no hay manifiesto válido")
+            outcomes[task_id] = ("not_run", "")
             continue
+        own = _task_errors(task, m, changed)
         if m.status != "done":
-            errors.append(f"{task_id} no completada (status: {m.status})")
+            own.insert(0, f"{task_id} no completada (status: {m.status})")
+            outcomes[task_id] = ("not_completed", m.digest)
         else:
-            if m.questions:
-                errors.append(f"{task_id}: 'done' con preguntas abiertas: {'; '.join(m.questions)}")
-            missing = [c for c in task.criteria if c not in m.criteria]
-            extra = [c for c in m.criteria if c not in task.criteria]
-            if missing:
-                errors.append(f"{task_id}: no cubre {', '.join(missing)}")
-            if extra:
-                errors.append(f"{task_id}: declara criterios ajenos a la tarea: {', '.join(extra)}")
-            if not m.tests:
-                errors.append(f"{task_id}: no informa de ningún test")
-            failing = [name for name, result in m.tests if result == "fail"]
-            if failing:
-                errors.append(f"{task_id}: tests en rojo: {', '.join(failing)}")
-        for f in m.files:
-            if not task.allows(f):
-                errors.append(f"{task_id}: '{f}' está fuera de los ficheros de la tarea")
-            if f not in changed:
-                errors.append(f"{task_id}: declara '{f}', que no tiene cambios")
+            outcomes[task_id] = ("rejected" if own else "ok", m.digest)
+        errors += own
         warnings += [f"{task_id} desvío: {d}" for d in m.deviations]
 
     claimed = {f for m in by_task.values() for f in m.files}
     errors += [f"cambio que ningún manifiesto declara: '{f}'" for f in sorted(changed - claimed)]
-    return errors, warnings
+    return WaveResult(errors, warnings, outcomes)
+
+
+# -- metrics ----------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ModelStats:
+    """Attempts of one model aggregated from ``plan.task`` trace events."""
+
+    model: str
+    attempts: int
+    ok: int
+
+    @property
+    def failed(self) -> int:
+        return self.attempts - self.ok
+
+    @property
+    def ok_rate(self) -> float:
+        return 100.0 * self.ok / self.attempts if self.attempts else 0.0
+
+
+_EVENT_KEYS = ("spec", "task", "model", "result", "manifest")
+
+
+def stats(lines: list[str], spec: str | None = None) -> tuple[list[ModelStats], int]:
+    """Aggregate ``plan.task`` events per model (SPEC-0002).
+
+    One attempt is ``(spec, task, model, manifest digest)``: verifying the same
+    attempt again only updates its result. Lines that are not JSON objects are
+    counted as unreadable; well-formed events of other kinds are ignored.
+
+    Returns:
+        Per-model stats (in order of first appearance) and the unreadable line count.
+    """
+    attempts: dict[tuple[str, ...], str] = {}
+    unreadable = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            unreadable += 1
+            continue
+        if not isinstance(event, dict):
+            unreadable += 1
+            continue
+        if event.get("event") != "plan.task":
+            continue
+        if not all(isinstance(event.get(k), str) for k in _EVENT_KEYS) or event["result"] not in OUTCOMES:
+            unreadable += 1
+            continue
+        if spec and event["spec"] != spec:
+            continue
+        attempts[tuple(event[k] for k in ("spec", "task", "model", "manifest"))] = event["result"]
+    per_model: dict[str, list[int]] = {}
+    for (_, _, model, _), result in attempts.items():
+        counts = per_model.setdefault(model, [0, 0])
+        counts[0] += 1
+        counts[1] += result == "ok"
+    return [ModelStats(m, a, ok) for m, (a, ok) in per_model.items()], unreadable
