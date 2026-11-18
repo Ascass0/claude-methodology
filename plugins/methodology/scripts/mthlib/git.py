@@ -122,6 +122,25 @@ class Git:
         """Files changed on HEAD since its merge-base with ``base``."""
         return [f for f in self.out("diff", "--name-only", f"{base}...HEAD").splitlines() if f]
 
+    def worktree_changes(self) -> set[str]:
+        """Files that differ from HEAD: modified, deleted, renamed (both paths) and new not ignored."""
+        raw = run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=self.root).stdout
+        entries = raw.split("\0")
+        changed: set[str] = set()
+        i = 0
+        while i < len(entries):
+            entry = entries[i]
+            i += 1
+            if len(entry) < 4:
+                continue
+            status, path = entry[:2], entry[3:]
+            changed.add(path)
+            if "R" in status or "C" in status:  # the next entry is the original path
+                if i < len(entries) and entries[i]:
+                    changed.add(entries[i])
+                i += 1
+        return changed
+
     def github_repo(self) -> str | None:
         """``owner/repo`` of the remote when it is hosted on GitHub, else None."""
         proc = self.try_run("remote", "get-url", self.remote)

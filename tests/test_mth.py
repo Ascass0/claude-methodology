@@ -266,6 +266,11 @@ class EndToEndTests(unittest.TestCase):
             self.assertNotEqual(proc.returncode, 0, proc.stdout)
         return proc.stdout + proc.stderr
 
+    def report(self, blocking=0):
+        path = self.tmp / f"report-{blocking}.txt"
+        path.write_text(f"HALLAZGOS\nninguno\nBLOQUEANTES: {blocking}\n", encoding="utf-8")
+        return str(path)
+
     def parents(self, ref):
         return len(self.git("rev-list", "--parents", "-n", "1", ref).split()) - 1
 
@@ -325,8 +330,8 @@ class EndToEndTests(unittest.TestCase):
         status = self.mth("review", "status")
         self.assertIn("verificador: pendiente", status)
         self.assertIn("No aplican a estos cambios: revisor-docs", status)  # docs/ untouched
-        self.mth("review", "record", "verificador", "--blocking", "0", "--summary", "AC-01 verificado.")
-        self.mth("review", "record", "revisor-x", "--blocking", "0", "--summary", "Sin hallazgos.")
+        self.mth("review", "record", "verificador", "--report", self.report(), "--summary", "AC-01 verificado.")
+        self.mth("review", "record", "revisor-x", "--report", self.report(), "--summary", "Sin hallazgos.")
         out = self.mth("integrate", "--title", "feat(runner): ephemeral runner", "--summary", "S.",
                        ok=False, checks="fail")
         self.assertIn("CI", out)
@@ -357,8 +362,8 @@ class EndToEndTests(unittest.TestCase):
         self.git("add", "-A")
         self.mth("commit", "--type", "fix", "--summary", "close leaked handle", "--body", "Close on exit.",
                  "--refs", "SPEC-0001")
-        self.mth("review", "record", "verificador", "--blocking", "0", "--summary", "Regresión OK.")
-        self.mth("review", "record", "revisor-x", "--blocking", "0", "--summary", "OK.")
+        self.mth("review", "record", "verificador", "--report", self.report(), "--summary", "Regresión OK.")
+        self.mth("review", "record", "revisor-x", "--report", self.report(), "--summary", "OK.")
         self.mth("hotfix", "finish")
         self.git("fetch", "-q", "--tags")
         self.assertIn("v0.1.1", self.git("tag", "--list"))
