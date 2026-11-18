@@ -72,6 +72,17 @@ La adopción es una entrevista guiada, con la skill `mth-init`:
 
 Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs, revisores, roles, prefijos de rama propios), se comprueba con `mth doctor` y se integra con `mth integrate`. En una adopción gradual, `trace.legacy_base` evita que el contenido anterior bloquee la trazabilidad; `mth trace --legacy` lo lista.
 
+### Reestructurar la metodología
+
+En un repo ya adoptado, la skill `mth-reconfigure` vuelve a pasar la entrevista de la adopción: el formulario completo, los bloques que se elijan (`flujo`, `documentacion`, `calidad`, `agente`) o solo el cambio que se describa ([SPEC-0011](specs/features/SPEC-0011-reestructuracion-guiada-de-la-metodologia.md), [ADR-0007](specs/adr/process/ADR-0007-reestructuracion-reutilizando-la-entrevista-de-adopcion.md)).
+
+1. `mth survey --reconfigure [--only <bloques o preguntas>]` ofrece las preguntas aplicables con su valor actual (solo lee).
+2. Opus pregunta con los textos del catálogo de `mth-init`, marcando la opción actual.
+3. `mth reconfigure --answers <json> [--only …]` valida las respuestas y las aplica **sobre la configuración actual**, así que lo que no se pregunta se conserva. Abre `chore/reconfigure-methodology` con la configuración y un ADR de reestructuración en un único commit, que cita el ADR de adopción y lista cada clave que cambia. Si nada cambia, no crea nada.
+4. Las migraciones que pidan las respuestas (convertir specs, renombrar agentes, crear la CI) se hacen en la misma rama, tras aprobar el plan, y se integra con `mth integrate`.
+
+El fichero de configuración se regenera, así que se pierden sus comentarios: el porqué de cada cambio queda en el ADR.
+
 ### Configuración
 
 | Clave | Para qué |
@@ -145,6 +156,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Changelog sin conflictos | Fragmentos por rama; `mth release` los agrega (Keep a Changelog) |
 | SemVer y etiquetas | `mth release` calcula la versión del mayor `bump`; etiqueta anotada |
 | `main ⊆ development` | El merge de vuelta integra `main` en `development` tras cada versión |
+| Reestructuración trazada | `mth survey --reconfigure` + skill `mth-reconfigure` + `mth reconfigure --answers`: valida antes de tocar nada, conserva lo no preguntado y registra un ADR |
 | Adopción sin conflictos silenciosos | `mth survey` + entrevista de `mth-init` + `mth init --answers`; sin adoptar, el plugin no actúa |
 | Artefactos de trabajo fuera del repo | `.work/` excluido en `.git/info/exclude` por el hook de sesión y `mth init`; guard ante `git add` forzado; `mth doctor` |
 | Trazabilidad de las operaciones | `.git/mth/trace.jsonl` (eventos JSON con ID de ejecución) |
