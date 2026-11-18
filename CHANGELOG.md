@@ -6,6 +6,23 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.5.0] - 2026-11-18
+
+### Añadido
+- Plan de trabajo en la spec (sección `## Plan de trabajo`): tareas por oleadas con sus ficheros permitidos y sus criterios. `mth plan check SPEC-NNNN` lo valida antes de delegar: formato, criterios existentes y asignados, y que dos tareas de la misma oleada no compartan ficheros. `mth trace` aplica las mismas comprobaciones a toda spec que tenga la sección. (SPEC-0001, ADR-0001)
+- `mth plan verify SPEC-NNNN --wave N --manifest FICHERO …` verifica una oleada contra los manifiestos JSON de sus agentes: rechaza tareas sin manifiesto (no ejecutadas), bloqueadas o fallidas (no completadas), manifiestos inválidos, criterios sin cubrir, tests ausentes o en rojo, ficheros fuera del alcance de la tarea, cambios que nadie declara y ficheros declarados sin cambios reales. Los desvíos se muestran como avisos. (SPEC-0001, ADR-0001)
+- `mth-develop` describe el protocolo de delegación por oleadas: encargo con los ficheros permitidos de la tarea, manifiesto JSON guardado sin editar, verificación al cerrar cada oleada y un único reintento por tarea fallida. (SPEC-0001, ADR-0001)
+- Tabla `[models]` en `.claude/methodology.toml`: escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas, de los revisores y del documentador. `mth models` la muestra y una configuración inválida falla antes de ejecutar nada. (SPEC-0002, ADR-0002)
+- Columna opcional `Modelo` en el plan de trabajo de la spec: cada tarea declara el modelo que necesita; si la celda está vacía, se usa `models.task`. (SPEC-0002, ADR-0002)
+- `mth plan model SPEC-NNNN T-NN [--retry]` imprime el alias que hay que pasar a la herramienta Agent; con `--retry`, el siguiente nivel de la escalera, de modo que un reintento no repite el modelo que falló. (SPEC-0002, ADR-0002)
+- `mth plan verify --model T-NN=alias` indica con qué modelo se ejecutó cada tarea y registra un evento `plan.task` por tarea (modelo, resultado y huella del manifiesto) en `.git/mth/trace.jsonl`. (SPEC-0002, ADR-0002)
+- `mth plan stats [--spec SPEC-NNNN]` resume por modelo los intentos, los aciertos y el porcentaje de `ok`, para ajustar los niveles con evidencia. (SPEC-0002, ADR-0002)
+- Las skills usan esos niveles: `mth-develop` elige el modelo de cada tarea delegada, escala en el reintento y lanza el documentador con `models.documenter`; `mth-review` lanza los revisores con `models.review`. (SPEC-0002, ADR-0002)
+
+### Cambiado
+- `mth review record` exige `--report INFORME` y toma el número de bloqueantes de la última línea del informe del revisor (`BLOQUEANTES: N`). Un informe ausente, vacío, de más de 256 KiB o sin esa línea no se registra y la revisión sigue pendiente. `--blocking` desaparece: actualiza los scripts o hábitos que lo usen. (SPEC-0001, ADR-0001)
+- `mth plan check` muestra el modelo efectivo de cada tarea, por ejemplo `Oleada 1: T-01 (haiku), T-02 (sonnet)`. (SPEC-0002, ADR-0002)
+
 ## [0.4.0] - 2026-11-18
 
 ### Añadido
