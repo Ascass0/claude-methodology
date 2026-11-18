@@ -464,5 +464,32 @@ class EndToEndTests(unittest.TestCase):
         out = self.mth("integrate", "--title", "docs: add x guide", "--summary", "S.", ok=False)
         self.assertIn("hijas sin integrar", out)
 
+
+class VersionConsistencyTests(unittest.TestCase):
+    """Regression for v0.5.0, published while the manifests still declared 0.4.0."""
+
+    ROOT = HERE.parent
+
+    def declared(self) -> dict[str, str]:
+        import mthlib
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        market = json.loads((self.ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        entry = next(p for p in market["plugins"] if p["name"] == plugin["name"])
+        return {"plugin.json": plugin["version"], "marketplace.json": entry["version"],
+                "mthlib.__version__": mthlib.__version__}
+
+    def test_manifests_and_package_declare_the_same_version(self):
+        self.assertEqual(len(set(self.declared().values())), 1, self.declared())
+
+    def test_declared_version_is_not_older_than_the_latest_tag(self):
+        tags = subprocess.run(["git", "-C", str(self.ROOT), "tag", "--list", "v*", "--sort=-v:refname"],
+                              capture_output=True, text=True).stdout.split()
+        if not tags:
+            self.skipTest("sin etiquetas de versión en este clon")
+        declared = tuple(int(n) for n in self.declared()["plugin.json"].split("."))
+        latest = tuple(int(n) for n in tags[0].removeprefix("v").split("."))
+        self.assertGreaterEqual(declared, latest, f"plugin declara {declared}, última etiqueta {tags[0]}")
+
+
 if __name__ == "__main__":
     unittest.main()
