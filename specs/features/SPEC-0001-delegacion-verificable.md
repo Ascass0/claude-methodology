@@ -1,6 +1,6 @@
 # SPEC-0001 · Delegación verificable: plan de trabajo, manifiestos y agentes que fallan
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-18
 - ADRs: ADR-0001
 - Sustituye a: —
