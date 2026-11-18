@@ -6,6 +6,19 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.7.0] - 2026-11-18
+
+### Añadido
+- Skill `mth-reconfigure`: en un repo ya adoptado, vuelve a pasar la entrevista de la adopción. Se puede rehacer el formulario completo, revisar bloques (`flujo`, `documentacion`, `calidad`, `agente`) o cambiar solo una decisión. (SPEC-0011, ADR-0007)
+- `mth survey --reconfigure [--only …]`: inventario de un repo adoptado con cada pregunta aplicable y su valor actual. (SPEC-0011, ADR-0007)
+- `mth reconfigure --answers FICHERO [--only …]`: valida las respuestas y las aplica sobre la configuración actual, conservando lo que no se pregunta. Abre `chore/reconfigure-methodology` con la configuración nueva y un ADR de reestructuración que lista cada clave que cambia. Si las respuestas no cambian nada, o no se pueden aplicar, no crea nada. (SPEC-0011, ADR-0007)
+- Con `autonomy.level = "supervised"`, el guard pide confirmación para `mth reconfigure`. (SPEC-0011, ADR-0007)
+- Directorio de trabajo local `.work/` en cada repo adoptado, con `plans/`, `merge-request/`, `security-report/`, `reviews/`, `notes/` y `tmp/`: ahí deja Claude planes, manifiestos, cuerpos de PR, informes y notas, en lugar del scratchpad de la sesión. El hook de sesión y `mth init` lo crean y lo excluyen de git en `.git/info/exclude`, sin modificar ningún fichero versionado. `mth doctor` lo comprueba y el guard bloquea los `git add` forzados que lo incluirían. (SPEC-0010, ADR-0006)
+- `work.dirs` en `.claude/methodology.toml` añade subdirectorios propios del repo a `.work/`. (SPEC-0010, ADR-0006)
+
+### Cambiado
+- `mth-review` guarda los informes de los revisores en `.work/reviews/`, `mth-develop` los manifiestos de los agentes en `.work/plans/` y `mth-integrate` propone `.work/merge-request/` para los resúmenes largos de PR. (SPEC-0010, ADR-0006)
+
 ## [0.6.0] - 2026-11-18
 
 ### Añadido
