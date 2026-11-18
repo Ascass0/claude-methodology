@@ -6,6 +6,29 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.6.0] - 2026-11-18
+
+### Añadido
+- Adopción guiada: `mth survey` inventaria el repo sin modificarlo, la skill `mth-init` conduce una entrevista con Opus que solo pregunta lo necesario, y `mth init --answers FICHERO` convierte las respuestas en configuración y en el ADR de adopción. `mth init --decline` desactiva el plugin en ese repo (`.claude/settings.local.json`, no versionado). (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- `trace.legacy_base` y `mth trace --legacy`: en una adopción gradual, los hallazgos en ficheros sin cambios desde el commit base son avisos; lo que se toca después cumple todas las reglas. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- `hooks.commit_msg` con los valores `own`, `replace` y `chain`: decide qué hacer con un hook `commit-msg` ajeno al instalar el de `mth`. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- `autonomy.level` con los valores `full`, `until-pr` y `supervised`: el guard pide confirmación para integrar y publicar, o también para ramas, commits y push. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- `language.docs` con los valores `es` y `en`: idioma de docs, specs, ADR, changelog y PR, con plantillas en inglés. Código y commits siguen en inglés. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- Nueva lista `release.version_files` en `.claude/methodology.toml` para declarar los ficheros que contienen la versión del proyecto (`package.json`, `pyproject.toml`, `plugin.json`…). Cada entrada tiene `path` (ruta relativa al repo) y `pattern` (expresión regular con exactamente un grupo de captura: la versión). Por defecto está vacía. Una entrada inválida (claves que faltan o sobran, ruta absoluta o con `..`, regex inválida o sin exactamente un grupo, entrada duplicada) hace fallar la carga de la configuración y ningún comando `mth` se ejecuta hasta corregirla. (SPEC-0003)
+- `mth release` y `mth hotfix finish` comprueban estos ficheros antes de crear la rama o el commit de la versión: deben existir y el patrón debe aparecer exactamente una vez; si no, no publican ni modifican nada. Después sustituyen la versión en el mismo commit `chore(release)` que el CHANGELOG y listan los ficheros actualizados en su cuerpo. (SPEC-0003)
+- `mth doctor` muestra la versión que declara cada fichero: ✓ si coincide con la última etiqueta, ⚠ si está desfasada y ✗ si el fichero no existe o el patrón no aparece exactamente una vez. (SPEC-0003)
+- La plantilla de `methodology.toml` incluye un ejemplo de `release.version_files`. (SPEC-0003)
+
+### Cambiado
+- En un repo sin `.claude/methodology.toml`, el plugin ya no inyecta las reglas base ni bloquea comandos: el hook de sesión solo da el aviso de adopción y el guard no actúa hasta que se adopta. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- `PRINCIPLES.md` §5 (idioma del código, independiente del de la documentación), §7 (idioma de `language.docs`) y §11 (autonomía según `autonomy.level`). (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0008, ADR-0003, ADR-0004, ADR-0005)
+- Las claves que añade esta versión (`language`, `hooks`, `autonomy`, `trace.legacy_base` y `release.version_files`) bloquean a quien siga con la 0.5.x: ningún comando `mth` se ejecuta y su hook `commit-msg` rechaza los commits. Actualiza el plugin en todo el equipo antes de añadirlas; el README explica el orden en "Actualizar el plugin". (SPEC-0009)
+
+### Corregido
+- El error de clave desconocida en `.claude/methodology.toml` indica la versión del plugin que la rechaza y explica que, si no es una errata, hay que actualizar el plugin con `/plugin` y abrir una sesión nueva. `mth doctor` muestra ahora también la pista de los errores de configuración. (SPEC-0009)
+- Al publicar, los ficheros de `release.version_files` conservan sus finales de línea: un fichero con CRLF ya no se reescribe entero con LF. (SPEC-0003)
+- Un patrón de `release.version_files` cuyo grupo de captura es opcional y no captura nada ya no corrompe el fichero al publicar: `mth release`, `mth hotfix finish` y `mth doctor` lo rechazan sin modificar nada. (SPEC-0003)
+
 ## [0.5.1] - 2026-11-18
 
 ### Corregido
