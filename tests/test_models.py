@@ -113,6 +113,30 @@ class ModelCommandTests(ModelRepoTestCase):
             self.assertNotIn(alias, out)
 
 
+class ModelFailureModeTests(ModelRepoTestCase):
+    """Failure modes of SPEC-0002 not tied to a single acceptance criterion."""
+
+    def test_plan_model_on_spec_without_plan(self):
+        other = "SPEC-" + "0043"
+        self.write(f"specs/features/{other}-plain.md", f"# {other} · Plain\n\n- **AC-01**: x.\n")
+        out = self.mth("plan", "model", other, "T-01", ok=False)
+        self.assertIn("no tiene sección '## Plan de trabajo'", out)
+        self.assertNotIn("sonnet\n", out)
+
+    def test_trace_reports_model_outside_ladder(self):
+        self.write(".claude/methodology.toml", self.config + '[models]\nladder = ["sonnet", "opus"]\n')
+        out = self.mth("trace", ok=False)
+        self.assertIn("T-01: modelo 'haiku' fuera de models.ladder", out)
+
+    def test_invalid_models_config_blocks_commands(self):
+        self.write(".claude/methodology.toml", self.config + '[models]\nladder = ["sonet"]\n')
+        for args in (("plan", "check", SPEC_ID), ("models",), ("trace",)):
+            with self.subTest(args=args):
+                out = self.mth(*args, ok=False)
+                self.assertIn("alias desconocidos: sonet", out)
+                self.assertNotIn("✓", out)
+
+
 class VerifyRecordsTests(ModelRepoTestCase):
     def test_records_each_task_of_accepted_wave(self):
         # verifies: SPEC-0002/AC-05
