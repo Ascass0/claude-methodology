@@ -23,3 +23,7 @@ description: Comprueba la trazabilidad del repo (IDs de specs/ADR definidos y ú
 - En los tests, la cobertura de AC: `# verifies: SPEC-NNNN/AC-02` (un test puede verificar varios).
 
 Si el repo tiene un esquema de IDs propio, se declara en `[ids]`; contenido que no debe comprobarse se excluye en `trace.exclude`, justificándolo en el commit.
+
+## Contenido legado
+
+Si el repo declara `trace.legacy_base` (adopción gradual), los hallazgos en ficheros sin cambios desde ese commit son avisos: no bloquean ni los gates. `mth trace` muestra cuántos hay y `mth trace --legacy` los lista con `fichero:línea`. Un fichero que tocas o creas deja de ser legado: corrige sus hallazgos como cualquier otro. Detalle en [SPEC-0005](../../../../specs/features/SPEC-0005-modo-legado-en-la-trazabilidad.md).
