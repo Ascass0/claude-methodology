@@ -38,6 +38,7 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
   - Cada AC de la spec en al menos una tarea; ninguna tarea con criterios que la spec no declara.
   - Dos tareas de la misma oleada nunca comparten ficheros. Entre globs, `mth` asume solapamiento salvo que sus prefijos literales sean distintos: usa rutas exactas.
   - Ninguna decisión de diseño para quien implementa: si una tarea obliga a elegir un esquema, una API o cómo tratar un caso límite, fíjalo antes en la spec.
+  - Columna opcional `Modelo` al final de la cabecera (`| Tarea | Oleada | Ficheros | Criterios | Modelo |`), con un alias de `models.ladder`; vacía = `models.task`. Elige el nivel por dificultad: `haiku` para lo mecánico (renombrados, fragmentos, ajustes repetitivos con el patrón dado), `sonnet` para implementar con criterio dentro de una spec cerrada, `opus` solo si la tarea exige razonamiento que la spec no puede fijar del todo.
   - Máximo 50 tareas. Valídalo con `mth plan check SPEC-NNNN` (también lo comprueba `mth trace`).
 
 ## Estados

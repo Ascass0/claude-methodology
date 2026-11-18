@@ -16,7 +16,7 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 ## Revisar
 
-Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Task con su nombre; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
+Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Agent con su nombre y el modelo `models.review` que muestra `mth models`; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
 
 ```
 Revisa la rama <rama> respecto a <destino>.
