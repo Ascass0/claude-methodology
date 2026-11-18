@@ -45,7 +45,7 @@ pattern = '"version": "(\d+\.\d+\.\d+)"'
 
 ### Publicación
 
-`mth release` y `mth hotfix finish`, después de pasar sus gates y antes de crear la rama o el commit de la versión, comprueban cada entrada. El fichero debe existir y el patrón debe aparecer **exactamente una vez**. Si alguna entrada falla, no se publica y no se modifica nada.
+`mth release` (después de sus gates y antes de crear la rama de release) y `mth hotfix finish` (antes de sus gates, para no pedir revisión de un hotfix que no podría publicarse) comprueban cada entrada. El fichero debe existir y el patrón debe aparecer **exactamente una vez**. Si alguna entrada falla, no se publica y no se modifica nada.
 
 En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión nueva, sin tocar el resto del fichero. El cuerpo del commit lista los ficheros actualizados. Si la captura ya es la versión nueva (una publicación reanudada), el fichero no cambia.
 
