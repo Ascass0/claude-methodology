@@ -31,9 +31,8 @@ claude-methodology/
 
 ## Instalación
 
-1. Publica este repositorio en GitHub (por ejemplo, `<owner>/claude-methodology`).
-2. En Claude Code: `/plugin marketplace add <owner>/claude-methodology` y `/plugin install methodology@claude-methodology`.
-3. En cada repositorio, la skill `mth-init` (o `mth init --marketplace-repo <owner>/claude-methodology --github`) deja la activación del plugin en su `.claude/settings.json`, de modo que cualquier clon lo carga.
+1. En Claude Code: `/plugin marketplace add Ascass0/claude-methodology` y `/plugin install methodology@claude-methodology`. El repositorio es público: no hace falta ninguna credencial. Abre una sesión nueva después de instalar.
+2. En cada repositorio, la skill `mth-init` (o `mth init --marketplace-repo Ascass0/claude-methodology --github`) deja la activación del plugin en su `.claude/settings.json`, de modo que cualquier clon lo carga.
 
 Fija la versión del plugin por repositorio: un cambio de metodología se adopta con un PR en cada repo, no de forma implícita en todos a la vez.
 
@@ -201,3 +200,7 @@ sh tests/run.sh -v
 `tests/run.sh` ejecuta los tests con el primer Python ≥ 3.11 que encuentra (`MTH_PYTHON` lo fija).
 
 El test de extremo a extremo recorre adopción → feature con rama hija → revisión → CI en rojo y reanudación → release interrumpida y reanudada → hotfix, contra un remoto local y un `gh` simulado que produce merge commits reales.
+
+## Licencia
+
+[MIT](LICENSE).

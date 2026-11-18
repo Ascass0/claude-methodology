@@ -7,7 +7,7 @@
       "name": "methodology",
       "source": "./plugins/methodology",
       "description": "Principios, flujo git, specs/ADR, changelog por fragmentos y trazabilidad con scripts deterministas.",
-      "version": "0.7.0"
+      "version": "0.7.1"
     }
   ]
 }
