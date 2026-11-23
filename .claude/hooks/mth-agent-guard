@@ -45,12 +45,24 @@ log_block() {  # $1 categoría, $2 motivo (texto fijo)
 }
 field() { printf '%s' "$input" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"\\\\]*\)\".*/\1/p" | head -n 1; }
 dir="${CLAUDE_PROJECT_DIR:-.}"
-common=$(bounded 5 git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
-  echo "[mth-agent-guard] No es un repositorio git: se bloquea la herramienta." >&2; exit 2; }
+common=$(bounded 5 git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  case "$rc" in
+    124|142) echo "[mth-agent-guard] git no respondió en 5 s: se bloquea la herramienta." >&2 ;;
+    *) echo "[mth-agent-guard] No es un repositorio git: se bloquea la herramienta." >&2 ;;
+  esac
+  exit 2
+fi
+guard_timeout="${MTH_AGENT_GUARD_TIMEOUT:-20}"   # acotado: por encima de 25 s vencería antes el hook (30 s), que no bloquea
+case "$guard_timeout" in ''|*[!0-9]*) guard_timeout=20 ;; esac
+[ "$guard_timeout" -le 25 ] || guard_timeout=20
 python=$(sed -n 1p "$common/mth/launcher" 2>/dev/null)
 script=$(sed -n 2p "$common/mth/launcher" 2>/dev/null)
 if [ -z "$python" ] || [ ! -x "$python" ] || [ -z "$script" ] || [ ! -f "$script" ]; then
   agent=$(field agent_type)
+  # agent_type repetido: un dato anidado (argumentos de una herramienta) podría suplantar al agente real.
+  [ "$(printf '%s' "$input" | grep -o '"agent_type"' | wc -l)" -le 1 ] || agent=""
   case "$agent" in
     "") ;;                                  # sin identificar: se bloquea
     *[!a-z0-9-]*|-*) exit 0 ;;              # no es un nombre del catálogo (methodology:verificador, Explore)
@@ -63,7 +75,7 @@ if [ -z "$python" ] || [ ! -x "$python" ] || [ -z "$script" ] || [ ! -f "$script
   log_block launcher-missing "no hay lanzador registrado"
   exit 2
 fi
-printf '%s' "$input" | bounded "${MTH_AGENT_GUARD_TIMEOUT:-20}" "$python" "$script" agent-guard
+printf '%s' "$input" | bounded "$guard_timeout" "$python" "$script" agent-guard
 rc=$?
 [ "$rc" -eq 0 ] && exit 0
 [ "$rc" -eq 2 ] && exit 2
