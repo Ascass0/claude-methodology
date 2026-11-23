@@ -20,6 +20,7 @@ claude-methodology/
 │   ├── scripts/mth.py, mthlib/       # CLI determinista (Python ≥ 3.11, sin dependencias)
 │   ├── skills/mth-*/SKILL.md         # develop, init, spec, branch, commit, review, integrate, release, trace
 │   ├── agents/                       # agentes compartidos: verificador, documentador
+│   ├── catalog/                      # plantillas de agentes instalables (no activas)
 │   └── templates/                    # config, spec, ADR, CHANGELOG, bloque de CLAUDE.md
 └── tests/                            # tests unitarios y de extremo a extremo (gh simulado)
 ```
@@ -103,6 +104,7 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 | `autonomy.level` | `full` (por defecto), `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, ramas, commits y push). Ver [SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md) y [ADR-0004](specs/adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) |
 | `language.docs` | Idioma de docs, specs, ADR, changelog y PR: `es` (por defecto) o `en`. Código y commits, siempre en inglés. Ver [SPEC-0008](specs/features/SPEC-0008-idioma-de-la-documentacion-configurable.md) |
 | `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
+| `[agents.<agente>]` | Variables de un agente del catálogo (`bench`, `databases`…). Opcional; solo admite las claves que declara ese agente. Requiere plugin ≥ 0.8.0 (un plugin anterior la rechaza, ver [SPEC-0009](specs/features/SPEC-0009-actualizacion-del-plugin-con-configuracion-mas-nueva.md)) |
 | `work.dirs` | Subdirectorios propios del repo en `.work/`, además de los de serie. Ver [Directorio de trabajo local](#directorio-de-trabajo-local) |
 
 ### Directorio de trabajo local
@@ -158,6 +160,8 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Reestructuración trazada | `mth survey --reconfigure` + skill `mth-reconfigure` + `mth reconfigure --answers`: valida antes de tocar nada, conserva lo no preguntado y registra un ADR |
 | Adopción sin conflictos silenciosos | `mth survey` + entrevista de `mth-init` + `mth init --answers`; sin adoptar, el plugin no actúa |
 | Artefactos de trabajo fuera del repo | `.work/` excluido en `.git/info/exclude` por el hook de sesión y `mth init`; guard ante `git add` forzado; `mth doctor` |
+| Cada agente del catálogo solo ejecuta lo que su guard permite | `mth agent-guard`: despacha por `agent_type` y falla cerrado |
+| Un agente de solo lectura no escribe en la base de estado | `mth db-query`: `mode=ro`, `PRAGMA query_only` y authorizer |
 | Trazabilidad de las operaciones | `.git/mth/trace.jsonl` (eventos JSON con ID de ejecución) |
 | Diseño, excepciones, parsimonia, docs en código | Principios + revisores del repo (criterio) |
 
@@ -174,6 +178,18 @@ Cada revisor termina su informe con la línea `BLOQUEANTES: <n>`. La sesión pri
 
 Los revisores del repo se declaran en `review.agents` (en orden de precedencia). Con `[review.paths]`, un revisor de un área solo se exige cuando el diff la toca, lo que mantiene acotado el coste de cada integración. En Claude Code, los agentes de plugin pueden aparecer con el prefijo `methodology:`.
 
+### Catálogo de agentes
+
+Además de esos dos, el plugin trae un **catálogo** de 12 plantillas de agentes en `plugins/methodology/catalog/`, agrupadas en tres perfiles (`profiles.toml`): `base` (cinco revisores, `diagnosticador` y `explorador-specs`), `opcional` (`ingeniero-rendimiento`, `analista-evals`, `lector-estado`, `respondedor-incidencias`) y `autonomo` (`orquestador`). No están activas: cada repo instala las que quiere. Referencia operativa, tabla de agentes y prueba de humo en [docs/catalogo-de-agentes.md](docs/catalogo-de-agentes.md); diseño en [SPEC-0012](specs/features/SPEC-0012-catalogo-de-agentes.md) y [ADR-0008](specs/adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md).
+
+- **Comandos:** `mth agents list|add|sync|diff|remove`. `add` acepta nombres o `--profile`.
+- **Renderizado determinista**, sin modelo de lenguaje: la misma configuración y las mismas variables (`[agents.<agente>]`) dan los mismos bytes. El agente queda en `.claude/agents/<agente>.md` con una cabecera de versión y hash. Su sección local (`<!-- mth:local:begin -->`…`end`) es del repo y `sync` la conserva; si se edita a mano la parte generada, `sync` se niega sin `--force`.
+- **Revisores:** `add` los coloca en `review.agents` tras `verificador`, según el `review.order` de cada plantilla (los revisores propios del repo conservan su posición), y añade sus `paths` a `[review.paths]`.
+- **Guard por agente:** `add` deja una entrada `PreToolUse` en `.claude/settings.json` y el shim `.claude/hooks/mth-agent-guard`. El shim despacha por `agent_type` y llama a `mth agent-guard`, que **falla cerrado**: sin reglas, sin lanzador o ante cualquier error, bloquea al subagente. El guard global sigue fallando abierto porque actúa sobre toda la sesión y las ramas compartidas las protege GitHub; un agente "de solo lectura" que escribe porque su guard se rompió es peor que un agente parado.
+- **`lector-estado`** consulta bases SQLite declaradas con `mth db-query`, que no admite escrituras (ver la fila de la tabla anterior).
+- **Adopción:** `mth init` ofrece el perfil `base` en la pregunta `revisores`, que ahora se hace siempre.
+- **Modelo:** ninguna plantilla fija `model`. Los revisores usan `models.review` y los trabajadores `models.task`; `model_hint` solo se muestra en `mth agents list`.
+
 ## Autonomía y permisos
 
 Por defecto (`autonomy.level = "full"`), la metodología no pide permiso para ramas, commits, integraciones ni versiones. El plugin **no** cambia el modo de permisos de Claude Code: eso se decide en cada repositorio. Para que no haya confirmaciones, configura `.claude/settings.json` del repo (por ejemplo, `defaultMode: acceptEdits` y reglas `allow` para `Bash(git:*)`, `Bash(gh:*)` y `Bash(python3:*)`; verifica la sintaxis en la [documentación de permisos](https://docs.claude.com/en/docs/claude-code/iam)) o ejecuta Claude dentro de un sandbox o devcontainer.
@@ -188,6 +204,14 @@ Si un repositorio necesita supervisión, elige `until-pr` o `supervised` en `aut
 - **Las revisiones se registran en `.git/mth/`** (local): no viajan entre máquinas. Su resumen queda en la descripción del PR.
 - **Las métricas de modelo son locales:** `mth plan stats` lee `.git/mth/trace.jsonl`, que no viaja entre máquinas. Los alias de `models.*` son los de la herramienta Agent de Claude Code (`haiku`, `sonnet`, `opus`, `fable`).
 - **No se puede verificar automáticamente** que un commit sea temático, que esté en inglés ni que una docstring sea suficiente: es criterio de quien desarrolla y de los revisores.
+- **El guard por agente no es una frontera de seguridad.** En los trabajadores con denylist, `python script.py` puede hacer cualquier cosa, también un `git push`. Las fronteras reales son `isolation: worktree`, los rulesets de GitHub y, para `lector-estado`, `mth db-query`.
+- **Depende de que Claude Code envíe `agent_id` y `agent_type`** en el payload del hook (verificado en Claude Code 2.1.330). Si dejara de enviarlos, el guard fallaría abierto sin aviso: hay que repetir la [prueba de humo](docs/catalogo-de-agentes.md#prueba-de-humo) al actualizar Claude Code y antes de cada versión del plugin. Los hooks del frontmatter de los subagentes no se aplican en 2.1.330, por eso las plantillas no los usan.
+- **Falsos positivos aceptados por fallar cerrado:** `deny_operators` busca subcadenas, así que `git grep ">"` se bloquea en los revisores; y `-F`, prohibido en `respondedor-incidencias` por `gh api`, también afecta a `git grep -F`.
+- **Coste del guard por agente:** unos 3 ms por llamada de la sesión principal y unos 50 ms por llamada de un subagente del catálogo (medido en WSL).
+- **Copias desactualizadas:** los agentes instalados solo se actualizan si alguien ejecuta `mth agents sync`; `mth doctor` avisa pero no bloquea.
+- **SQLite en WAL:** `mode=ro` necesita poder crear o leer el fichero `-shm`.
+- **Las plantillas del catálogo están en español.** Con `language.docs = "en"` se avisa y los agentes se instalan igualmente en español.
+- **El `orquestador` (perfil `autonomo`) es experimental.**
 - **Hook `commit-msg`:** script `sh`; no probado en Windows nativo.
 - **Perfil de lenguaje:** las reglas de código son genéricas. Los perfiles por lenguaje se añadirán como referencias de las skills cuando haya un segundo proyecto que los justifique.
 
