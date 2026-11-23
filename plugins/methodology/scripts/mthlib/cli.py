@@ -7,7 +7,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, branches, changelog, commits, flow, guard, plan, review, session, setup, survey
+from . import __version__, agent_guard, branches, changelog, commits, flow, guard, plan, review, session, setup, survey
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
@@ -347,6 +347,7 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("action", choices=["finish"])
     sub.add_parser("status", help="posición de la rama actual en el flujo")
     sub.add_parser("guard", help="hook PreToolUse (stdin JSON)")
+    sub.add_parser("agent-guard", help="guard de los agentes del catálogo (stdin JSON; falla cerrado)")
     sub.add_parser("session", help="hook SessionStart")
     return p
 
@@ -355,6 +356,8 @@ def _dispatch(args: argparse.Namespace) -> int:
     c = args.command
     if c == "guard":
         return guard.main(sys.stdin.read())
+    if c == "agent-guard":  # SPEC-0012: its own entry point, fails closed
+        return agent_guard.main(sys.stdin.read())
     if c == "session":
         return session.main()
     if c == "init":

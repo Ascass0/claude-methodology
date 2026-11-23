@@ -107,6 +107,25 @@ def install_hook(git: Git, mode: str = "own") -> str:
     return status
 
 
+LAUNCHER = Path("mth") / "launcher"
+MTH_PY = MTH.parent / "mth.py"
+
+
+def register_launcher(git: Git) -> Path:
+    """Record the interpreter and ``mth.py`` in ``<git-common-dir>/mth/launcher`` for the agent-guard shim.
+
+    The plugin path changes with every version, like the commit-msg hook. The interpreter is
+    the one already validated for this session (>= 3.11): the shim runs it directly, skipping
+    the launcher's interpreter search on every subagent tool call (SPEC-0012).
+    """
+    path = git.common_dir() / LAUNCHER
+    record = f"{sys.executable}\n{MTH_PY}\n"
+    if not path.is_file() or path.read_text(encoding="utf-8") != record:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(record, encoding="utf-8")
+    return path
+
+
 # -- scaffolding ----------------------------------------------------------------
 def _claude_block(paths: dict, vocab: lang.Vocabulary) -> str:
     text = (vocab.templates / "claude-block.md").read_text(encoding="utf-8")
