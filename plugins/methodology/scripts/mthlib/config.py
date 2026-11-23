@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, lang, versions, work
+from . import __version__, catalog, lang, versions, work
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -50,6 +50,7 @@ DEFAULTS: dict[str, Any] = {
     "hooks": {"commit_msg": "own"},
     "autonomy": {"level": "full"},
     "work": {"dirs": []},
+    "agents": {},
 }
 
 # Model aliases understood by Claude Code's Agent tool (ADR-0002).
@@ -80,6 +81,7 @@ _SCHEMA: dict[str, Any] = {
     "hooks": {"commit_msg": str},
     "autonomy": {"level": str},
     "work": {"dirs": list},
+    "agents": dict,  # SPEC-0012: validated against the catalog metas
 }
 
 # SPEC-0009: an unknown key is usually one from a newer plugin, not a typo.
@@ -192,6 +194,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
     if data["language"]["docs"] not in lang.LANGUAGES:
         raise MthError(f"'language.docs' = '{data['language']['docs']}' no es un idioma admitido ({', '.join(lang.LANGUAGES)}).")
     _check_models(data["models"])
+    catalog.validate_vars(data["agents"], catalog.CATALOG_DIR)
     agents = data["review"]["agents"]
     if len(set(agents)) != len(agents) or not all(isinstance(a, str) and a for a in agents):
         raise MthError("'review.agents' debe ser una lista de nombres únicos.")
