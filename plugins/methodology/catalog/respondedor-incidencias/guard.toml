@@ -1,14 +1,16 @@
 # Solo lectura sobre git y GitHub. `gh api` solo con GET: se rechazan las opciones que cambian el
-# método o envían cuerpo. `git fetch` se admite (solo actualiza referencias remotas), salvo con
-# opciones que ejecutan programas.
+# método o envían cuerpo. Sin `git fetch`: con refspecs (`+x:refs/heads/main`) reescribe ramas
+# locales; las referencias remotas las actualiza la sesión principal. Los listados de ramas y
+# etiquetas solo se admiten exactos (`allow_exact`): con más opciones, `git branch -r -d` borra.
 [bash]
 mode = "allowlist"
 allow = [
   "git diff", "git log", "git show", "git blame", "git grep", "git status", "git ls-files",
-  "git rev-parse", "git fetch", "git branch --list", "git branch -a", "git branch -r", "git tag --list",
+  "git rev-parse",
   "gh run list", "gh run view", "gh pr list", "gh pr view", "gh pr checks", "gh issue list",
   "gh issue view", "gh release list", "gh release view", "gh api",
 ]
+allow_exact = ["git branch --list", "git branch -a", "git branch -r", "git tag --list"]
 filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut", "jq"]
 deny_operators = [">", "$(", "`", "<("]
 deny_flags = [

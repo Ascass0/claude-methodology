@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import catalog_support as support
 import test_mth
@@ -163,6 +164,65 @@ class AddTests(AgentsTestCase):
         proc = run({**main, "agent_id": "a", "agent_type": "revisor-fallos"})
         self.assertEqual(proc.returncode, 2)
         self.assertIn("mth agents sync", proc.stderr)
+
+    def test_hook_entry_has_a_timeout_and_removal_keeps_foreign_hooks_in_a_shared_entry(self):
+        self.add("revisor-fallos")
+        settings = json.loads(self.read(".claude/settings.json"))
+        ours = settings["hooks"]["PreToolUse"][-1]
+        self.assertEqual(ours["hooks"][0]["timeout"], agents.HOOK_TIMEOUT)
+        ours["hooks"].append({"type": "command", "command": "echo propio"})
+        self.write(".claude/settings.json", json.dumps(settings))
+        self.mth("agents", "remove", "revisor-fallos")
+        left = json.loads(self.read(".claude/settings.json"))["hooks"]["PreToolUse"]
+        self.assertEqual(left, [{"matcher": agents.HOOK_MATCHER, "hooks": [{"type": "command", "command": "echo propio"}]}])
+
+    def test_write_errors_are_reported_as_resumable_environment_errors(self):
+        from mthlib import files
+        target = self.root / "bloqueado" / "x.json"
+        (self.root / "bloqueado").write_text("no es un directorio", encoding="utf-8")
+        with self.assertRaises(MthError) as ctx:
+            files.atomic_write(target, "{}")
+        self.assertIn("No se pudo escribir", ctx.exception.message)
+        self.assertIn("reanudable", ctx.exception.hint)
+        self.assertIsInstance(ctx.exception.__cause__, OSError)
+        files.atomic_write(self.root / "ok.txt", "a")
+        (self.root / "ok.txt").chmod(0o640)
+        files.atomic_write(self.root / "ok.txt", "b")
+        self.assertEqual((self.root / "ok.txt").stat().st_mode & 0o777, 0o640)
+
+    def test_the_decision_log_tolerates_a_concurrent_rotation(self):
+        from mthlib.log import Tracer
+        tracer = Tracer(self.root / ".git", "x", "t.jsonl", max_bytes=1)
+        (self.root / ".git/mth").mkdir(exist_ok=True)
+        (self.root / ".git/mth/t.jsonl").write_text("lleno", encoding="utf-8")
+        real = Path.replace
+
+        def racing(self_path, target):
+            real(self_path, target)
+            raise FileNotFoundError  # another process rotated first
+        with mock.patch.object(Path, "replace", racing):
+            tracer.event("a")
+        self.assertIn('"event": "a"', (self.root / ".git/mth/t.jsonl").read_text(encoding="utf-8"))
+
+    def test_settings_with_an_unexpected_shape_are_rejected(self):
+        self.write(".claude/settings.json", json.dumps({"hooks": {"PreToolUse": {"x": 1}}}))
+        with self.assertRaises(MthError) as ctx:
+            self.add("revisor-fallos")
+        self.assertIn("forma esperada", ctx.exception.message)
+
+    def test_a_failure_halfway_never_leaves_an_agent_without_its_hook(self):
+        real = agents.atomic_write
+
+        def failing(path, text, mode=None):
+            if path.suffix == ".md":
+                raise OSError("disco lleno")
+            real(path, text, mode)
+        with mock.patch.object(agents, "atomic_write", side_effect=failing), self.assertRaises(OSError):
+            self.add("revisor-fallos")
+        self.assertTrue(agents.has_hook(agents.read_settings(self.root)))
+        self.assertTrue((self.root / agents.SHIM).is_file())
+        self.assertFalse((self.root / ".claude/agents/revisor-fallos.md").exists())
+        self.assertEqual(self.add("revisor-fallos"), 0)  # a re-run completes the install
 
     def test_unreadable_settings_abort_without_writing(self):
         # verifies: SPEC-0012/AC-17
@@ -321,6 +381,25 @@ class DoctorTests(AgentsTestCase):
         finally:
             os.chdir(cwd)
         self.assertIn("⚠ Falta la entrada PreToolUse", out.getvalue())
+
+    def test_guard_without_header_is_reported_and_can_be_synced_or_removed(self):
+        # verifies: SPEC-0012/AC-21
+        self.add("revisor-fallos", "revisor-diseno")
+        (self.root / ".claude/agents/revisor-fallos.md").write_text("---\nname: revisor-fallos\n---\nAdaptado.\n",
+                                                                    encoding="utf-8")
+        found = "\n".join(self.findings())
+        self.assertIn("revisor-fallos: tiene guard pero su .md no tiene cabecera", found)
+        self.assertEqual(self.mth("agents", "sync", "revisor-fallos"), 1)
+        self.assertEqual(self.mth("agents", "sync", "--force", "revisor-fallos"), 0)
+        self.assertEqual(self.findings(), [])
+        (self.root / ".claude/agents/revisor-diseno.md").write_text("---\nname: revisor-diseno\n---\n", encoding="utf-8")
+        self.assertEqual(self.mth("agents", "remove", "revisor-diseno"), 0)
+        self.assertFalse((self.root / ".claude/mth/agents/revisor-diseno.guard.toml").exists())
+
+    def test_unreadable_settings_files_are_reported(self):
+        self.add("revisor-fallos")
+        self.write(".claude/settings.local.json", "{roto")
+        self.assertIn("No se puede leer .claude/settings.local.json", "\n".join(self.findings()))
 
     def test_no_catalog_agents_no_findings(self):
         self.assertEqual(self.findings(), [])

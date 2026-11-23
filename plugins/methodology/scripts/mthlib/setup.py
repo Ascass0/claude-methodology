@@ -10,6 +10,7 @@ import tomllib
 from pathlib import Path
 
 from . import adoption, agents, changelog, commits, lang, survey, versions, work
+from .files import atomic_write
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
 from .errors import MthError
@@ -121,8 +122,7 @@ def register_launcher(git: Git) -> Path:
     path = git.common_dir() / LAUNCHER
     record = f"{sys.executable}\n{MTH_PY}\n"
     if not path.is_file() or path.read_text(encoding="utf-8") != record:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(record, encoding="utf-8")
+        atomic_write(path, record)  # concurrent sessions never leave a half-written record
     return path
 
 
@@ -500,7 +500,7 @@ def doctor(start: Path) -> int:
         if agent:
             where = agent_location(git.root, agent)
             report(where is not None, f"Rol {role} → {agent} ({where or 'no encontrado'})")
-    installed = agents.installed_names(git.root)
+    installed = agents.catalog_names(git.root)
     if installed:  # SPEC-0012: warnings only
         findings = agents.doctor_findings(git.root, cfg, git.common_dir() / LAUNCHER)
         for finding in findings:
