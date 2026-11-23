@@ -77,7 +77,7 @@ acceptance = true     # los AC de specs "implementada" deben tener test
 spec_kind = "SPEC"
 adr_kind = "ADR"
 include = ["**"]      # ficheros que se comprueban (en un fork, solo lo propio)
-exclude = ["tests/test_mth.py"]  # fixtures write example IDs into temporary repos
+exclude = ["tests/test_mth.py", "plugins/methodology/catalog/*/evals.toml"]  # fixtures with example IDs
 
 [release]
 github_release = true
