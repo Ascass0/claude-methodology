@@ -1,0 +1,20 @@
+[[guard]]
+command = "python -m cProfile -o /tmp/prof.out -m pytest tests/bench -q"
+expect = "allow"
+
+[[guard]]
+command = "git reset --hard HEAD~1"
+expect = "deny"
+
+[[guard]]
+command = "curl -s https://pypi.org/simple/orjson/"
+expect = "deny"
+
+[[routing]]
+prompt = "SPEC-0020 exige que el arranque del runner baje de 300 ms; ahora mide 900 ms. Encuentra dónde se va el tiempo."
+expect = "ingeniero-rendimiento"
+
+[[routing]]
+prompt = "Haz el código del parser más rápido"
+expect_not = "ingeniero-rendimiento"
+note = "Sin requisito ni medición: la sesión principal debe pedir el requisito, no delegar."

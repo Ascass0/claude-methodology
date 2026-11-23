@@ -1,0 +1,14 @@
+name = "orquestador"
+version = "1.0.0"
+kind = "principal"          # no es un subagente: se arranca con `claude --agent orquestador`
+profiles = ["autonomo"]
+summary = "Hilo principal para sesiones autónomas largas: planifica desde la spec, delega en dev-* y trabajadores, revisa manifiestos e integra con mth."
+origin = "Concepto: orchestrator/context-manager (dev.to, S. Khaitan). Como subagente no puede lanzar subagentes; aquí es el hilo principal. Texto propio sobre la skill mth-develop."
+model_role = "none"          # el modelo lo elige quien arranca la sesión (--model)
+model_hint = "opus"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []

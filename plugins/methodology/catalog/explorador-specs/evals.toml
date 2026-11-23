@@ -1,0 +1,19 @@
+# Sin [[guard]]: no tiene Bash, Edit ni Write (lo garantiza `tools`, que aplica Claude Code).
+
+[[routing]]
+prompt = "Antes de empezar con el timeout configurable del runner, ¿qué specs y ADR aplican?"
+expect = "explorador-specs"
+
+[[routing]]
+prompt = "¿Dónde se define la función que limpia los contenedores?"
+expect_not = "explorador-specs"
+
+[[routing]]
+prompt = "Voy a añadir soporte de Redis como caché, prepara el plan"
+expect = "explorador-specs"
+
+[[output]]
+name = "hueco-sin-adr"
+context = "El encargo añade una dependencia nueva; no hay ningún ADR sobre ella."
+must_contain = ["estructural", "PREGUNTAS"]
+must_not_contain_full_spec = true

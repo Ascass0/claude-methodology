@@ -1,0 +1,20 @@
+name = "analista-evals"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "Interpreta resultados de evals: compara ejecuciones, separa regresión de ruido y resume con cifras."
+origin = "Concepto: data-scientist (dev.to, S. Khaitan), llevado de SQL de negocio a los resultados de evals. Texto propio."
+model_role = "task"
+model_hint = "sonnet"
+local_section = true
+local_required = true      # qué métrica importa y qué umbral es regresión lo decide el repo
+
+[requires]
+config = []
+vars = ["results"]
+
+[vars]
+# Directorio (o glob) con los resultados de evals que se comparan. Obligatorio.
+results = ""
+# Dónde escribe sus informes. Por defecto, en el directorio local de trabajo (no versionado).
+reports = ".work/evals"

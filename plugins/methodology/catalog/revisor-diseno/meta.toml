@@ -1,0 +1,19 @@
+name = "revisor-diseno"
+version = "1.0.0"
+kind = "revisor"
+profiles = ["base"]
+summary = "SOLID, antipatrones STUPID, dependencias y acoplamiento, testabilidad y las reglas de código de §5."
+origin = "Concepto: code-reviewer (dev.to, S. Khaitan), partido por apartados. Texto propio, adaptado a PRINCIPLES §2 y §5."
+model_role = "review"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []
+
+[review]
+order = 30
+branches = ["feat", "fix", "hotfix"]
+paths = []

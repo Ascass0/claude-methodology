@@ -1,0 +1,51 @@
+[[guard]]
+command = "pytest tests/test_runner.py -x -q"
+expect = "allow"
+
+[[guard]]
+command = "git bisect run pytest tests/test_runner.py -x -q"
+expect = "allow"
+
+[[guard]]
+command = "git log --oneline -20 -- src/runner.py"
+expect = "allow"
+
+[[guard]]
+command = "git commit -am 'fix'"
+expect = "deny"
+
+[[guard]]
+command = "pytest -q && git push origin HEAD"
+expect = "deny"
+
+[[guard]]
+command = "bash -c 'git push'"
+expect = "deny"
+
+[[guard]]
+command = "echo $(gh auth token)"
+expect = "deny"
+
+[[routing]]
+prompt = "test_cleanup_removes_container falla de forma intermitente en CI y no sé por qué"
+expect = "diagnosticador"
+
+[[routing]]
+prompt = "Implementa el AC-03 de SPEC-0012: el runner debe aceptar un timeout configurable"
+expect_not = "diagnosticador"
+
+[[routing]]
+prompt = "El fallo es que falta el import de Path en runner.py, añádelo"
+expect_not = "diagnosticador"
+
+[[guard]]
+command = "pytest -q 2>&1 | tail -20"
+expect = "allow"
+
+[[guard]]
+command = "nohup git push origin HEAD"
+expect = "deny"
+
+[[guard]]
+command = "pytest -q &> /tmp/log"
+expect = "deny"

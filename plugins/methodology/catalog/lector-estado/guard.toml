@@ -1,0 +1,9 @@
+# Solo `mth db-query`. La garantía de solo lectura NO depende de este guard sino del propio
+# `mth db-query` (README, «db-query»): abre la base con `mode=ro`, activa `PRAGMA query_only` y un
+# authorizer que solo admite lectura. Aquí se impide además usar sqlite3 directamente: su CLI tiene
+# `.shell`, `.system`, `.output` y `ATTACH`, que convierten una "consulta" en ejecución o escritura.
+[bash]
+mode = "allowlist"
+allow = ["mth db-query"]
+filters = ["head", "wc"]
+deny_operators = [">", "$(", "`", "<("]

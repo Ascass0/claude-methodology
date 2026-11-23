@@ -1,0 +1,14 @@
+name = "explorador-specs"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["base"]
+summary = "Antes de un encargo: localiza specs, AC, modos de fallo y ADR aplicables y devuelve IDs y rutas, no contenido."
+origin = "Concepto: Explore integrado (dev.to, S. Khaitan), especializado en la documentación normativa del repo. Texto propio."
+model_role = "task"
+model_hint = "haiku"
+local_section = false
+local_required = false
+
+[requires]
+config = ["paths.specs", "paths.adr"]
+vars = []
