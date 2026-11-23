@@ -147,7 +147,12 @@ def read_report(path: Path) -> bytes:
 
 def require_inside(root: Path, path: Path, what: str) -> None:
     """Refuse a path that resolves outside the repository (symbolic links, ``..``, absolute paths)."""
-    if not path.resolve().is_relative_to(root.resolve()):
+    try:
+        inside = path.resolve().is_relative_to(root.resolve())
+    except (OSError, RuntimeError) as exc:  # a symbolic-link loop
+        raise ReviewError("rejected", f"No se puede resolver {path}: {exc}.",
+                          hint="Usa una ruta real dentro del repo; no se ha registrado nada.") from exc
+    if not inside:
         raise ReviewError("rejected", f"{path} queda fuera del repositorio: {what}.",
                           hint="Usa una ruta dentro del repo (los informes van en .work/tmp/); no se ha registrado nada.")
 

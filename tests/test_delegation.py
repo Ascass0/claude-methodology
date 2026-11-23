@@ -542,8 +542,9 @@ class ReviewReportTests(RepoTestCase):
                 fh.write = mock.Mock(side_effect=OSError("disco lleno"))
             return fh
 
-        with mock.patch("builtins.open", failing), self.assertRaises(MthError):
+        with mock.patch("builtins.open", failing), self.assertRaises(MthError) as partial:
             review.archive(self.work, folder, "abc123", "verificador", 1, b"x")
+        self.assertEqual(partial.exception.stage, "archive")
         self.assertEqual(list(folder.iterdir()), [])
 
     def test_the_stop_advice_counts_consecutive_failures(self):
@@ -623,6 +624,25 @@ class ReviewReportTests(RepoTestCase):
             attempt()
         self.assertEqual(orphan.exception.stage, "store")
         self.assertTrue(orphan.exception.archived.is_file())
+
+    def test_the_cli_traces_not_recorded_with_its_stage_and_orphan(self):
+        # verifies: SPEC-0013/AC-14
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        store.write_text("{no es json", encoding="utf-8")
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        event = [e for e in events if e["event"] == "review.not_recorded"][-1]
+        self.assertEqual((event["stage"], event["agent"]), ("store", "verificador"))
+        self.assertIsNone(event["orphan"])
+        out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
+        self.assertIn("necesita", out)
+
+    def test_a_summary_pipe_cannot_break_the_pr_table(self):
+        # verifies: SPEC-0013/AC-12
+        from mthlib import flow
+        body = flow._pr_body("r", [], None, "ok", {"verificador": {"blocking": 0, "summary": "a | b\nc"}})
+        self.assertIn("| verificador | 0 | a \\| b c |", body)
 
     def test_an_overwritten_entry_is_visible_as_previous_status(self):
         # verifies: SPEC-0013/AC-14

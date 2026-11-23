@@ -189,7 +189,7 @@ def _pr_body(summary: str, refs: list[str], frag: changelog.Fragment | None,
     parts += ["## Verificación", f"- Tests: {tests}", "- Trazabilidad: OK"]
     if reviews:
         parts += ["", "## Revisión", "| Revisor | Bloqueantes | Resumen |", "|---|---|---|"]
-        parts += [f"| {a} | {r['blocking']} | {r['summary'].replace(chr(10), ' ')} |"
+        parts += [f"| {a} | {r['blocking']} | {r['summary'].replace(chr(10), ' ').replace('|', '\\|')} |"
                   for a, r in reviews.items()]
     parts += ["", "---", "_Generado por claude-methodology._"]
     return "\n".join(parts) + "\n"

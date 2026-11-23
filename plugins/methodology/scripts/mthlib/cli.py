@@ -98,9 +98,10 @@ def _cmd_review(args: argparse.Namespace) -> int:
     if args.action == "record":
         if args.agent not in agents:
             raise MthError(f"'{args.agent}' no está en review.agents ({', '.join(agents) or 'vacío'}).")
-        if not args.report:
-            raise MthError("Falta --report <fichero>.", hint="Guarda el informe literal del revisor en .work/tmp/ y pásalo.")
         try:
+            if not args.report:
+                raise review.ReviewError("rejected", "Falta --report <fichero>.",
+                                         hint="Guarda el informe literal del revisor en .work/tmp/ y pásalo.")
             entry = review.record_report(ctx.git.git_dir(), ctx.root, ctx.root / ".work" / "reviews", branch, sha,
                                          args.agent, Path(args.report), args.summary)
         except MthError as exc:
