@@ -22,10 +22,16 @@ case "$input" in
   *) exit 0 ;;
 esac
 # Límites de tiempo por debajo del timeout de la entrada del hook (30 s): si vencen, se bloquea.
-short="" long=""
-if command -v timeout >/dev/null 2>&1; then short="timeout 5"; long="timeout 20"; fi
+# timeout(1) o, donde no existe (macOS sin coreutils), perl; el guard tiene además su propio límite.
+bounded() {
+  secs=$1; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"
+  elif command -v perl >/dev/null 2>&1; then perl -e 'alarm shift; exec @ARGV or exit 127' "$secs" "$@"
+  else "$@"
+  fi
+}
 dir="${CLAUDE_PROJECT_DIR:-.}"
-common=$($short git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
+common=$(bounded 5 git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
   echo "[mth-agent-guard] No es un repositorio git: se bloquea la herramienta." >&2; exit 2; }
 python=$(sed -n 1p "$common/mth/launcher" 2>/dev/null)
 script=$(sed -n 2p "$common/mth/launcher" 2>/dev/null)
@@ -42,8 +48,14 @@ if [ -z "$python" ] || [ ! -x "$python" ] || [ -z "$script" ] || [ ! -f "$script
   echo "[mth-agent-guard] claude-methodology no encontrado: abre una sesión nueva de Claude Code con el plugin >= 0.8.0." >&2
   exit 2
 fi
-printf '%s' "$input" | $long "$python" "$script" agent-guard
+printf '%s' "$input" | bounded 20 "$python" "$script" agent-guard
 rc=$?
 [ "$rc" -eq 0 ] && exit 0
-[ "$rc" -eq 2 ] || echo "[mth-agent-guard] El guard terminó con código $rc: se bloquea por seguridad." >&2
+[ "$rc" -eq 2 ] && exit 2
+echo "[mth-agent-guard] El guard terminó con código $rc: se bloquea por seguridad." >&2
+case "$rc" in 124|142)  # timeout(1) / SIGALRM de perl: el guard no pudo registrarlo él mismo
+  ( umask 077; mkdir -p "$common/mth" &&
+    printf '{"event": "agent_guard.decision", "cmd": "shim", "result": "deny", "category": "timeout", "reason": "el guard no terminó a tiempo (código %s)"}\n' "$rc" \
+      >> "$common/mth/agent-guard.jsonl" ) 2>/dev/null ;;
+esac
 exit 2
