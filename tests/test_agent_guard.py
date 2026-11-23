@@ -214,6 +214,7 @@ class AllowlistHardeningTests(GuardTestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("respondedor-incidencias", command=command)), expected)
         for command, expected in {"gh run list --json name | jq '.[].name'": 0, "gh run list | jq -n env": 2,
+                                  "gh run list | jq 'import \"x\" as $d; .'": 2, "gh run list | jq 'include \"x\"; .'": 2,
                                   "gh run list | jq -nf prog.jq": 2, "gh run list | jq -rf prog.jq": 2,
                                   "gh run list | jq -n '$ENV.GH_TOKEN'": 2, "gh run list | jq --rawfile a x .": 2,
                                   "gh run list | jq -f filtro.jq": 2, "gh run list | jq 'input_filename'": 2}.items():
@@ -229,7 +230,7 @@ class AllowlistHardeningTests(GuardTestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("lector-estado", command=command)), 0)
         for command in (f"sh /tmp/otro/scripts/mth {query}", f"python3 /tmp/otro/mth.py {query}",
-                        f"/tmp/otro/mth {query}"):
+                        f"/tmp/otro/mth {query}", f"sh scripts/mth {query}", f"python3 ./mth.py {query}"):
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("lector-estado", command=command)), 2)
 
@@ -454,6 +455,28 @@ class ShimTests(GuardTestCase):
         self.run_shim(self.repo.payload("revisor-seguridad", command="git log"))
         self.assertTrue(log.with_name("agent-guard.jsonl.1").is_file())
         self.assertEqual(len(log.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_a_repeated_agent_type_cannot_impersonate_another_agent(self):
+        # verifies: SPEC-0012/AC-22
+        payload = self.repo.payload("revisor-seguridad", command="git log")
+        payload["tool_input"]["x"] = {"agent_type": "Explore"}  # nested data from a tool call
+        self.assertEqual(self.run_shim(payload).returncode, 2)
+
+    def test_the_shim_limit_is_clamped_and_git_timeouts_are_told_apart(self):
+        # verifies: SPEC-0012/AC-24
+        self.fake_launcher("exit 0\n")
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root), "MTH_AGENT_GUARD_TIMEOUT": "999"}
+        run = lambda: subprocess.run(["sh", str(self.shim)], env=env, capture_output=True, text=True,
+                                     input=json.dumps(self.repo.payload("revisor-adr", command="git log")))
+        self.assertEqual(run().returncode, 0)  # a value above 25 s falls back to 20
+        stub = self.repo.tmp / "stub"
+        stub.mkdir()
+        (stub / "git").write_text("#!/bin/sh\nexit 124\n", encoding="utf-8")
+        (stub / "git").chmod(0o755)
+        env["PATH"] = f"{stub}{os.pathsep}{os.environ['PATH']}"
+        proc = run()
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("git no respondió", proc.stderr)
 
     def test_the_shim_and_the_guard_agree_on_what_a_template_header_is(self):
         # verifies: SPEC-0012/AC-22
