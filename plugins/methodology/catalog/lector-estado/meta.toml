@@ -1,0 +1,24 @@
+name = "lector-estado"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "Consultas de solo lectura sobre bases SQLite declaradas (por ejemplo, el estado de Hermes) vía `mth db-query`."
+origin = "Concepto: db-reader (dev.to, S. Khaitan). Texto propio. El hook de bloqueo del original se sustituye por un envoltorio determinista de solo lectura."
+model_role = "task"
+model_hint = "haiku"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = ["databases"]
+
+[vars]
+# Alias → ruta de cada base SQLite que se puede consultar. El agente solo conoce los alias;
+# `mth db-query` resuelve la ruta y rechaza cualquier alias no declarado. Obligatorio.
+# Ejemplo (DOckerAI):  databases = { hermes = "data/hermes/state.db", kanban = "data/hermes/kanban.db" }
+databases = {}
+# Filas máximas que devuelve una consulta (límite explícito, PRINCIPLES §2).
+max_rows = 200
+# Segundos máximos por consulta: `mth db-query` la corta al superarlos (límite explícito, PRINCIPLES §2).
+timeout_s = 10

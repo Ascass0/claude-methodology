@@ -47,7 +47,8 @@ Si no puedes preguntar: con el perfil `new`, adopta con las opciones recomendada
    - retirar de CLAUDE.md las líneas contradictorias (`instrucciones: metodologia`);
    - renombrar los agentes que colisionan (`colision: renombrar`) y actualizar sus referencias;
    - crear el workflow de CI (`ci: crear`);
-   - añadir `mth check-msg "$1"` al gestor de hooks, si lo hay.
+   - añadir `mth check-msg "$1"` al gestor de hooks, si lo hay;
+   - rellenar la sección local (`<!-- mth:local:begin -->`) de los agentes del catálogo instalados: el modelo de amenazas de `revisor-seguridad` es obligatorio. Sale de lo que has leído del repo; si no hay base para escribirlo, pregunta a la persona.
 4. `mth doctor` sin ✗ y `mth trace` sin errores (los avisos de legado son normales en una adopción gradual).
 5. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
 
@@ -58,6 +59,10 @@ Un mensaje final con tres listas: lo que se aplica tal cual, lo adaptado a este 
 ## Fork de otro proyecto
 
 `mth survey` lo detecta por el remoto `upstream`, y `mth init --answers` fija `paths.claude_md = ".claude/CLAUDE.md"` y `commits.external_refs`. Lo demás se ajusta con respuestas `otro` en la pregunta que corresponda: `paths.*` bajo un directorio propio, `release.tag_prefix` propio y `trace.include` limitado a lo propio. Las sincronizaciones con upstream se hacen por merge en una rama `sync/`, nunca por cherry-pick, porque un cherry-pick crea commits nuevos que sí se validarían como propios.
+
+## Agentes del catálogo después de adoptar
+
+Se gestionan con `mth agents list | add | sync | diff | remove` en una rama `chore/`, no con la reestructuración.
 
 ## Diagnóstico
 

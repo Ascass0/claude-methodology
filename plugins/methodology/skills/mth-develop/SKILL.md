@@ -23,6 +23,8 @@ description: Ciclo completo de desarrollo autónomo dirigido por specs de claude
 
 ## 3. Spec y decisiones → skill `mth-spec`
 
+Antes de planificar una feature o un cambio estructural, si el repo tiene instalado el agente `explorador-specs` (catálogo del plugin, `mth agents list`), pídele qué specs, criterios, modos de fallo y ADR aplican a la tarea y qué falta por decidir: devuelve IDs y rutas, no el contenido.
+
 Si la spec no existe, escríbela en la propia rama como primer commit: contexto, objetivo, fuera de alcance, comportamiento, **modos de fallo** y **criterios de aceptación verificables**. Pásala a `aprobada` cuando sea coherente con los principios y los ADR vigentes. Toda decisión estructural va en un ADR aceptado antes de implementarla. `mth integrate` rechaza una feature cuyo fragmento no referencie su spec.
 
 ## 4. Implementa (orquestas, los agentes `dev-*` implementan)
@@ -61,6 +63,7 @@ Delegar tiene un coste de coordinación: si el trabajo es pequeño, implementa t
 Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, parsimonia, excepciones solo donde se actúa, trazas con ID de correlación, docstrings mínimos, referencias `ADR-NNNN` en decisiones no obvias.
 
 - Tests: uno por AC (con `verifies: SPEC-NNNN/AC-NN`), uno por modo de fallo, uno de regresión por bug. Ninguno más.
+- **Fallo de causa desconocida** (un test, un comando o un comportamiento falla y no sabes por qué): si el repo tiene el agente `diagnosticador`, encárgale reproducirlo. Trabaja en un worktree aislado y devuelve la causa, la evidencia, un test de regresión y el fix propuesto como diff; el fix lo aplicas tú. Los trabajadores del catálogo usan el modelo `models.task`.
 - Docs actualizadas en la misma rama.
 - Commits temáticos durante el trabajo → skill `mth-commit`.
 

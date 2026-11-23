@@ -9,6 +9,10 @@ if sys.version_info < (3, 11):  # tomllib is required (fail-fast).
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+if sys.argv[1:2] == ["agent-guard"]:  # SPEC-0012: runs on every subagent tool call; skip the CLI imports
+    from mthlib.agent_guard import main as agent_guard_main
+    sys.exit(agent_guard_main(sys.stdin.read()))
+
 from mthlib.cli import main  # noqa: E402
 
 if __name__ == "__main__":

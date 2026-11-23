@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from . import adoption, changelog, commits, lang, survey, versions, work
+from . import adoption, agents, changelog, commits, lang, survey, versions, work
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
 from .errors import MthError
@@ -105,6 +105,25 @@ def install_hook(git: Git, mode: str = "own") -> str:
     path.write_text(desired, encoding="utf-8")
     path.chmod(0o755)
     return status
+
+
+LAUNCHER = Path("mth") / "launcher"
+MTH_PY = MTH.parent / "mth.py"
+
+
+def register_launcher(git: Git) -> Path:
+    """Record the interpreter and ``mth.py`` in ``<git-common-dir>/mth/launcher`` for the agent-guard shim.
+
+    The plugin path changes with every version, like the commit-msg hook. The interpreter is
+    the one already validated for this session (>= 3.11): the shim runs it directly, skipping
+    the launcher's interpreter search on every subagent tool call (SPEC-0012).
+    """
+    path = git.common_dir() / LAUNCHER
+    record = f"{sys.executable}\n{MTH_PY}\n"
+    if not path.is_file() or path.read_text(encoding="utf-8") != record:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(record, encoding="utf-8")
+    return path
 
 
 # -- scaffolding ----------------------------------------------------------------
@@ -224,6 +243,12 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
             config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
     cfg = parse(root, config, config_file or answers_file or "plantilla")  # validate before any mutation
     check_hook_mode(git, cfg["hooks"]["commit_msg"])
+    chosen = plan.catalog if plan is not None else []
+    blockers = agents.Manager(cfg).blockers(chosen)  # SPEC-0012: before any mutation
+    if blockers:
+        raise MthError("No se pueden instalar los agentes del catálogo elegidos:\n"
+                       + "\n".join(f"  - {b}" for b in blockers),
+                       hint="Quítalos de 'catalog' en la respuesta 'revisores' o completa su configuración.")
     for ref in cfg["commits"]["external_refs"]:
         if not git.ok("rev-parse", "--verify", "--quiet", ref):
             raise MthError(f"No existe la referencia externa {ref}.", hint="Trae el remoto externo (git fetch upstream).")
@@ -251,6 +276,8 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     install_hook(git, cfg["hooks"]["commit_msg"])
     if plan is not None:
         _write_adoption_adr(root, cfg, git, inventory, plan)
+    if chosen and agents.Manager(load(root)).add(chosen, None, False):
+        raise MthError("No se instalaron todos los agentes del catálogo elegidos.")
 
     git.out("add", "-A")
     message = commits.build("chore", "methodology", "adopt claude-methodology",
@@ -473,6 +500,13 @@ def doctor(start: Path) -> int:
         if agent:
             where = agent_location(git.root, agent)
             report(where is not None, f"Rol {role} → {agent} ({where or 'no encontrado'})")
+    installed = agents.installed_names(git.root)
+    if installed:  # SPEC-0012: warnings only
+        findings = agents.doctor_findings(git.root, cfg, git.common_dir() / LAUNCHER)
+        for finding in findings:
+            report(False, finding, blocking=False)
+        if not findings:
+            report(True, f"Agentes del catálogo: {', '.join(installed)}")
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)

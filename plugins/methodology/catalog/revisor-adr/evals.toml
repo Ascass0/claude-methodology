@@ -1,0 +1,27 @@
+[[guard]]
+command = "git log --format='%h %ad' -- specs/adr/process/ADR-0002-niveles-de-modelo.md"
+expect = "allow"
+
+[[guard]]
+command = "git checkout -- specs/adr"
+expect = "deny"
+
+[[scope]]
+name = "dependencia-sin-adr"
+diff = '''
+--- a/pyproject.toml
++++ b/pyproject.toml
++  "redis>=5",
+'''
+context = "Ningún ADR menciona redis ni una caché."
+must_find = { severity = "bloqueante", rule = "§1" }
+
+[[scope]]
+name = "con-adr-aceptado-sin-hallazgos"
+diff = '''
+--- a/pyproject.toml
++++ b/pyproject.toml
++  "redis>=5",
+'''
+context = "ADR-0042 (aceptado, anterior al commit) decide usar redis como caché."
+expect_blockers = 0

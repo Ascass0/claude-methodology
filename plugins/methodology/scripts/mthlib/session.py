@@ -14,7 +14,7 @@ from . import branches, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
-from .setup import install_hook
+from .setup import install_hook, register_launcher
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 MTH = PLUGIN_ROOT / "scripts" / "mth"  # launcher: picks a Python >= 3.11
@@ -59,6 +59,10 @@ def _state(cwd: Path) -> list[str]:
     except MthError as exc:
         hook = "error"
         lines.append(f"⚠ Hook commit-msg: {exc.message} → {exc.hint or ''}".strip())
+    try:
+        register_launcher(git)  # SPEC-0012: the agent-guard shim reads it
+    except (MthError, OSError) as exc:
+        lines.append(f"⚠ Lanzador para el guard de los agentes: {exc} (los agentes del catálogo quedan bloqueados).")
     try:
         work.ensure(git, cfg["work"]["dirs"])  # SPEC-0010
     except MthError as exc:

@@ -1,0 +1,17 @@
+# Perfiles del catálogo. `mth init` propone "base"; los demás se añaden con `mth agents add`.
+# Un agente se instala solo si cumple sus [requires] (meta.toml); si no, se informa y se omite.
+
+[base]
+description = "Revisores y trabajadores que aplican a cualquier repo con la metodología."
+agents = [
+  "revisor-seguridad", "revisor-fallos", "revisor-adr", "revisor-diseno", "revisor-parsimonia",
+  "diagnosticador", "explorador-specs",
+]
+
+[opcional]
+description = "Agentes con requisitos específicos del repo (benchmark, evals, bases de estado, CI)."
+agents = ["ingeniero-rendimiento", "analista-evals", "lector-estado", "respondedor-incidencias"]
+
+[autonomo]
+description = "Hilo principal para sesiones autónomas largas (`claude --agent orquestador`)."
+agents = ["orquestador"]

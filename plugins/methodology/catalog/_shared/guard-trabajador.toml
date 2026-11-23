@@ -1,0 +1,17 @@
+# Guard común de los trabajadores con shell abierta (diagnosticador, ingeniero-rendimiento,
+# respondedor-incidencias). Modo denylist: protege la historia de git, el remoto y el flujo de mth
+# frente a errores del agente. NO es una frontera de seguridad frente a un agente malicioso:
+# `python script.py` puede hacer lo que quiera. La frontera real es `isolation: worktree` (el árbol
+# de trabajo) y los rulesets de GitHub (las ramas compartidas). Riesgo residual aceptado: ver
+# README de claude-methodology, «Límites conocidos».
+[bash]
+mode = "denylist"
+deny = [
+  "git commit", "git push", "git merge", "git rebase", "git reset", "git revert", "git tag",
+  "git branch -d", "git branch -D", "git branch -m", "git branch -M", "git update-ref",
+  "git filter-branch", "git filter-repo", "git clean", "git stash", "git cherry-pick", "git am",
+  "git checkout -B", "git switch -C", "git remote", "git config", "git gc", "git prune",
+  "gh", "mth", "curl", "wget", "ssh", "scp", "rsync", "docker push", "docker login",
+  "sh -c", "bash -c", "zsh -c", "eval", "sudo",
+]
+deny_operators = ["$(", "`", "<("]

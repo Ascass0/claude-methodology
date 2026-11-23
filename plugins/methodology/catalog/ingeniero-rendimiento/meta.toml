@@ -1,0 +1,21 @@
+name = "ingeniero-rendimiento"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "Mide con el benchmark del repo, propone una optimización y la vuelve a medir. Sin medición no hay propuesta."
+origin = "Concepto: performance-engineer (dev.to, S. Khaitan). Texto propio, adaptado a PRINCIPLES §2 «Optimización con evidencia»."
+model_role = "task"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = ["bench"]
+
+[vars]
+# Comando que ejecuta el benchmark y escribe resultados comparables (por ejemplo, pytest-benchmark
+# con --benchmark-json, hyperfine --export-json). Obligatorio: sin él, el agente no se instala.
+bench = ""
+# Umbral de mejora por debajo del cual no se propone el cambio (ruido de medición).
+min_gain_pct = 5

@@ -15,10 +15,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import lang
+from . import catalog, lang
 from .config import AUTONOMY_LEVELS, DEFAULTS, _merge
 from .errors import MthError
-from .survey import Survey
+from .survey import RECONFIGURE, Survey
 
 MAX_ANSWERS_BYTES = 256 * 1024
 OTHER = "otro"
@@ -34,7 +34,7 @@ OPTIONS: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
     "decisiones": {"mapear": {"path": (str, True), "kind": (str, True), "pattern": (str, True)},
                    "convertir": {}, "archivar": {}},
     "tests": {"comando": {"command": (str, True)}, "ninguno": {}},
-    "revisores": {"agentes": {"agents": (list, True)}},
+    "revisores": {"agentes": {"agents": (list, True), "catalog": (list, False), "vars": (dict, False)}},
     "colision": {"renombrar": {"renames": (dict, True)}, "mantener": {}},
     "instrucciones": {"metodologia": {}, "repo": {"exceptions": (list, True)}},
     "autonomia": {level: {} for level in AUTONOMY_LEVELS},
@@ -70,6 +70,7 @@ class Decision:
 class Plan:
     data: dict[str, Any]
     decisions: list[Decision] = field(default_factory=list)
+    catalog: list[str] = field(default_factory=list)  # catalog agents to install (SPEC-0012)
 
 
 def load_answers(path: Path) -> dict[str, dict[str, Any]]:
@@ -124,11 +125,28 @@ def validate(survey: Survey, answers: dict[str, dict[str, Any]]) -> None:
                     problems.append(f"{qid}: '{option}' necesita '{name}'")
             elif not isinstance(answer[name], kind):
                 problems.append(f"{qid}: '{name}' debe ser de tipo {kind.__name__}")
+        if qid == "revisores":
+            problems += _catalog_problems(survey, answer)
         if qid in ("specs", "decisiones") and option == "mapear" and not _KIND.match(str(answer.get("kind", ""))):
             problems.append(f"{qid}: 'kind' debe ser un prefijo en mayúsculas (por ejemplo, RFC)")
     if problems:
         raise MthError("Respuestas inválidas:\n" + "\n".join(f"  - {p}" for p in problems),
                        hint="Corrige el JSON de respuestas; las opciones están en la skill mth-init.")
+
+
+def _catalog_problems(survey: Survey, answer: dict[str, Any]) -> list[str]:
+    """Problems of the catalog part of the ``revisores`` answer (SPEC-0012)."""
+    chosen, variables = answer.get("catalog", []), answer.get("vars", {})
+    if not chosen and not variables:
+        return []
+    if survey.profile == RECONFIGURE:
+        return ["revisores: 'catalog' y 'vars' solo se usan al adoptar; en un repo adoptado, mth agents add"]
+    available = catalog.names(catalog.CATALOG_DIR)
+    problems = [f"revisores: '{name}' no es un agente del catálogo" for name in chosen if name not in available]
+    for name, table in variables.items() if isinstance(variables, dict) else []:
+        if name not in chosen or not isinstance(table, dict):
+            problems.append(f"revisores: 'vars.{name}' debe ser una tabla de un agente elegido en 'catalog'")
+    return problems
 
 
 def build(template: str, survey: Survey, answers: dict[str, dict[str, Any]], main: str, base: str) -> Plan:
@@ -199,6 +217,11 @@ def _decide(plan: Plan, survey: Survey, answers: dict[str, dict[str, Any]], base
             plan.decisions.append(Decision(qid, OTHER, effect, answer.get("note", "")))
             continue
         effect = _apply(plan.data, qid, option, answer, survey.signals, base, reconfigure)
+        if qid == "revisores" and answer.get("catalog"):
+            plan.catalog = list(answer["catalog"])
+            if answer.get("vars"):
+                plan.data["agents"] = copy.deepcopy(answer["vars"])
+            effect += f"; agentes del catálogo: {', '.join(plan.catalog)} (mth agents add)"
         note = "; ".join(answer.get("exceptions", [])) if qid == "instrucciones" else ""
         plan.decisions.append(Decision(qid, option, effect, note))
 

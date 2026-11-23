@@ -1,0 +1,31 @@
+[[guard]]
+command = "mth db-query --db hermes --schema"
+expect = "allow"
+
+[[guard]]
+command = "sh /home/u/.claude/plugins/cache/claude-methodology/methodology/0.8.0/scripts/mth db-query --db hermes \"SELECT count(*) FROM sessions\""
+expect = "allow"
+
+[[guard]]
+command = "$MTH db-query --db kanban \"SELECT status, count(*) FROM tasks GROUP BY status\" | head -50"
+expect = "allow"
+
+[[guard]]
+command = "sqlite3 data/hermes/state.db '.shell id'"
+expect = "deny"
+
+[[guard]]
+command = "mth db-query --db hermes \"SELECT 1\" > /tmp/out"
+expect = "deny"
+
+[[guard]]
+command = "mth integrate"
+expect = "deny"
+
+[[routing]]
+prompt = "¿En qué estado quedaron las tareas del Kanban de la ejecución de anoche?"
+expect = "lector-estado"
+
+[[routing]]
+prompt = "Añade una columna 'retries' a la tabla de tareas"
+expect_not = "lector-estado"

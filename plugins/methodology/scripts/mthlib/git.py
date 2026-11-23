@@ -46,6 +46,10 @@ class Git:
     def git_dir(self) -> Path:
         return Path(self.out("rev-parse", "--absolute-git-dir"))
 
+    def common_dir(self) -> Path:
+        """Directory shared by every worktree of the repository (``--git-common-dir``)."""
+        return Path(self.out("rev-parse", "--path-format=absolute", "--git-common-dir"))
+
     def hooks_dir(self) -> Path:
         path = Path(self.out("rev-parse", "--git-path", "hooks"))
         return path if path.is_absolute() else self.root / path
