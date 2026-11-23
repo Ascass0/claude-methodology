@@ -260,10 +260,10 @@ class Changes:
                 (self.root / rel).unlink(missing_ok=True)
             else:
                 atomic_write(self.root / rel, text, 0o755 if rel in self.executable else None)
-        if SHIM in self.files and self.files[SHIM] is None:  # removal: the agents are gone first
+        if self.settings is not None and not has_hook(self.settings):  # removal: the hook goes before the shim,
+            atomic_write(self.root / SETTINGS, _settings_text(self.settings))  # an orphan shim is harmless
+        if SHIM in self.files and self.files[SHIM] is None:
             (self.root / SHIM).unlink(missing_ok=True)
-        if self.settings is not None and not has_hook(self.settings):
-            atomic_write(self.root / SETTINGS, _settings_text(self.settings))
         if self.config_text is not None:
             atomic_write(self.root / CONFIG_PATH, self.config_text)
 

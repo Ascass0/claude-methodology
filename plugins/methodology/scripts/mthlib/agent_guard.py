@@ -59,7 +59,7 @@ _UNIQ_VALUE_OPTIONS = {"-f", "-s", "-w"}
 # jq must not read the environment (tokens) nor files: it filters stdin only.
 _JQ_DENIED_OPTIONS = ("-f", "--from-file", "--rawfile", "--slurpfile", "-L")
 _JQ_SHORT_DENIED = ("-f", "-L")
-_JQ_DENIED_TEXT = re.compile(r"\benv\b|\$ENV|input_filename|\$__loc__")
+_JQ_DENIED_TEXT = re.compile(r"\benv\b|\$ENV|input_filename|\$__loc__|\b(?:import|include)\b")
 _SECRET = re.compile(
     r"(?i)(\b[A-Z][A-Z0-9_]*=|\bauthorization[\"']?\s*[:=]\s*[\"']?(?:bearer\s+|token\s+|basic\s+)?"
     r"|\b(?:token|password|passwd|secret)[\"']?\s*[:=\s]\s*[\"']?)[^\s\"']+"
@@ -83,8 +83,10 @@ def _tokens(segment: str) -> list[str]:
 
 
 def _is_own_mth(path: str) -> bool:
+    """Whether ``path`` is this plugin's mth. A relative path would resolve against the guard's
+    working directory, not the agent's, so only absolute paths count."""
     try:
-        return Path(path).resolve() in _OWN_MTH
+        return Path(path).is_absolute() and Path(path).resolve() in _OWN_MTH
     except OSError:
         return False
 
@@ -509,6 +511,6 @@ def _decide(stdin: str, environ: dict[str, str] | None) -> int:
     except Exception as exc:  # noqa: BLE001 — hook boundary: fail closed, keep the traceback.
         print(f"[mth-agent-guard] Error interno ({type(exc).__name__}: {exc}); se bloquea por seguridad.",
               file=sys.stderr)
-        # If the log itself fails, the process exits non-zero and the shim still blocks.
+        # A failure of the log itself only warns (Tracer); the decision stands.
         _record(project, payload, "deny", "internal", f"{type(exc).__name__}: {exc}", None, traceback.format_exc())
         return BLOCK
