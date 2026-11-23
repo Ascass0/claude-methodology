@@ -54,7 +54,7 @@ required_for = ["feat", "fix", "hotfix"]
 [review]
 # Revisores en orden de precedencia: los del repo (.claude/agents/<nombre>.md) y los
 # compartidos del plugin (verificador). Ponlo primero: comprueba que la rama cumple su spec.
-agents = ["verificador"]
+agents = ["verificador", "revisor-seguridad", "revisor-fallos"]
 required_for = ["feat", "fix", "hotfix"]
 
 # Revisores que solo aplican si el diff toca sus rutas (globs; '!' excluye, gana el último).
