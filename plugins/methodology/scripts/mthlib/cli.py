@@ -99,13 +99,31 @@ def _cmd_review(args: argparse.Namespace) -> int:
         if args.agent not in agents:
             raise MthError(f"'{args.agent}' no está en review.agents ({', '.join(agents) or 'vacío'}).")
         try:
-            blocking = review.blocking_from_report(Path(args.report), args.agent)
-        except MthError:
-            ctx.tracer.event("review.not_run", branch=branch, sha=sha, agent=args.agent)
+            if not args.report:
+                raise review.ReviewError("rejected", "Falta --report <fichero>.",
+                                         hint="Guarda el informe literal del revisor en .work/tmp/ y pásalo.")
+            entry = review.record_report(ctx.git.git_dir(), ctx.root, ctx.root / ".work" / "reviews", branch, sha,
+                                         args.agent, Path(args.report), args.summary)
+        except MthError as exc:
+            ctx.tracer.event("review.not_recorded", branch=branch, sha=sha, agent=args.agent,
+                             stage=getattr(exc, "stage", "unknown"), error=exc.message,
+                             orphan=str(getattr(exc, "archived", None) or "") or None)
             raise
-        review.record(ctx.git.git_dir(), branch, sha, args.agent, blocking, args.summary)
-        ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, blocking=blocking)
-        say(f"✓ Revisión de {args.agent} registrada para {sha[:8]} ({blocking} bloqueantes)")
+        ctx.tracer.event("review.failed" if entry["status"] == "failed" else "review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
+                         blocking=entry.get("blocking"), attempts=entry["attempts"],
+                         reason=entry.get("reason"), failures=entry.get("failures"),
+                         previous_status=entry.get("previous_status"))
+        if entry["status"] == "failed":
+            stop = entry["failures"] >= 2
+            raise MthError(
+                f"Revisión de {args.agent} fallida (intento {entry['attempts']}, fallo {entry['failures']}): {entry['reason']}. "
+                "No aprueba nada.",
+                hint=("Segundo fallo: detente y avisa (PRINCIPLES §11); revisa el prompt del revisor."
+                      if stop else
+                      "Pide UNA corrección al mismo agente con SendMessage (mismo contexto), indicándole "
+                      "este motivo, y registra de nuevo. No lances otro agente desde cero."))
+        say(f"✓ Revisión de {args.agent} registrada para {sha[:8]} ({entry['blocking']} bloqueantes, "
+            f"intento {entry['attempts']})")
         return 0
     info = branches.parse(branch, ctx.cfg)
     needed = required_reviewers(ctx, info) if info else []
@@ -114,8 +132,8 @@ def _cmd_review(args: argparse.Namespace) -> int:
         say("No se requiere revisión para esta rama (tipo, rama hija o ningún revisor aplica).")
     for agent in needed:
         r = found.get(agent)
-        print(f"{'✓' if r and not r['blocking'] else '✗'} {agent}: "
-              f"{'pendiente' if not r else str(r['blocking']) + ' bloqueantes'}")
+        approved, state = review.describe(r)
+        print(f"{'✓' if approved else '✗'} {agent}: {state}")
     skipped = [a for a in agents if a not in needed]
     if needed and skipped:
         say(f"No aplican a estos cambios: {', '.join(skipped)}")
@@ -351,7 +369,7 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("review", help="registra o consulta revisiones del HEAD")
     s.add_argument("action", choices=["record", "status"])
     s.add_argument("agent", nargs="?")
-    s.add_argument("--report", help="informe completo del revisor; su última línea es 'BLOQUEANTES: <n>'")
+    s.add_argument("--report", help="informe literal del revisor (sección HALLAZGOS y última línea 'BLOQUEANTES: <n>'); mth cuenta los bloqueantes")
     s.add_argument("--summary", default="")
 
     s = sub.add_parser("plan", help="plan de trabajo: validar, verificar una oleada, modelo de una tarea, métricas")
