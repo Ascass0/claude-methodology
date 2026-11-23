@@ -37,7 +37,7 @@ Antes de la primera pregunta, un mensaje breve: qué se va a revisar, que nada s
 - Empieza cada pregunta con `Ahora: {current}.` y añade ` (actual)` a la etiqueta de la opción que corresponde a lo que hay. La opción recomendada sigue siendo la primera.
 - Las frases del catálogo que hablan de la adopción («tu repo tiene…») se adaptan al presente del repo; las opciones y sus respuestas JSON no cambian.
 - Diferencias con la adopción:
-  - `revisores`: la lista que des es la lista completa (incluye `verificador` si se mantiene).
+  - `revisores`: la lista que des es la lista completa (incluye `verificador` si se mantiene). Incluye también los revisores del catálogo instalados (`mth agents list`), en el orden en que están. `catalog` y `vars` no se admiten aquí: los agentes del catálogo se instalan y retiran con `mth agents`.
   - `alcance: gradual` conserva el `trace.legacy_base` que haya; `completa` lo vacía y todo el contenido pasa a cumplir las reglas.
   - `versiones: continuar` conserva la numeración; pasa `version_files` solo si cambian.
 - Cambiar `ramas` o las rutas de `specs`/`decisiones` afecta a las ramas abiertas: díselo a la persona antes de aplicarlo.
