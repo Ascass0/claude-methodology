@@ -1,6 +1,6 @@
 # SPEC-0014 · Prueba de humo de los agentes
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-23
 - ADRs: [ADR-0010](../adr/process/ADR-0010-la-prueba-de-humo-exige-evidencia-independiente-del-guard.md), [ADR-0008](../adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md)
 - Sustituye a: —
