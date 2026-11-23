@@ -27,6 +27,8 @@ _ALLOWED = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION,
             sqlite3.SQLITE_RECURSIVE}  # WITH RECURSIVE only reads
 _PRAGMAS = {"table_info", "table_list", "index_list", "index_info", "foreign_key_list"}
 _FORBIDDEN_FUNCTIONS = {"load_extension", "readfile", "writefile", "edit", "fts3_tokenizer"}
+MAX_VALUE_BYTES = 1_000_000  # SQLITE_LIMIT_LENGTH: no string or blob grows beyond this
+MAX_CELL_CHARS = 2_000       # each cell is cut in the output
 
 
 class QueryError(MthError):
@@ -67,15 +69,21 @@ def query(databases: dict[str, str], root: Path, alias: str, sql: str | None, *,
     Raises:
         QueryError: Unknown alias, missing file, rejected or invalid statement, timeout.
     """
+    if max_rows <= 0 or timeout_s <= 0:
+        raise QueryError(f"Límites inválidos en [agents.{AGENT}]: max_rows y timeout_s deben ser positivos.")
     if alias not in databases:
         raise QueryError(f"Alias desconocido: '{alias}'. Disponibles: {', '.join(sorted(databases)) or 'ninguno'}.",
                          hint=f"Los alias se declaran en [agents.{AGENT}].databases.")
     path = (root / databases[alias]).resolve()
+    if not path.is_relative_to(root.resolve()):  # the repo config is not trusted to point elsewhere
+        raise QueryError(f"La base de '{alias}' está fuera del repositorio: {databases[alias]}.",
+                         hint="mth db-query solo abre bases dentro del repositorio.")
     if not path.is_file():
         raise QueryError(f"No existe la base de '{alias}': {path}.")
     con = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=timeout_s)
     try:
         con.execute("PRAGMA query_only = ON")
+        con.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_BYTES)
         con.set_authorizer(_authorizer)
         deadline = time.monotonic() + timeout_s
         con.set_progress_handler(lambda: int(time.monotonic() > deadline), 10_000)
@@ -98,7 +106,10 @@ def _cell(value: object) -> str:
         return "NULL"
     if isinstance(value, bytes):
         return f"<{len(value)} bytes>"
-    return str(value).replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
+    text = str(value)
+    if len(text) > MAX_CELL_CHARS:
+        text = f"{text[:MAX_CELL_CHARS]}… <{len(text) - MAX_CELL_CHARS} caracteres más>"
+    return text.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 
 
 def format_result(result: Result, max_rows: int) -> str:

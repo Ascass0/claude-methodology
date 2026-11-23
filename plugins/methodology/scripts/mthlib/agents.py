@@ -20,6 +20,7 @@ from . import catalog
 from .agent_guard import AGENTS_DIR, GUARDS_DIR
 from .config import CONFIG_PATH, Config, parse
 from .errors import MthError
+from .files import atomic_write
 from .log import say, warn
 
 SHIM = Path(".claude") / "hooks" / "mth-agent-guard"
@@ -27,6 +28,7 @@ SETTINGS = Path(".claude") / "settings.json"
 GITIGNORE = Path(".gitignore")
 WORKTREES_IGNORE = ".claude/worktrees/"
 HOOK_MATCHER = "Bash|Write|Edit|MultiEdit|NotebookEdit"
+HOOK_TIMEOUT = 30  # seconds; above the shim limits, so the shim blocks before Claude Code gives up
 # The shim may be missing (deleted, partial checkout): subagents are blocked, the main session goes on.
 HOOK_COMMAND = (
     'f="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/mth-agent-guard"; '
@@ -45,7 +47,16 @@ class Copy:
 
     md: str | None
     guard: str | None
-    origin: catalog.Installed | None  # None: not from the catalog (or not installed)
+    origin: catalog.Installed | None  # None: no template header (foreign, edited or not installed)
+
+    @property
+    def from_catalog(self) -> bool:
+        """Header or rendered guard: an agent that lost its header is still a catalog agent."""
+        return self.origin is not None or self.guard is not None
+
+    @property
+    def edited(self) -> bool:
+        return self.origin.edited if self.origin is not None else self.guard is not None
 
 
 def read_copy(root: Path, name: str) -> Copy:
@@ -62,6 +73,13 @@ def installed_names(root: Path) -> list[str]:
         return []
     return sorted(p.stem for p in folder.glob("*.md")
                   if catalog.installed(p.read_text(encoding="utf-8"), None) is not None)
+
+
+def catalog_names(root: Path) -> list[str]:
+    """Catalog agents of the repository: with a template header or a rendered guard."""
+    folder = root / GUARDS_DIR
+    guards = {p.name.removesuffix(".guard.toml") for p in folder.glob("*.guard.toml")} if folder.is_dir() else set()
+    return sorted(set(installed_names(root)) | guards)
 
 
 def local_is_empty(agent_md: str) -> bool:
@@ -82,28 +100,50 @@ def read_settings(root: Path) -> dict[str, Any]:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise MthError(f"{SETTINGS} no es JSON válido: {exc}.", hint="Corrígelo y vuelve a intentarlo.") from exc
-    if not isinstance(data, dict):
-        raise MthError(f"{SETTINGS} debe ser un objeto JSON.")
+    hooks = data.get("hooks", {}) if isinstance(data, dict) else None
+    if not isinstance(hooks, dict) or not isinstance(hooks.get("PreToolUse", []), list):
+        raise MthError(f"{SETTINGS} no tiene la forma esperada (objeto, con hooks.PreToolUse como lista).",
+                       hint="Corrígelo y vuelve a intentarlo.")
     return data
 
 
+def _is_our_hook(hook: Any) -> bool:
+    return isinstance(hook, dict) and str(SHIM) in str(hook.get("command", ""))
+
+
 def _is_ours(entry: Any) -> bool:
-    return isinstance(entry, dict) and any(
-        isinstance(h, dict) and str(SHIM) in str(h.get("command", "")) for h in entry.get("hooks", []) or [])
+    return isinstance(entry, dict) and any(_is_our_hook(h) for h in entry.get("hooks", []) or [])
+
+
+def _our_entry() -> dict[str, Any]:
+    return {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": HOOK_COMMAND, "timeout": HOOK_TIMEOUT}]}
 
 
 def has_hook(settings: dict[str, Any]) -> bool:
     return any(_is_ours(e) for e in ((settings.get("hooks") or {}).get("PreToolUse") or []))
 
 
+def _drop_ours(entries: list[Any]) -> list[Any]:
+    """Entries without our hook; other hooks of a shared entry are kept, empty entries dropped."""
+    out = []
+    for entry in entries:
+        if not _is_ours(entry):
+            out.append(entry)
+            continue
+        rest = [h for h in entry.get("hooks", []) if not _is_our_hook(h)]
+        if rest:
+            out.append({**entry, "hooks": rest})
+    return out
+
+
 def with_hook(settings: dict[str, Any]) -> dict[str, Any]:
-    """Settings with exactly one, current, agent-guard entry; every other key is kept."""
+    """Settings with exactly one, current, agent-guard entry; every other hook and key is kept."""
     out = json.loads(json.dumps(settings))
     hooks = out.setdefault("hooks", {})
-    entries = [e for e in hooks.get("PreToolUse") or [] if not _is_ours(e)]
-    entries.append({"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": HOOK_COMMAND}]})
+    entries = _drop_ours(hooks.get("PreToolUse") or [])
+    entries.append(_our_entry())
     hooks["PreToolUse"] = entries
     return out
 
@@ -112,7 +152,7 @@ def without_hook(settings: dict[str, Any]) -> dict[str, Any]:
     out = json.loads(json.dumps(settings))
     hooks = out.get("hooks") or {}
     if "PreToolUse" in hooks:
-        hooks["PreToolUse"] = [e for e in hooks["PreToolUse"] if not _is_ours(e)]
+        hooks["PreToolUse"] = _drop_ours(hooks["PreToolUse"])
         if not hooks["PreToolUse"]:
             del hooks["PreToolUse"]
     if "hooks" in out and not out["hooks"]:
@@ -207,20 +247,25 @@ class Changes:
     executable: set[Path] = field(default_factory=set)
 
     def apply(self) -> None:
+        """Write everything, each file atomically, guard first: if writing stops halfway, no agent
+        is left installed without its hook (fail-safe), and a re-run completes the rest."""
+        if SHIM in self.files and self.files[SHIM] is not None:
+            atomic_write(self.root / SHIM, self.files[SHIM], 0o755)
+        if self.settings is not None and has_hook(self.settings):
+            atomic_write(self.root / SETTINGS, _settings_text(self.settings))
         for rel, text in self.files.items():
-            path = self.root / rel
-            if text is None:
-                path.unlink(missing_ok=True)
+            if rel == SHIM:
                 continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-            if rel in self.executable:
-                path.chmod(0o755)
-        if self.settings is not None:
-            (self.root / SETTINGS).parent.mkdir(parents=True, exist_ok=True)
-            (self.root / SETTINGS).write_text(_settings_text(self.settings), encoding="utf-8")
+            if text is None:
+                (self.root / rel).unlink(missing_ok=True)
+            else:
+                atomic_write(self.root / rel, text, 0o755 if rel in self.executable else None)
+        if self.settings is not None and not has_hook(self.settings):  # removal: the hook goes before the shim,
+            atomic_write(self.root / SETTINGS, _settings_text(self.settings))  # an orphan shim is harmless
+        if SHIM in self.files and self.files[SHIM] is None:
+            (self.root / SHIM).unlink(missing_ok=True)
         if self.config_text is not None:
-            (self.root / CONFIG_PATH).write_text(self.config_text, encoding="utf-8")
+            atomic_write(self.root / CONFIG_PATH, self.config_text)
 
 
 class Manager:
@@ -391,7 +436,7 @@ class Manager:
 
     def sync(self, names: list[str], force: bool) -> int:
         """Re-render installed agents keeping their local section. Returns the number refused."""
-        targets = names or installed_names(self.root)
+        targets = names or catalog_names(self.root)
         if not targets:
             say("No hay agentes del catálogo instalados.")
             return 0
@@ -401,11 +446,11 @@ class Manager:
         worktree = False
         for name in targets:
             copy = read_copy(self.root, name)
-            if copy.origin is None:
+            if not copy.from_catalog:
                 raise MthError(f"{name} no es un agente instalado desde el catálogo.",
                                hint=f"Instálalo con mth agents add {name}.")
             rendered = self._render_sync(name, copy)
-            if copy.origin.edited and not force:
+            if copy.edited and not force:
                 warn(f"{name}: la parte generada se editó a mano; no se sincroniza sin --force. Diferencias:")
                 print(self._diff(name, copy, rendered))
                 refused += 1
@@ -433,13 +478,13 @@ class Manager:
 
     def diff(self, name: str) -> str:
         copy = read_copy(self.root, name)
-        if copy.origin is None:
+        if not copy.from_catalog:
             raise MthError(f"{name} no es un agente instalado desde el catálogo.")
         return self._diff(name, copy, self._render_sync(name, copy))
 
     def remove(self, name: str) -> None:
         copy = read_copy(self.root, name)
-        if copy.origin is None:
+        if not copy.from_catalog:
             raise MthError(f"{name} no es un agente instalado desde el catálogo: no se borra.",
                            hint="Un agente propio del repo se borra a mano.")
         changes = Changes(self.root)
@@ -448,7 +493,7 @@ class Manager:
         text = self._config_text()
         if name in self.cfg["review"]["agents"] or name in self.cfg["review"]["paths"]:
             changes.config_text = self._with_review(text, name, None, remove=True)
-        if installed_names(self.root) == [name]:  # the last one: drop the shared infrastructure
+        if catalog_names(self.root) == [name]:  # the last one: drop the shared infrastructure
             changes.files[SHIM] = None
             settings = read_settings(self.root)
             if has_hook(settings):
@@ -461,9 +506,12 @@ class Manager:
 def doctor_findings(root: Path, cfg: Config, launcher: Path, catalog_dir: Path = catalog.CATALOG_DIR) -> list[str]:
     """Warnings about the installed catalog agents (empty when everything is in order)."""
     names = installed_names(root)
-    if not names:
+    every = catalog_names(root)
+    if not every:
         return []
-    out = []
+    out = [f"Agente {name}: tiene guard pero su .md no tiene cabecera de plantilla, así que queda bloqueado "
+           f"(mth agents sync --force {name} o mth agents remove {name})."
+           for name in every if name not in names]  # SPEC-0012/AC-21
     manager = Manager(cfg, catalog_dir)
     for name in names:
         copy = read_copy(root, name)
@@ -492,11 +540,15 @@ def doctor_findings(root: Path, cfg: Config, launcher: Path, catalog_dir: Path =
                    "(mth agents sync).")
     for rel in (SETTINGS, Path(".claude") / "settings.local.json"):
         path = root / rel
+        if not path.is_file():
+            continue
         try:
-            if path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("disableAllHooks"):
-                out.append(f"{rel} declara disableAllHooks: el guard de los agentes no se ejecuta.")
-        except (json.JSONDecodeError, AttributeError):
-            pass
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            out.append(f"No se puede leer {rel} ({exc}): Claude Code puede estar ignorando sus hooks.")
+            continue
+        if isinstance(data, dict) and data.get("disableAllHooks"):
+            out.append(f"{rel} declara disableAllHooks: el guard de los agentes no se ejecuta.")
     lines = launcher.read_text(encoding="utf-8").splitlines() if launcher.is_file() else []
     if len(lines) < 2 or not all(Path(p).is_file() for p in lines[:2]):
         out.append("No hay lanzador registrado para el guard de los agentes: abre una sesión nueva de Claude Code.")

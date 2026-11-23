@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -15,10 +16,12 @@ class Tracer:
     reported once on stderr and then ignored (deliberate fail-open).
     """
 
-    def __init__(self, git_dir: Path | None, command: str) -> None:
+    def __init__(self, git_dir: Path | None, command: str, name: str = "trace.jsonl",
+                 max_bytes: int | None = None) -> None:
         self.run_id = uuid.uuid4().hex[:12]
         self.command = command
-        self.path = git_dir / "mth" / "trace.jsonl" if git_dir else None
+        self.path = git_dir / "mth" / name if git_dir else None
+        self.max_bytes = max_bytes  # rotate to <name>.1 beyond this size (None: never)
         self._warned = False
 
     def event(self, name: str, **data: object) -> None:
@@ -29,7 +32,13 @@ class Tracer:
                   "run": self.run_id, "cmd": self.command, "event": name, **data}
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as fh:
+            if self.max_bytes is not None and self.path.is_file() and self.path.stat().st_size > self.max_bytes:
+                try:
+                    self.path.replace(self.path.with_name(self.path.name + ".1"))
+                except FileNotFoundError:  # another process rotated first: keep writing
+                    pass
+            fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)  # local and private
+            with os.fdopen(fd, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
         except OSError as exc:
             if not self._warned:

@@ -1,0 +1,6 @@
+[bash]
+mode = "allowlist"
+allow = ["git diff", "git log", "git show", "git blame", "git grep", "git status", "git ls-files", "git rev-parse"]
+filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut"]
+deny_operators = [">", "$(", "`", "<("]
+deny_flags = ["--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager"]

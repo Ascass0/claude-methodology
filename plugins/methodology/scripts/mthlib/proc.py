@@ -9,13 +9,17 @@ from .errors import MthError
 _TAIL_LINES = 15
 
 
+class CommandTimeout(MthError):
+    """A command did not finish within its timeout."""
+
+
 def _tail(text: str) -> str:
     lines = text.strip().splitlines()
     return "\n".join(lines[-_TAIL_LINES:])
 
 
 def run(args: list[str], cwd: Path | None = None, check: bool = True,
-        input_text: str | None = None) -> subprocess.CompletedProcess:
+        input_text: str | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
     """Run a command capturing its output.
 
     Args:
@@ -23,13 +27,16 @@ def run(args: list[str], cwd: Path | None = None, check: bool = True,
         cwd: Working directory.
         check: Raise on non-zero exit.
         input_text: Data sent to stdin.
+        timeout: Seconds before the command is killed (None: no limit).
 
     Raises:
-        MthError: The executable is missing, or it failed and ``check`` is true.
+        MthError: The executable is missing, it timed out, or it failed and ``check`` is true.
     """
     try:
         proc = subprocess.run(args, cwd=cwd, input=input_text,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise CommandTimeout(f"'{' '.join(args)}' no respondió en {timeout} s.") from exc
     except FileNotFoundError as exc:
         raise MthError(f"No se encuentra el ejecutable '{args[0]}'.",
                        hint="Instálalo y comprueba el PATH.") from exc

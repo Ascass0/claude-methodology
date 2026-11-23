@@ -9,5 +9,19 @@
   },
   "enabledPlugins": {
     "methodology@claude-methodology": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/mth-agent-guard\"; if [ -f \"$f\" ]; then exec sh \"$f\"; fi; if grep -q -e '\"agent_id\"' -e '\"agent_type\"'; then echo \"[mth-agent-guard] Falta .claude/hooks/mth-agent-guard: ejecuta mth agents sync.\" >&2; exit 2; fi; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }
