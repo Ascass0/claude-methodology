@@ -156,8 +156,8 @@ def require_inside(root: Path, path: Path, what: str) -> None:
         raise ReviewError("rejected", f"No se puede resolver {path}: {exc}.",
                           hint="Usa una ruta real dentro del repo; no se ha registrado nada.") from exc
     if not inside:
-        raise ReviewError("rejected", f"{path} queda fuera del repositorio: {what}.",
-                          hint="Usa una ruta dentro del repo (los informes van en .work/tmp/); no se ha registrado nada.")
+        raise ReviewError("rejected", f"{path} queda fuera de {root}: {what}.",
+                          hint="Los informes van en .work/tmp/ (o .work/reviews/); no se ha registrado nada.")
 
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -256,7 +256,7 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
     if len(summary.encode("utf-8")) > MAX_SUMMARY:
         raise ReviewError("rejected", f"El resumen supera {MAX_SUMMARY} bytes.",
                           hint="Resume en una línea; el informe completo se archiva aparte.")
-    require_inside(root, report, "el informe no se lee")
+    require_inside(root / ".work", report, "el informe no se lee")  # not any file of the repository
     with _locked(git_dir):
         try:
             previous = results(git_dir, branch, sha).get(agent, {})

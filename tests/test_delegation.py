@@ -521,7 +521,7 @@ class ReviewReportTests(RepoTestCase):
         (self.work / ".work").mkdir(exist_ok=True)
         (self.work / ".work" / "reviews").symlink_to(outside)
         report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
-        self.assertIn("fuera del repositorio", self.record(report, ok=False))
+        self.assertIn("queda fuera de", self.record(report, ok=False))
         self.assertEqual(list(outside.iterdir()), [])
         self.assertNotIn("verificador", self.recorded())
 
@@ -560,7 +560,7 @@ class ReviewReportTests(RepoTestCase):
         secret = self.tmp / "secret.txt"
         secret.write_text("clave privada\n", encoding="utf-8")
         out = self.record(str(secret), ok=False)
-        self.assertIn("fuera del repositorio", out)
+        self.assertIn("queda fuera de", out)
         self.assertNotIn("verificador", self.recorded())
         fifo = self.inbox / "pipe"
         os.mkfifo(fifo)
@@ -637,6 +637,54 @@ class ReviewReportTests(RepoTestCase):
         self.assertIsNone(event["orphan"])
         out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
         self.assertIn("necesita", out)
+
+    def test_the_cli_traces_review_failed_with_its_reason_and_failures(self):
+        # verifies: SPEC-0013/AC-14
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        failed = [e for e in events if e["event"] == "review.failed"]
+        self.assertEqual([e["failures"] for e in failed], [1, 2])
+        self.assertIn("declara", failed[-1]["reason"])
+
+    def test_the_cli_traces_the_orphan_archive_when_the_store_cannot_be_written(self):
+        # verifies: SPEC-0013/AC-14
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.mkdir(parents=True)  # reading finds no file, replacing a directory fails after archiving
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        event = [e for e in events if e["event"] == "review.not_recorded"][-1]
+        self.assertEqual(event["stage"], "store")
+        self.assertTrue(Path(event["orphan"]).is_file())
+
+    def test_integration_refuses_a_failed_review(self):
+        # verifies: SPEC-0013/AC-07
+        from unittest import mock
+
+        from mthlib import branches, flow
+        from mthlib.errors import MthError
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        ctx = mock.Mock()
+        ctx.cfg = {"review": {"agents": ["verificador"], "required_for": ["feat"]}}
+        ctx.git.git_dir.return_value = self.work / ".git"
+        ctx.git.sha.return_value = self.git("rev-parse", "HEAD").strip()
+        info = mock.Mock(is_child=False, kind="feat")
+        with mock.patch.object(flow, "required_reviewers", return_value=["verificador"]), \
+                self.assertRaises(MthError) as caught:
+            flow._review(ctx, info, "feat/demo")
+        self.assertIn("Revisión fallida", caught.exception.message)
+
+    def test_a_summary_with_carriage_returns_stays_on_one_row(self):
+        # verifies: SPEC-0013/AC-12
+        from mthlib import flow
+        self.assertEqual(flow._cell("a\r\nb | c\td"), "a b \\| c d")
+
+    def test_a_report_outside_work_is_refused_even_inside_the_repository(self):
+        # verifies: SPEC-0013/AC-12
+        env = self.work / ".env"
+        env.write_text("TOKEN=abc\n", encoding="utf-8")
+        self.assertIn("queda fuera de", self.record(str(env), ok=False))
+        self.assertNotIn("verificador", self.recorded())
 
     def test_a_summary_pipe_cannot_break_the_pr_table(self):
         # verifies: SPEC-0013/AC-12

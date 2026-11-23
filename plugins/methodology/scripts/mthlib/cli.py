@@ -111,7 +111,8 @@ def _cmd_review(args: argparse.Namespace) -> int:
             raise
         ctx.tracer.event("review.failed" if entry["status"] == "failed" else "review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
                          blocking=entry.get("blocking"), attempts=entry["attempts"],
-                         reason=entry.get("reason"), previous_status=entry.get("previous_status"))
+                         reason=entry.get("reason"), failures=entry.get("failures"),
+                         previous_status=entry.get("previous_status"))
         if entry["status"] == "failed":
             stop = entry["failures"] >= 2
             raise MthError(

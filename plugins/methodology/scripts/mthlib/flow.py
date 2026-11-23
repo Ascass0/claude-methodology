@@ -182,7 +182,7 @@ def _merge_message(title: str, number: int, head: str, base: str,
 
 def _cell(text: str) -> str:
     """A table cell from free text: one line, pipes escaped (no backslash inside an f-string: Python 3.11)."""
-    return text.replace("\n", " ").replace("|", "\\|")
+    return " ".join(text.split()).replace("|", "\\|")
 
 
 def _pr_body(summary: str, refs: list[str], frag: changelog.Fragment | None,
