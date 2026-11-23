@@ -1,7 +1,7 @@
 # Guard común de los revisores: git de solo lectura y filtros de texto. Lo heredan los revisores
 # con `extends = "_shared/guard-revisor.toml"`.
 #
-# Semántica (implementación de referencia: tools/reference/agent_guard.py):
+# Semántica (implementación: mthlib/agent_guard.py, `mth agent-guard`):
 # - allowlist: cada segmento del comando (separado por ; && || | y saltos de línea) debe empezar
 #   por un prefijo de `allow`; tras un `|`, también vale un programa de `filters`.
 # - Se rechaza siempre: asignaciones de entorno delante del programa (GIT_EXTERNAL_DIFF=...),

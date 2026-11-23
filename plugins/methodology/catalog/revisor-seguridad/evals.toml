@@ -1,5 +1,5 @@
-# Evals de revisor-seguridad. [[guard]]: deterministas (los ejecuta tools/check_catalog.py con el
-# guard de referencia). [[scope]]: con modelo; el arnés aplica `diff` sobre un repo de prueba,
+# Evals de revisor-seguridad. [[guard]]: deterministas (los ejecuta tests/test_agent_guard.py de
+# claude-methodology con mth agent-guard). [[scope]]: con modelo; el arnés aplica `diff` sobre un repo de prueba,
 # lanza el revisor y comprueba la salida.
 
 [[guard]]
