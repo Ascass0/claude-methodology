@@ -122,7 +122,7 @@ Informa de todos los problemas a la vez y termina con error si hay alguno. Los `
 | El agente tocó ficheros fuera de su alcance o hay cambios que nadie declara | `mth plan verify` | Error con cada fichero |
 | El manifiesto afirma cambios que no existen | `mth plan verify` | Error (afirmación falsa) |
 | Criterios sin cubrir, tests en rojo o sin tests | `mth plan verify` | Error |
-| Revisor caído o informe sin la línea `BLOQUEANTES: <n>` | `mth review record` | No se registra; la revisión sigue pendiente y `mth integrate` la exige |
+| Revisor caído o informe sin la línea `BLOQUEANTES: <n>` | `mth review record` | Se registra como fallida (SPEC-0013); la revisión no aprueba y `mth integrate` la rechaza |
 
 ## Criterios de aceptación
 

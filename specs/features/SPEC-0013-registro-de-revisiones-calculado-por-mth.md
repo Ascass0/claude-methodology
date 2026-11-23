@@ -1,6 +1,6 @@
 # SPEC-0013 · Registro de revisiones calculado por mth
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-23
 - ADRs: [ADR-0008](../adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md)
 - Sustituye a: la parte de [SPEC-0001](SPEC-0001-delegacion-verificable.md) que toma los bloqueantes de la última línea del informe (AC-12 queda ampliado, no anulado)

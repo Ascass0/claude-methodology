@@ -339,29 +339,121 @@ class ReviewReportTests(RepoTestCase):
         sha = self.git("rev-parse", "HEAD").strip()
         return review.results(self.work / ".git", "feat/demo", sha)
 
+    def report_file(self, name: str, body: str) -> str:
+        path = self.tmp / name
+        path.write_text(body, encoding="utf-8")
+        return str(path)
+
     def record(self, report, ok):
         return self.mth("review", "record", "verificador", "--report", report, "--summary", "s", ok=ok)
 
-    def test_blocking_count_comes_from_report(self):
-        # verifies: SPEC-0001/AC-12
-        report = self.tmp / "r.txt"
-        report.write_text("HALLAZGOS\n1. [bloqueante] a.py:1 — x.\n\nBLOQUEANTES: 1\n\n", encoding="utf-8")
-        self.assertIn("(1 bloqueantes)", self.record(str(report), ok=True))
-        self.assertEqual(self.recorded()["verificador"]["blocking"], 1)
+    def test_blocking_count_is_computed_from_the_findings(self):
+        # verifies: SPEC-0013/AC-01
+        report = self.report_file("r.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\n2. [Importante] b.py:2 — y.\n"
+                            "   [bloqueante] continuación que no cuenta\nRESUMEN: r\nBLOQUEANTES: 1\n\n")
+        self.assertIn("(1 bloqueantes, intento 1)", self.record(report, ok=True))
+        entry = self.recorded()["verificador"]
+        self.assertEqual((entry["status"], entry["blocking"]), ("ok", 1))
+        self.assertEqual(entry["findings"], {"bloqueante": 1, "importante": 1, "sugerencia": 0})
 
-    def test_unfinished_reviewer_is_not_recorded(self):
+    def test_ninguno_counts_zero(self):
+        # verifies: SPEC-0013/AC-01
+        report = self.report_file("r.txt", "CRITERIOS\n- AC-01: sí\nHALLAZGOS\nninguno\nRESUMEN: r\nBLOQUEANTES: 0\n")
+        self.record(report, ok=True)
+        self.assertEqual(self.recorded()["verificador"]["blocking"], 0)
+
+    def test_a_declared_figure_that_differs_is_a_failed_review(self):
+        # verifies: SPEC-0013/AC-02
+        for name, body in (("lower.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n"),
+                           ("higher.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")):
+            with self.subTest(name=name):
+                out = self.record(self.report_file(name, body), ok=False)
+                self.assertIn("declara", out)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+                from mthlib import review
+                approved, state = review.describe(self.recorded()["verificador"])
+                self.assertFalse(approved)
+                self.assertIn("fallida (intento", state)
+
+    def test_an_unreadable_format_is_a_failed_review(self):
+        # verifies: SPEC-0013/AC-03
+        cases = {
+            "nosection": "RESUMEN: r\nBLOQUEANTES: 0\n",
+            "twice": "HALLAZGOS\nninguno\nHALLAZGOS\nninguno\nBLOQUEANTES: 0\n",
+            "bullets": "HALLAZGOS\n- [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "severity": "HALLAZGOS\n1. [grave] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "both": "HALLAZGOS\nninguno\n1. [sugerencia] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "stray": "HALLAZGOS\nninguno\nAfirmaciones y estado:\nBLOQUEANTES: 0\n",
+            "cut": "HALLAZGOS\n1. [importante] a.py:1 — x.\n",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                self.record(self.report_file(f"{name}.txt", body), ok=False)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+                self.assertNotIn("blocking", self.recorded()["verificador"])
+
+    def test_missing_empty_or_oversized_reports_are_failed_reviews(self):
+        # verifies: SPEC-0013/AC-04
         # verifies: SPEC-0001/AC-12
-        empty = self.tmp / "empty.txt"
-        empty.write_text("", encoding="utf-8")
-        cut = self.tmp / "cut.txt"
-        cut.write_text("HALLAZGOS\n1. [importante] a.py:1 — x.\n", encoding="utf-8")
-        huge = self.tmp / "huge.txt"
-        huge.write_text("x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n", encoding="utf-8")
-        for report in (str(self.tmp / "missing.txt"), str(empty), str(cut), str(huge)):
+        huge = self.report_file("huge.txt", "x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n")
+        for report in (str(self.tmp / "missing.txt"), self.report_file("empty.txt", ""), huge):
             with self.subTest(report=report):
-                out = self.record(report, ok=False)
-                self.assertIn("revisor no ejecutado", out)
-                self.assertNotIn("verificador", self.recorded())
+                self.record(report, ok=False)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+
+    def test_the_report_is_archived_verbatim_and_never_overwritten(self):
+        # verifies: SPEC-0013/AC-05
+        body = "HALLAZGOS\r\nninguno\r\nBLOQUEANTES: 0\r\n"
+        report = self.tmp / "r.txt"
+        report.write_bytes(body.encode())
+        self.record(str(report), ok=True)
+        sha = self.git("rev-parse", "HEAD").strip()
+        entry = self.recorded()["verificador"]
+        archived = self.work / ".work" / "reviews" / f"{sha}-verificador-1.md"
+        self.assertEqual(archived.read_bytes(), body.encode())
+        self.assertEqual(entry["report"], str(archived))
+        import hashlib
+        self.assertEqual(entry["report_sha256"], hashlib.sha256(body.encode()).hexdigest())
+        archived.write_text("otro", encoding="utf-8")  # a second record must not touch attempt 1
+        self.record(str(report), ok=True)
+        self.assertEqual(archived.read_text(encoding="utf-8"), "otro")
+        self.assertTrue((self.work / ".work" / "reviews" / f"{sha}-verificador-2.md").is_file())
+
+    def test_attempts_are_counted_and_survive_a_later_success(self):
+        # verifies: SPEC-0013/AC-06
+        # verifies: SPEC-0013/AC-09
+        bad = self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")
+        good = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("UNA corrección", self.record(bad, ok=False))
+        self.assertEqual(self.recorded()["verificador"]["attempts"], 1)
+        out = self.record(bad, ok=False)
+        self.assertIn("detente", out)
+        self.assertEqual(self.recorded()["verificador"]["attempts"], 2)
+        self.record(good, ok=True)
+        entry = self.recorded()["verificador"]
+        self.assertEqual((entry["status"], entry["attempts"], entry["blocking"]), ("ok", 3, 0))
+        self.git("commit", "--allow-empty", "-q", "-m", "chore: next\n\nRefs: n/a")
+        self.assertNotIn("verificador", self.recorded())  # a new SHA starts from zero
+
+    def test_integration_tells_a_failed_review_from_a_missing_one(self):
+        # verifies: SPEC-0013/AC-07
+        from mthlib import review
+        from mthlib.errors import MthError
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        sha = self.git("rev-parse", "HEAD").strip()
+        with self.assertRaises(MthError) as ctx:
+            review.check(self.work / ".git", "feat/demo", sha, ["verificador"])
+        self.assertIn("Revisión fallida", ctx.exception.message)
+        self.assertIn("intento 1", ctx.exception.message)
+        self.assertEqual(review.describe(None), (False, "pendiente"))
+
+    def test_an_unarchivable_report_records_nothing(self):
+        # verifies: SPEC-0013/AC-08
+        (self.work / ".work").mkdir(exist_ok=True)
+        (self.work / ".work" / "reviews").write_text("no es un directorio", encoding="utf-8")
+        report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("No se pudo archivar", self.record(report, ok=False))
+        self.assertNotIn("verificador", self.recorded())
 
 
 if __name__ == "__main__":

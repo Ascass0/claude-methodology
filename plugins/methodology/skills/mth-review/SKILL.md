@@ -31,9 +31,14 @@ Bloqueante = incumple una regla DEBE, un criterio de aceptación, o introduce un
 Termina con: BLOQUEANTES: <n>
 ```
 
-Guarda el informe completo de cada revisor, tal cual, en `.work/reviews/<rama>-<agente>.md` (local, excluido de git). Su última línea es `BLOQUEANTES: <n>`.
+Guarda el informe de cada revisor **tal cual lo devolvió**, sin resumir ni retocar, en un fichero temporal (por ejemplo `.work/tmp/<agente>.md`). `mth review record` lo archiva byte a byte en `.work/reviews/<sha>-<agente>-<n>.md` (`<n>` = número de intento) y es el registro de la revisión. Si quieres un resumen, que sea un fichero aparte que enlace al original; nunca lo sustituye. El informe incluye siempre la sección `HALLAZGOS` y termina con `BLOQUEANTES: <n>`.
 
-**Revisor que no termina** (se cae, agota el tiempo o su informe no acaba en `BLOQUEANTES: <n>`): no ha revisado. Nunca cuenta como "sin hallazgos". Relánzalo una vez con el mismo encargo; si vuelve a fallar, detente y avisa (PRINCIPLES §11).
+**El número de bloqueantes lo calcula `mth`:** cuenta las líneas `N. [bloqueante] …` de `HALLAZGOS` y contrasta la línea `BLOQUEANTES: <n>` del agente. Si no coinciden, o `mth` no sabe leer el formato (sección ausente, viñetas, texto suelto, severidad desconocida, informe vacío o ausente), registra la revisión como **fallida**: no aprueba nada y `mth review status` la muestra con su motivo y su número de intento.
+
+**Revisor que falla** (informe ilegible o incoherente, se cae o agota el tiempo): no ha revisado. Nunca cuenta como "sin hallazgos".
+- Primer fallo: pide **una** corrección al **mismo** agente con `SendMessage` (mismo contexto), citando el motivo que imprime `mth`, y registra de nuevo. No lances otro agente desde cero: eso es volver a tirar el dado.
+- Segundo fallo: detente y avisa (PRINCIPLES §11). El fallo está en el prompt del revisor; `attempts` y `reason` del registro lo dejan ver.
+- Si el agente no puede continuar (sin contexto, caído), relánzalo una vez con el mismo encargo y cuéntalo como el segundo intento.
 
 ## Resolver
 
@@ -50,6 +55,6 @@ mth review record <agente> --report <informe> --summary "<resumen en español en
 mth review status
 ```
 
-`mth` toma los bloqueantes de la última línea del informe. Si el informe falta, está vacío o no termina en esa línea, no registra nada y la revisión sigue pendiente.
+`mth` calcula los bloqueantes del informe. Si falta, está vacío o no se puede leer, o la cuenta no coincide con la que declara el revisor, registra la revisión como fallida y la integración sigue bloqueada.
 
 `mth integrate` exige un registro con 0 bloqueantes de cada revisor para el HEAD actual, y copia los resúmenes al PR.
