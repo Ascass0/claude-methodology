@@ -396,10 +396,15 @@ class ReviewReportTests(RepoTestCase):
         # verifies: SPEC-0013/AC-04
         # verifies: SPEC-0001/AC-12
         huge = self.report_file("huge.txt", "x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n")
-        for report in (str(self.tmp / "missing.txt"), self.report_file("empty.txt", ""), huge):
+        cases = ((str(self.tmp / "missing.txt"), "no se puede leer"), (self.report_file("empty.txt", ""), "vacío"),
+                 (huge, "supera"))
+        for report, reason in cases:
             with self.subTest(report=report):
                 self.record(report, ok=False)
-                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+                entry = self.recorded()["verificador"]
+                self.assertEqual(entry["status"], "failed")
+                self.assertIn(reason, entry["reason"])
+                self.assertNotIn("report_sha256", entry)
 
     def test_the_report_is_archived_verbatim_and_never_overwritten(self):
         # verifies: SPEC-0013/AC-05
@@ -469,11 +474,24 @@ class ReviewReportTests(RepoTestCase):
 
     def test_status_shows_the_failed_review_and_its_attempts(self):
         # verifies: SPEC-0013/AC-07
-        from mthlib import review
+        from unittest import mock
+
+        from mthlib import cli, review
         self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
         approved, state = review.describe(self.recorded()["verificador"])
         self.assertFalse(approved)
         self.assertTrue(state.startswith("fallida (intento 1): el revisor declara 1"))
+        # The command prints that state; the test repo has no remote, so the branch lookup is stubbed.
+        info = mock.Mock()
+        with mock.patch.object(cli.branches, "parse", return_value=info), \
+                mock.patch.object(cli, "required_reviewers", return_value=["verificador"]), \
+                mock.patch.object(cli, "_ctx") as ctx, mock.patch("builtins.print") as shown:
+            ctx.return_value.git.current_branch.return_value = "feat/demo"
+            ctx.return_value.git.sha.return_value = self.git("rev-parse", "HEAD").strip()
+            ctx.return_value.git.git_dir.return_value = self.work / ".git"
+            ctx.return_value.cfg = {"review": {"agents": ["verificador"]}}
+            cli._cmd_review(mock.Mock(action="status", agent=None))
+        self.assertIn("fallida (intento 1)", shown.call_args.args[0])
 
     def test_a_blocker_mark_outside_the_counted_findings_fails_the_review(self):
         # verifies: SPEC-0013/AC-10
