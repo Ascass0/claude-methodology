@@ -195,15 +195,24 @@ class AllowlistHardeningTests(GuardTestCase):
         denied = ["./git log", "/tmp/evil/git diff", "git diff $'--output=/tmp/x'", "git diff --{output,x}=/tmp/x",
                   "git grep $'-Ocmd' x", "git diff *", "git log ?", "git diff ~/x", "git log `id`",
                   "git diff | sort -o /tmp/x", "git log | sort --out=/tmp/x", "git log | uniq a b",
-                  "git log | sort -S1 --compress-program=sh", 'git log --grep="$HOME"']
+                  "git log | sort -S1 --compress-program=sh", 'git log --grep="$HOME"',
+                  "git grep --open=sh -n x", "git grep --open-files-in-p=sh x", "git diff --out=/tmp/x"]
         for command in denied:
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command=command)), 2)
         allowed = ["git log --oneline | sort | uniq -c", "git grep -n 'a.*b' -- '*.py'", "git log --grep='$HOME'",
-                   'git log --grep="fix: x" 2>&1 | head -5']
+                   'git log --grep="fix: x" 2>&1 | head -5', "git diff HEAD~1", "git log HEAD~3..HEAD -- src"]
         for command in allowed:
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command=command)), 0)
+
+    def test_jq_only_filters_stdin(self):
+        # verifies: SPEC-0012/AC-23
+        for command, expected in {"gh run list --json name | jq '.[].name'": 0, "gh run list | jq -n env": 2,
+                                  "gh run list | jq -n '$ENV.GH_TOKEN'": 2, "gh run list | jq --rawfile a x .": 2,
+                                  "gh run list | jq -f filtro.jq": 2, "gh run list | jq 'input_filename'": 2}.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("respondedor-incidencias", command=command)), expected)
 
     def test_only_this_plugins_mth_passes_with_a_path(self):
         # verifies: SPEC-0012/AC-23
@@ -264,7 +273,20 @@ class DecisionLogTests(GuardTestCase):
         self.assertEqual(events[0]["session"], "s")
         self.assertIn("RuntimeError: boom", events[2]["traceback"])
 
+    def test_the_log_holds_no_whole_commands_nor_credentials_and_is_private(self):
+        # verifies: SPEC-0012/AC-27
+        self.repo.guard(self.repo.payload("revisor-seguridad", command="GH_TOKEN=ghp_s3cr3t git log --grep=x"))
+        self.repo.guard(self.repo.payload("respondedor-incidencias",
+                                          command="gh api -H 'Authorization: token ghp_s3cr3t' repos/x"))
+        text = (self.repo.root / ".git/mth/agent-guard.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn("s3cr3t", text)
+        self.assertNotIn("--grep", text)
+        self.assertEqual([e["target"] for e in self.events()], ["GH_TOKEN=[redactado] git", "gh api"])
+        self.assertEqual((self.repo.root / ".git/mth/agent-guard.jsonl").stat().st_mode & 0o777, 0o600)
+        self.assertEqual(agent_guard.redact("Authorization: Bearer abc x"), "Authorization: Bearer [redactado] x")
+
     def test_the_log_rotates(self):
+        # verifies: SPEC-0012/AC-27
         with mock.patch.object(agent_guard, "LOG_MAX_BYTES", 10):
             for _ in range(3):
                 self.repo.guard(self.repo.payload("revisor-seguridad", command="git log"))
@@ -306,7 +328,6 @@ class ShimTests(GuardTestCase):
         self.assertFalse(marker.exists())
 
 
-
     def test_without_launcher_only_catalog_or_unidentified_subagents_are_blocked(self):
         # verifies: SPEC-0012/AC-22
         self.repo.write(".claude/agents/propio.md", "---\nname: propio\n---\nAgente del repo.\n")
@@ -331,6 +352,42 @@ class ShimTests(GuardTestCase):
         self.assertEqual(self.run_shim(push).returncode, 2)
         self.assertEqual(self.run_shim(log).returncode, 0)
         self.assertEqual(self.run_shim(log, project=wt).returncode, 0)
+
+    def path_with(self, tools: dict[str, str]) -> str:
+        """A PATH with stub executables first; ``tools`` maps a name to its script body."""
+        stubs = self.repo.tmp / "stubs"
+        stubs.mkdir(exist_ok=True)
+        for name, body in tools.items():
+            (stubs / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+            (stubs / name).chmod(0o755)
+        return f"{stubs}{os.pathsep}{os.environ['PATH']}"
+
+    def test_a_guard_cut_by_the_time_limit_blocks_and_is_logged(self):
+        # verifies: SPEC-0012/AC-24
+        self.fake_launcher("exit 0\n")
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root),
+               "PATH": self.path_with({"timeout": 'shift; [ "$1" = git ] && exec "$@"; exit 124'})}
+        proc = subprocess.run(["sh", str(self.shim)], input=json.dumps(self.repo.payload("revisor-adr", command="git log")),
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 2)
+        log = (self.common / "mth" / "agent-guard.jsonl").read_text(encoding="utf-8")
+        self.assertEqual(json.loads(log.splitlines()[-1])["category"], "timeout")
+
+    def test_without_timeout_the_shim_falls_back_to_perl(self):
+        if shutil.which("perl") is None:
+            self.skipTest("perl no disponible")
+        bin_dir = self.repo.tmp / "bin"
+        bin_dir.mkdir()
+        for tool in ("sh", "git", "sed", "head", "grep", "cat", "mkdir", "perl", "sleep"):
+            if shutil.which(tool):
+                (bin_dir / tool).symlink_to(shutil.which(tool))
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root), "PATH": str(bin_dir)}
+        run = lambda: subprocess.run([shutil.which("sh"), str(self.shim)], env=env, capture_output=True, text=True,
+                                     input=json.dumps(self.repo.payload("revisor-adr", command="git log")))
+        self.fake_launcher("exit 0\n")
+        self.assertEqual(run().returncode, 0)
+        self.fake_launcher("exit 2\n")
+        self.assertEqual(run().returncode, 2)
 
     def test_any_failure_of_the_launcher_blocks(self):
         self.fake_launcher("exit 1\n")

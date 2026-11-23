@@ -9,6 +9,8 @@ from pathlib import Path
 def atomic_write(path: Path, text: str, mode: int | None = None) -> None:
     """Replace ``path`` with ``text`` atomically: readers see the old or the new file, never half.
 
+    The file keeps its current permissions (0644 when new) unless ``mode`` is given.
+
     Raises:
         OSError: The directory cannot be created or written.
     """
@@ -17,8 +19,9 @@ def atomic_write(path: Path, text: str, mode: int | None = None) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
-        if mode is not None:
-            os.chmod(tmp, mode)
+        if mode is None:
+            mode = path.stat().st_mode & 0o7777 if path.exists() else 0o644
+        os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

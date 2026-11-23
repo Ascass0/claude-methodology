@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import sys
 import tomllib
 import traceback
@@ -27,13 +28,14 @@ from pathlib import Path
 from . import catalog, globs
 from .errors import MthError
 from .log import Tracer
-from .proc import run
+from .proc import CommandTimeout, run
 
 BLOCK = 2  # Claude Code: exit code 2 blocks the tool call and shows stderr to the model.
 AGENTS_DIR = Path(".claude") / "agents"
 GUARDS_DIR = Path(".claude") / "mth" / "agents"
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 GIT_TIMEOUT = 5  # seconds per git call; the shim and the hook entry allow more (SPEC-0012)
+GUARD_TIMEOUT = 15  # seconds for the whole decision, below the shim (20 s) and the hook entry (30 s)
 LOG_NAME = "agent-guard.jsonl"
 LOG_MAX_BYTES = 1024 * 1024
 # Files that define the restrictions themselves: never writable by a catalog agent (SPEC-0012/AC-25).
@@ -54,6 +56,11 @@ _TEMPLATE_HEADER = "<!-- mth:template "
 _FILTER_DENIED = {"sort": {"short": "oT", "long": ("output", "compress-program", "temporary-directory",
                                                    "files0-from")}}
 _UNIQ_VALUE_OPTIONS = {"-f", "-s", "-w"}
+# jq must not read the environment (tokens) nor files: it filters stdin only.
+_JQ_DENIED_OPTIONS = ("-f", "--from-file", "--rawfile", "--slurpfile", "-L")
+_JQ_DENIED_TEXT = re.compile(r"\benv\b|\$ENV|input_filename|\$__loc__")
+_SECRET = re.compile(r"(?i)(\b[A-Z][A-Z0-9_]*=|authorization:?\s*(bearer\s+)?|token[=:\s]+|password[=:\s]+)\S+"
+                     r"|\bgh[pousr]_[A-Za-z0-9]+|\bsk-[A-Za-z0-9_-]+")
 
 
 class Denied(Exception):
@@ -110,7 +117,10 @@ def unquoted_expansion(command: str) -> str | None:
     """
     quote = None
     escaped = False
+    previous = " "
     for ch in command:
+        at_word_start = previous in " \t\n;|&=:("
+        previous = ch
         if escaped:
             escaped = False
             continue
@@ -128,6 +138,9 @@ def unquoted_expansion(command: str) -> str | None:
             continue
         if ch in "'\"":
             quote = ch
+        elif ch == "~":
+            if at_word_start:  # ~/x, x=~/y expand; HEAD~1 does not
+                return ch
         elif ch in _UNQUOTED_EXPANSIONS:
             return ch
     return None
@@ -157,9 +170,12 @@ def _starts(words: list[str], prefix: str) -> bool:
 
 def _has_flag(args: list[str], flags: list[str]) -> str | None:
     for a in args:
+        typed = a.split("=", 1)[0]
         for f in flags:
             if a == f or (f.startswith("--") and a.startswith(f + "=")):
                 return f
+            if f.startswith("--") and typed.startswith("--") and len(typed) > 2 and f.startswith(typed):
+                return f  # git and GNU tools accept unique prefixes: --open=sh is --open-files-in-pager
             if len(f) == 2 and f.startswith("-") and not a.startswith("--") and a.startswith(f) and len(a) > 2:
                 return f  # -XPOST, -Ffoo
     return None
@@ -180,6 +196,10 @@ def _check_filter(words: list[str], deny_flags: list[str]) -> None:
                     raise Denied(f"Opción no permitida en `{program}`: `{a}`.")
             elif a.startswith("-") and any(c in rules["short"] for c in a[1:]):
                 raise Denied(f"Opción no permitida en `{program}`: `{a}`.")
+    if program == "jq":
+        for a in args:
+            if a.split("=", 1)[0] in _JQ_DENIED_OPTIONS or _JQ_DENIED_TEXT.search(a):
+                raise Denied(f"`jq` solo filtra la entrada estándar: no se admite `{a}`.")
     if program == "uniq":  # uniq [INPUT [OUTPUT]]: a positional argument may be an output file
         previous = ""
         for a in args:
@@ -270,8 +290,10 @@ def _rev_parse(where: Path, *what: str) -> list[str]:
     try:
         proc = run(["git", "rev-parse", "--path-format=absolute", *what], cwd=where, check=False,
                    timeout=GIT_TIMEOUT)
-    except MthError as exc:
+    except CommandTimeout as exc:
         raise Denied(exc.message, "timeout") from exc
+    except MthError as exc:
+        raise Denied(exc.message, "git") from exc
     if proc.returncode != 0:
         raise Denied(f"No se puede resolver el repositorio de {where}.")
     return proc.stdout.splitlines()
@@ -405,6 +427,20 @@ def _common_dir(project: Path) -> Path | None:
         return None
 
 
+def redact(text: str) -> str:
+    """``text`` with values that look like credentials replaced (PRINCIPLES §4)."""
+    return _SECRET.sub(lambda m: (m.group(1) or "") + "[redactado]" if m.group(1) else "[redactado]", text)
+
+
+def _target(tool_input: dict) -> str:
+    """What the call acts on, without secrets: program and subcommand, or the file path."""
+    command = tool_input.get("command")
+    if isinstance(command, str):
+        words = [w for w in re.split(r"\s+", command.strip()) if w][:2]
+        return redact(" ".join(words))
+    return str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")[:300]
+
+
 def _record(project: str | None, payload: object, result: str, category: str, reason: str,
             agent: str | None, detail: str | None = None) -> None:
     """Append the decision to ``<git-common-dir>/mth/agent-guard.jsonl`` (SPEC-0012/AC-27)."""
@@ -412,17 +448,35 @@ def _record(project: str | None, payload: object, result: str, category: str, re
         return
     data = payload if isinstance(payload, dict) else {}
     tool_input = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
-    target = tool_input.get("command") or tool_input.get("file_path") or tool_input.get("notebook_path") or ""
     event = {"agent": agent or data.get("agent_type"), "agent_id": data.get("agent_id"),
-             "session": data.get("session_id"), "tool": data.get("tool_name"), "target": str(target)[:300],
-             "result": result, "category": category, "reason": reason}
+             "session": data.get("session_id"), "tool": data.get("tool_name"), "target": _target(tool_input),
+             "result": result, "category": category, "reason": redact(reason)[:500]}
     if detail:
-        event["traceback"] = detail
+        event["traceback"] = redact(detail)
     Tracer(_common_dir(Path(project)), "agent-guard", LOG_NAME, LOG_MAX_BYTES).event("agent_guard.decision", **event)
+
+
+def _on_alarm(_signum, _frame) -> None:
+    raise Denied(f"El guard no terminó en {GUARD_TIMEOUT} s.", "timeout")
+
+
+def _arm_alarm(seconds: int) -> None:
+    """Bound the whole decision even where the shim has no timeout(1) (SPEC-0012/AC-24); 0 disarms."""
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, _on_alarm)
+        signal.alarm(seconds)
 
 
 def main(stdin: str, environ: dict[str, str] | None = None) -> int:
     """Hook entry point. Returns 0 to allow and 2 to block; never raises (fails closed)."""
+    _arm_alarm(GUARD_TIMEOUT)
+    try:
+        return _decide(stdin, environ)
+    finally:
+        _arm_alarm(0)
+
+
+def _decide(stdin: str, environ: dict[str, str] | None) -> int:
     environ = os.environ if environ is None else environ
     project = environ.get("CLAUDE_PROJECT_DIR")
     payload: object = None
