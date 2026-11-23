@@ -74,16 +74,26 @@ Obligatorio en todos los agentes. Admite `extends = "_shared/<guard>.toml"`; lo 
 |---|---|
 | `mode` | `allowlist` (cada segmento del comando debe empezar por un prefijo de `allow`), `denylist` (se rechaza lo que empiece por un prefijo de `deny`) o `deny` (sin Bash) |
 | `allow` / `deny` | Prefijos de comando |
-| `filters` | Programas admitidos tras un `\|` en `allowlist` (`grep`, `head`, `wc`…) |
+| `allow_exact` | Comandos admitidos solo tal cual, sin más argumentos (`git branch -r`: con `-d` borraría) |
+| `filters` | Programas admitidos tras un `\|` en `allowlist` (`grep`, `head`, `wc`…). También se les aplica `deny_flags`; `sort` no admite `-o`, `--output`, `--compress-program` ni `-T` (ni sus abreviaturas), y `uniq` no admite ficheros |
 | `deny_operators` | Subcadenas prohibidas en cualquier parte del comando, comillas incluidas (`>`, `$(`, `` ` ``, `<(`) |
 | `deny_flags` | Opciones prohibidas en los segmentos de `allow` (`--output`, `--ext-diff`, `-F`…) |
 
 Siempre se rechazan, además: asignaciones de entorno delante del programa (`GIT_EXTERNAL_DIFF=…`), `git -c`, `--config-env`, `--exec-path` y un `&` suelto.
 
+En `allowlist`, el guard razona sobre el comando ya tokenizado, así que rechaza lo que la shell cambiaría después:
+
+- un programa con ruta (`./git`, `/tmp/x/git`), salvo el `mth` del propio plugin (`sh <plugin>/scripts/mth`, `python <plugin>/scripts/mth.py`) o `$MTH`;
+- `$` fuera de comillas simples (`$'…'`, `$VAR`) y las comillas invertidas;
+- llaves, `~` y comodines (`*`, `?`, `[`) fuera de comillas: un `git diff *` expandiría a los nombres de fichero del repo, que pueden empezar por `--`.
+
+Para texto literal, comillas simples: `git grep -n 'a.*b' -- '*.py'`.
+
 `[write]` (Write, Edit, MultiEdit, NotebookEdit):
 
 - `allow`: globs de rutas permitidas, relativos a la raíz del proyecto. Sin `[write]`, no se escribe.
 - `in_worktree = true`: solo se escribe desde un worktree vinculado y dentro de él, nunca en el árbol principal. Lo llevan los agentes con `isolation: worktree` que escriben.
+- Nunca, aunque `allow` sea `**`: `.git`, `.claude/hooks/`, `.claude/mth/`, `.claude/agents/`, `.claude/settings*.json` ni `.claude/methodology.toml`. Un agente no puede relajar sus propias restricciones.
 
 `delegate = "global"`: el guard por agente no restringe al agente y se le aplica el guard global de la sesión. Solo lo puede declarar un agente de tipo `principal` (`orquestador`).
 
@@ -110,9 +120,10 @@ El arnés con modelo todavía no está en el repo. `tests/test_catalog.py` solo 
 | `.claude/hooks/mth-agent-guard` | sí | El shim, común a todos los agentes |
 | `.claude/settings.json` | sí | Una entrada `PreToolUse` (matcher `Bash\|Write\|Edit\|MultiEdit\|NotebookEdit`) que invoca el shim; se conservan las demás claves |
 | `.gitignore` | sí | `.claude/worktrees/`, si hay agentes con `isolation: worktree` |
+| `<git-common-dir>/mth/agent-guard.jsonl` | no | Una línea JSON por cada decisión sobre un agente del catálogo (agente, herramienta, comando o ruta, resultado, categoría, sesión; traceback si es un error interno). Se rota a `.1` al pasar de 1 MiB |
 | `<git-common-dir>/mth/launcher` | no | Dos líneas: el intérprete de Python (≥ 3.11) y la ruta de `mth.py`. La escribe `mth session` en cada sesión, porque la ruta del plugin cambia con cada versión. Está en el git-common-dir para que funcione desde un worktree |
 
-Flujo de una llamada: el shim lee el payload; si no trae `agent_id` ni `agent_type` (sesión principal), sale con 0 sin lanzar Python. Con un subagente llama a `mth agent-guard`, que deja pasar a los agentes que no son del catálogo (`methodology:verificador`, `Explore`, los propios del repo sin cabecera) y aplica su guard a los del catálogo. Sale con 0 (permite) o 2 (bloquea, motivo en stderr con el prefijo `[mth-agent-guard]`). Falla cerrado ante cualquier error; la tabla de fallos está en SPEC-0012.
+Flujo de una llamada: el shim lee el payload; si no trae `agent_id` ni `agent_type` (sesión principal), sale con 0 sin lanzar Python. Con un subagente llama a `mth agent-guard`, que deja pasar a los agentes que no son del catálogo (`methodology:verificador`, `Explore`, los propios del repo sin cabecera ni guard) y aplica su guard a los del catálogo. Un agente es del catálogo si su `.md` tiene cabecera de plantilla **o** existe su guard: si alguien borra la cabecera al adaptarlo a mano, queda bloqueado hasta `mth agents sync --force` o `mth agents remove`. Sin lanzador (plugin ausente o anterior a 0.8.0), el shim bloquea solo a los agentes del catálogo y a los que no puede identificar. El shim y el guard acotan su tiempo (5 s por llamada a `git`, 20 s el guard; la entrada del hook, 30 s): si vence, bloquean. Sale con 0 (permite) o 2 (bloquea, motivo en stderr con el prefijo `[mth-agent-guard]`). Falla cerrado ante cualquier error; la tabla de fallos está en SPEC-0012.
 
 ## Los 12 agentes
 
