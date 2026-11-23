@@ -70,6 +70,30 @@ class QueryTests(unittest.TestCase):
         with self.assertRaises(db_query.QueryError):
             self.query("SELECT 1", alias="vacia")
 
+    def test_rejects_paths_outside_the_repository_and_non_positive_limits(self):
+        # verifies: SPEC-0012/AC-26
+        outside = self.root.parent / f"{self.root.name}-fuera.db"
+        sqlite3.connect(outside).close()
+        self.addCleanup(outside.unlink)
+        (self.root / "enlace.db").symlink_to(outside)
+        for alias, path in {"rel": f"../{outside.name}", "abs": str(outside), "enlace": "enlace.db"}.items():
+            self.dbs[alias] = path
+            with self.subTest(alias=alias), self.assertRaises(db_query.QueryError) as ctx:
+                self.query("SELECT 1", alias=alias)
+            self.assertIn("fuera del repositorio", ctx.exception.message)
+        for limits in ({"max_rows": 0}, {"timeout_s": 0}, {"max_rows": -1}):
+            with self.subTest(limits=limits), self.assertRaises(db_query.QueryError):
+                self.query("SELECT 1", **limits)
+
+    def test_values_and_cells_are_bounded(self):
+        # verifies: SPEC-0012/AC-26
+        with self.assertRaises(db_query.QueryError):
+            self.query(f"SELECT zeroblob({db_query.MAX_VALUE_BYTES + 1})")
+        long = self.query("SELECT printf('%.*c', 5000, 'x')")
+        text = db_query.format_result(long, 10).splitlines()[1]
+        self.assertLess(len(text), db_query.MAX_CELL_CHARS + 50)
+        self.assertIn("caracteres más", text)
+
     def test_cells_are_escaped(self):
         result = db_query.Result(["a"], [("x\ty\nz",), (None,), (b"\x00\x01",)], False)
         self.assertEqual(db_query.format_result(result, 10), "a\nx\\ty\\nz\nNULL\n<2 bytes>")
