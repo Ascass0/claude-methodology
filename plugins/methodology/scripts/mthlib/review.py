@@ -6,9 +6,9 @@ summary of each review is copied into the PR body for traceability.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,6 +103,10 @@ def parse_report(text: str) -> Parsed:
             said_none = True
         else:
             raise ReportError(f"línea no admitida en HALLAZGOS: «{stripped[:60]}»")
+    marks = len(re.findall(r"\[bloqueante\]", text, re.IGNORECASE))
+    if marks != counts["bloqueante"]:
+        raise ReportError(f"hay {marks} marcas [bloqueante] y solo {counts['bloqueante']} son líneas de "
+                          "hallazgo de HALLAZGOS (sangradas, fuera de la sección o en otro texto)")
     if said_none and any(counts.values()):
         raise ReportError("HALLAZGOS dice 'ninguno' y lista hallazgos")
     if declared != counts["bloqueante"]:
@@ -113,43 +117,59 @@ def parse_report(text: str) -> Parsed:
 def read_report(path: Path) -> bytes:
     """Bytes of the report, or a ``ReportError`` if it cannot be used."""
     try:
-        size = path.stat().st_size
-        if size > MAX_REPORT_BYTES:
-            raise ReportError(f"el informe ocupa {size} bytes (máximo {MAX_REPORT_BYTES})")
-        data = path.read_bytes()
+        with open(path, "rb") as fh:
+            data = fh.read(MAX_REPORT_BYTES + 1)
     except OSError as exc:
         raise ReportError(f"no se puede leer el informe ({exc.strerror or exc})") from exc
+    if len(data) > MAX_REPORT_BYTES:
+        raise ReportError(f"el informe supera {MAX_REPORT_BYTES} bytes")
     if not data.strip():
         raise ReportError("el informe está vacío")
     return data
 
 
-def archive(directory: Path, sha: str, agent: str, first: int, data: bytes) -> tuple[Path, int]:
+_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def archive(root: Path, directory: Path, sha: str, agent: str, first: int, data: bytes) -> tuple[Path, int]:
     """Write the verbatim report to ``<sha>-<agent>-<n>.md`` and never overwrite one.
 
     Returns:
         The path and the attempt number actually used (>= ``first``).
 
     Raises:
-        MthError: The directory or file cannot be written; nothing is recorded.
+        MthError: The name is unsafe, the directory resolves outside ``root`` (a symbolic link in
+            a repository one does not trust), or it cannot be written; nothing is recorded.
     """
+    if not (_SAFE.fullmatch(sha) and _SAFE.fullmatch(agent)) or ".." in agent:
+        raise MthError(f"Nombre no válido para archivar el informe ({agent}, {sha[:12]}).",
+                       hint="El agente y el commit solo pueden llevar letras, dígitos, '.', '_' y '-'.")
+    if not directory.resolve().is_relative_to(root.resolve()):
+        raise MthError(f"{directory} apunta fuera del repositorio: no se archiva el informe.",
+                       hint="Sustituye el enlace simbólico por un directorio real; no se ha registrado nada.")
     n = first
     try:
         directory.mkdir(parents=True, exist_ok=True)
         while True:
             target = directory / f"{sha}-{agent}-{n}.md"
             try:
-                with open(target, "xb") as fh:
-                    fh.write(data)
-                return target, n
+                fh = open(target, "xb")
             except FileExistsError:
                 n += 1
+                continue
+            try:
+                with fh:
+                    fh.write(data)
+            except OSError:
+                target.unlink(missing_ok=True)  # a truncated file must not pass as the literal report
+                raise
+            return target, n
     except OSError as exc:
         raise MthError(f"No se pudo archivar el informe de {agent} en {directory}: {exc}.",
                        hint="Comprueba permisos y espacio y repite el registro: no se ha registrado nada.") from exc
 
 
-def record_report(git_dir: Path, reviews_dir: Path, branch: str, sha: str, agent: str,
+def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha: str, agent: str,
                   report: Path, summary: str) -> dict:
     """Record a review computed from the report; failures are recorded as ``failed`` (SPEC-0013).
 
@@ -172,7 +192,7 @@ def record_report(git_dir: Path, reviews_dir: Path, branch: str, sha: str, agent
         if same:
             path = report
         else:
-            path, attempt = archive(reviews_dir, sha, agent, attempt, data)
+            path, attempt = archive(root, reviews_dir, sha, agent, attempt, data)
         entry["report"] = str(path)
         entry["report_sha256"] = hashlib.sha256(data).hexdigest()
         try:
@@ -184,6 +204,8 @@ def record_report(git_dir: Path, reviews_dir: Path, branch: str, sha: str, agent
             entry["reason"] = str(exc)
     entry["status"] = "failed" if "reason" in entry else "ok"
     entry["attempts"] = attempt
+    # Consecutive failures drive the "stop" advice; an approved record in between resets them.
+    entry["failures"] = int(previous.get("failures", 0)) + 1 if entry["status"] == "failed" else 0
     record(git_dir, branch, sha, agent, entry)
     return entry
 

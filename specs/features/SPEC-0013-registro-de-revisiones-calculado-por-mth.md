@@ -39,7 +39,7 @@ El informe tiene una única sección `HALLAZGOS` (línea que es solo `HALLAZGOS`
 - líneas de continuación, que empiezan por un espacio o tabulador;
 - líneas en blanco.
 
-Cualquier otra cosa (viñetas, texto suelto, una severidad desconocida, dos secciones `HALLAZGOS`, ninguna) hace el informe **ilegible**. La última línea no vacía debe ser `BLOQUEANTES: <n>`.
+Además, la marca `[bloqueante]` no puede aparecer en ningún otro sitio del informe (líneas sangradas, otras secciones, prosa): cada marca debe ser una línea de hallazgo contada. Cualquier otra cosa (viñetas, texto suelto, una severidad desconocida, dos secciones `HALLAZGOS`, ninguna) hace el informe **ilegible**. La última línea no vacía debe ser `BLOQUEANTES: <n>`.
 
 ### Cálculo
 
@@ -56,6 +56,7 @@ Cualquier otra cosa (viñetas, texto suelto, una severidad desconocida, dos secc
 | `declared` | número de la última línea, si se pudo leer |
 | `findings` | cuenta por severidad |
 | `attempts` | intentos de registro de ese agente sobre ese SHA, fallidos y correctos |
+| `failures` | fallos consecutivos; un registro `ok` lo pone a 0 |
 | `reason` | causa del fallo, en una frase (`failed`) |
 | `report` / `report_sha256` | ruta del archivo literal y su huella |
 
@@ -67,7 +68,7 @@ Antes de analizarlo, `mth` copia el informe, byte a byte, a `.work/reviews/<sha>
 
 ### Reintentos
 
-Ante un registro `failed`, la sesión principal pide **una** corrección al **mismo** agente con `SendMessage` (mismo contexto), nombrando el motivo que imprime `mth`, y registra de nuevo. No lanza otro agente desde cero. Si el segundo intento también falla, se detiene y avisa (PRINCIPLES §11): el fallo está en el prompt del revisor, y `attempts` y `reason` permiten verlo. `mth review status` muestra los intentos.
+Ante un registro `failed`, la sesión principal pide **una** corrección al **mismo** agente con `SendMessage` (mismo contexto), nombrando el motivo que imprime `mth`, y registra de nuevo. No lanza otro agente desde cero. Si fallan dos intentos seguidos (`failures` ≥ 2), se detiene y avisa (PRINCIPLES §11): el fallo está en el prompt del revisor, y `attempts` y `reason` permiten verlo. `mth review status` muestra los intentos.
 
 ## Modos de fallo
 
@@ -78,8 +79,10 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 | Informe ausente, vacío o de más de 256 KiB | Lectura del fichero | Registro `failed` sin huella; error |
 | Informe que no es UTF-8 | Decodificación | Se archiva tal cual (es la evidencia), con su huella; registro `failed`; error |
 | No se puede archivar el informe (disco, permisos) | Error de escritura | No se registra nada y la revisión sigue pendiente; error reanudable |
+| `.work/reviews` es un enlace simbólico que sale del repo, o el agente o el SHA llevan caracteres no seguros | Resolución de la ruta y validación del nombre | No se archiva ni se registra nada; error |
+| El disco falla a mitad de la copia | `OSError` al escribir | Se borra el archivo parcial; no se registra nada |
 | Informe repetido en el mismo intento (ruta de archivo ocupada) | El archivo existe | El número de intento sube hasta uno libre; nunca se sobrescribe |
-| Segundo intento fallido | `attempts` ≥ 2 con `failed` | El mensaje manda detenerse y avisar, no relanzar |
+| Segundo fallo seguido | `failures` ≥ 2 | El mensaje manda detenerse y avisar, no relanzar |
 | `mth integrate` con un revisor `failed` | `review.check` | Rechaza con «revisión fallida» y el motivo, distinto de «falta» |
 
 ## Criterios de aceptación
@@ -92,8 +95,13 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 - **AC-06**: `attempts` cuenta los intentos por agente y SHA, sobrevive a un registro correcto posterior y se reinicia con un SHA nuevo.
 - **AC-07**: `mth review status` muestra una revisión `failed` con su motivo y los intentos, y `mth integrate` la rechaza distinguiéndola de una revisión pendiente.
 - **AC-08**: Si no se puede archivar el informe, no se registra nada.
+- **AC-10**: Una marca `[bloqueante]` fuera de las líneas de hallazgo contadas (sangrada, tras otra cabecera, en prosa) deja la revisión `failed`, aunque el informe declare 0.
+- **AC-11**: Si `.work/reviews` resuelve fuera del repo, o el agente o el SHA no son nombres seguros, no se archiva ni se registra nada; si la copia falla a medias no queda un archivo parcial.
 - **AC-09**: Un registro `ok` tras un `failed` deja la revisión aprobada con los bloqueantes calculados.
 
 ## Notas
+
+Límite aceptado: la cuenta solo detecta incoherencias. Un revisor que omite un hallazgo sigue produciendo un `ok`; que los hallazgos sean correctos y estén bien clasificados es juicio del revisor.
+
 
 La skill `mth-review` y el README describen el flujo de reintento con `SendMessage`. Los registros existentes (sin `status`) se leen como `ok`.

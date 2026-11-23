@@ -99,18 +99,19 @@ def _cmd_review(args: argparse.Namespace) -> int:
         if args.agent not in agents:
             raise MthError(f"'{args.agent}' no está en review.agents ({', '.join(agents) or 'vacío'}).")
         try:
-            entry = review.record_report(ctx.git.git_dir(), ctx.root / ".work" / "reviews", branch, sha,
+            entry = review.record_report(ctx.git.git_dir(), ctx.root, ctx.root / ".work" / "reviews", branch, sha,
                                          args.agent, Path(args.report), args.summary)
-        except MthError:
-            ctx.tracer.event("review.not_archived", branch=branch, sha=sha, agent=args.agent)
+        except MthError as exc:
+            ctx.tracer.event("review.not_archived", branch=branch, sha=sha, agent=args.agent,
+                             error=exc.message)
             raise
         ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
                          blocking=entry.get("blocking"), attempts=entry["attempts"],
                          reason=entry.get("reason"))
         if entry["status"] == "failed":
-            stop = entry["attempts"] >= 2
+            stop = entry["failures"] >= 2
             raise MthError(
-                f"Revisión de {args.agent} fallida (intento {entry['attempts']}): {entry['reason']}. "
+                f"Revisión de {args.agent} fallida (intento {entry['attempts']}, fallo {entry['failures']}): {entry['reason']}. "
                 "No aprueba nada.",
                 hint=("Segundo fallo: detente y avisa (PRINCIPLES §11); revisa el prompt del revisor."
                       if stop else

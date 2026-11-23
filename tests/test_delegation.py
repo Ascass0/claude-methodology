@@ -350,7 +350,7 @@ class ReviewReportTests(RepoTestCase):
     def test_blocking_count_is_computed_from_the_findings(self):
         # verifies: SPEC-0013/AC-01
         report = self.report_file("r.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\n2. [Importante] b.py:2 — y.\n"
-                            "   [bloqueante] continuación que no cuenta\nRESUMEN: r\nBLOQUEANTES: 1\n\n")
+                            "   continuación de la línea anterior\nRESUMEN: r\nBLOQUEANTES: 1\n\n")
         self.assertIn("(1 bloqueantes, intento 1)", self.record(report, ok=True))
         entry = self.recorded()["verificador"]
         self.assertEqual((entry["status"], entry["blocking"]), ("ok", 1))
@@ -474,6 +474,60 @@ class ReviewReportTests(RepoTestCase):
         approved, state = review.describe(self.recorded()["verificador"])
         self.assertFalse(approved)
         self.assertTrue(state.startswith("fallida (intento 1): el revisor declara 1"))
+
+    def test_a_blocker_mark_outside_the_counted_findings_fails_the_review(self):
+        # verifies: SPEC-0013/AC-10
+        cases = {
+            "indented": "HALLAZGOS\n  1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "after": "HALLAZGOS\nninguno\nFUERA DE ALCANCE\n1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "prose": "HALLAZGOS\nninguno\nRESUMEN: hay un [Bloqueante] sin contar\nBLOQUEANTES: 0\n",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                out = self.record(self.report_file(f"{name}.txt", body), ok=False)
+                self.assertIn("marcas [bloqueante]", out)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+
+    def test_an_archive_that_escapes_the_repository_is_refused(self):
+        # verifies: SPEC-0013/AC-11
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (self.work / ".work").mkdir(exist_ok=True)
+        (self.work / ".work" / "reviews").symlink_to(outside)
+        report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("fuera del repositorio", self.record(report, ok=False))
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertNotIn("verificador", self.recorded())
+
+    def test_unsafe_names_and_partial_copies(self):
+        # verifies: SPEC-0013/AC-11
+        from unittest import mock
+
+        from mthlib import review
+        from mthlib.errors import MthError
+        folder = self.work / ".work" / "reviews"
+        for agent in ("../x", "a/b", ".."):
+            with self.subTest(agent=agent), self.assertRaises(MthError):
+                review.archive(self.work, folder, "abc123", agent, 1, b"x")
+        real_open = open
+
+        def failing(path, mode="r", *a, **k):
+            fh = real_open(path, mode, *a, **k)
+            if mode == "xb":
+                fh.write = mock.Mock(side_effect=OSError("disco lleno"))
+            return fh
+
+        with mock.patch("builtins.open", failing), self.assertRaises(MthError):
+            review.archive(self.work, folder, "abc123", "verificador", 1, b"x")
+        self.assertEqual(list(folder.iterdir()), [])
+
+    def test_the_stop_advice_counts_consecutive_failures(self):
+        # verifies: SPEC-0013/AC-06
+        bad = self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")
+        good = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.record(good, ok=True)
+        self.assertIn("UNA corrección", self.record(bad, ok=False))  # a failure after an ok is the first
+        self.assertEqual(self.recorded()["verificador"]["failures"], 1)
 
     def test_an_unarchivable_report_records_nothing(self):
         # verifies: SPEC-0013/AC-08
