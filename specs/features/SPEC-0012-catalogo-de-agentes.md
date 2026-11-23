@@ -88,7 +88,7 @@ La entrada de `.claude/settings.json`:
 1. **Shim.** Si el payload no contiene `agent_id` ni `agent_type` (sesión principal), sale con 0 sin lanzar `mth`. En caso contrario:
    - lee el lanzador de `<git-common-dir>/mth/launcher`;
    - si no es un repositorio git, sale con 2;
-   - si no encuentra el lanzador (plugin ausente o anterior a 0.8.0), bloquea solo a los subagentes del catálogo (`.claude/mth/agents/<agente>.guard.toml` o cabecera de plantilla) y a los que no puede identificar; los demás (`verificador`, `Explore`...) siguen funcionando;
+   - si no encuentra el lanzador (plugin ausente o anterior a 0.8.0), bloquea solo a los subagentes del catálogo (`.claude/mth/agents/<agente>.guard.toml` o cabecera de plantilla) y a los que no puede identificar; si `agent_type` aparece más de una vez en el payload (un dato anidado de una herramienta), no se puede identificar y bloquea; los demás (`verificador`, `Explore`...) siguen funcionando;
    - si lo encuentra, le pasa el payload con `agent-guard`, acotado en tiempo con `timeout` o, si no existe (macOS), con `perl`; cualquier salida distinta de 0, también por tiempo agotado, bloquea. Si el guard muere por tiempo, el shim añade una línea al registro.
 2. **`mth agent-guard`.** Lee el JSON del hook por stdin:
    - **sin `agent_type`** (pero con `agent_id`): bloquea;
@@ -98,10 +98,10 @@ La entrada de `.claude/settings.json`:
    - las llamadas a `git` del guard tienen timeout, y el guard entero un límite propio; si vencen, bloquea;
    - sale con 0 para permitir y con 2 para bloquear, con el motivo en stderr. Falla cerrado ante cualquier error;
    - semántica de `[bash]` y de `[write] allow`: la de `mthlib/agent_guard.py`, portada de la implementación de referencia de la entrega; se documenta en [docs/catalogo-de-agentes.md](../../docs/catalogo-de-agentes.md). En modo `allowlist`, además:
-     - el programa no puede llevar ruta (`./git`, `/x/git`), salvo el `mth` del propio plugin (`sh <plugin>/scripts/mth`, `python <plugin>/scripts/mth.py`) o `$MTH`;
+     - el programa no puede llevar ruta (`./git`, `/x/git`), salvo el `mth` del propio plugin con ruta absoluta (`sh <plugin>/scripts/mth`, `python <plugin>/scripts/mth.py`) o `$MTH`;
      - se bloquea toda expansión de shell que el tokenizador no modela: `$` fuera de comillas simples (salvo `$MTH` como programa), comillas invertidas, llaves, `~` y comodines (`*`, `?`, `[`) fuera de comillas;
      - `deny_flags` cubre también las abreviaturas de las opciones largas (`git grep --open=sh` es `--open-files-in-pager`) y las cortas agrupadas (`git grep -nOsh`, `gh api -iXPOST`, `jq -nf`): se deniega si el grupo contiene la letra de una opción prohibida, aunque a veces sea un falso positivo (fail-closed);
-     - en los filtros tras `|` se aplican también `deny_flags`, y no se admiten las opciones que escriben o ejecutan (`sort -o/--output/--compress-program/-T`), ficheros posicionales en `uniq` ni lecturas del entorno o de ficheros en `jq` (`env`, `$ENV`, `input_filename`, `-f`, `--rawfile`, `--slurpfile`);
+     - en los filtros tras `|` se aplican también `deny_flags`, y no se admiten las opciones que escriben o ejecutan (`sort -o/--output/--compress-program/-T`), ficheros posicionales en `uniq` ni lecturas del entorno o de módulos en `jq` (`env`, `$ENV`, `input_filename`, `import`, `include`, `-f`, `--rawfile`, `--slurpfile`). Riesgo aceptado: un filtro (`jq`, `grep`, `head`...) puede recibir un fichero posicional y leerlo; no da nada que el agente no tenga ya con `Read`;
      - `~` solo cuenta como expansión al inicio de una palabra (`HEAD~1` se admite);
    - `[write]` nunca permite escribir en `.git`, `.claude/hooks/`, `.claude/mth/`, `.claude/agents/`, `.claude/settings*.json` ni `.claude/methodology.toml`, aunque `allow` sea `**`: un trabajador no puede relajar sus propias restricciones. La comparación no distingue mayúsculas, porque macOS y Windows resuelven `.Claude/Hooks` al mismo fichero.
 3. **Raíz y worktrees.** El `cwd` del payload tiene que pertenecer al mismo repositorio que `CLAUDE_PROJECT_DIR` (mismo `git-common-dir`); si no, se bloquea.
