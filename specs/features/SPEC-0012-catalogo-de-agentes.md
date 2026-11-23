@@ -123,6 +123,9 @@ La entrada de `.claude/settings.json`:
 
 - **`mth session`** escribe en `<git-common-dir>/mth/launcher` la ruta del lanzador vigente, igual que reescribe el hook `commit-msg`.
 - **`mth init`** ofrece el perfil `base` en la pregunta de revisores, con todo marcado salvo lo que no cumpla sus requisitos. Las variables obligatorias de los agentes opcionales se piden al añadirlos.
+  - La pregunta `revisores` pasa a hacerse en todos los perfiles, también en un repo nuevo sin agentes; si no, justo los repos nuevos se quedarían sin catálogo. Se corrige [SPEC-0004](SPEC-0004-adopcion-guiada.md) en consecuencia.
+  - La respuesta admite `catalog` (agentes del catálogo) y `vars` (sus variables). `mth init` comprueba requisitos y colisiones antes de tocar nada e instala los agentes en la rama de adopción, en el mismo commit.
+  - En la reestructuración ([SPEC-0011](SPEC-0011-reestructuracion-guiada-de-la-metodologia.md)) no se admite `catalog`: un repo adoptado gestiona sus agentes con `mth agents`.
 - **`mth doctor`** comprueba, y todos sus avisos son ⚠:
   - que cada agente instalado tiene su guard;
   - que existen el shim y la entrada de `.claude/settings.json`;
@@ -179,6 +182,7 @@ La entrada de `.claude/settings.json`:
 - **AC-17**: `mth agents add` añade la entrada de `.claude/settings.json` una sola vez y conserva las demás claves. Si el fichero es ilegible, no escribe nada.
 - **AC-18**: Con `in_worktree = true`, se permite escribir dentro del worktree vinculado del `cwd` y se bloquea escribir desde el árbol principal, fuera del worktree o con un `cwd` de otro repositorio.
 - **AC-19**: `[agents.<agente>]` con una clave que no está en el `[vars]` del agente es un error de configuración que nombra la clave.
+- **AC-20**: `mth init --answers` con agentes en `catalog` los instala en el commit de adopción; si alguno no puede instalarse (requisitos, colisión, nombre desconocido), no cambia nada.
 
 ## Notas
 

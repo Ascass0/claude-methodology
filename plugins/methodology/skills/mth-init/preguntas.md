@@ -81,11 +81,18 @@ Descripciones y vistas previas: las de `specs`, aplicadas a los ADR.
 
 **Cabecera:** Revisores (selección múltiple, sin vista previa)
 
-**Pregunta:** Antes de integrar, la metodología revisa cada rama con agentes de contexto limpio: solo ven el diff, las specs y los principios. Siempre va primero el `verificador` del plugin, que comprueba que la rama cumple su spec. En tu repo hay {`security-reviewer`, `api-reviewer`}. ¿Cuáles añadimos como revisores?
+Se hace siempre: también ofrece los agentes del catálogo del plugin (SPEC-0012 de claude-methodology).
 
-- Una opción por agente, con su `description` como descripción.
+**Pregunta 1:** Antes de integrar, la metodología revisa cada rama con agentes de contexto limpio: solo ven el diff, las specs y los principios. Siempre va primero el `verificador` del plugin, que comprueba que la rama cumple su spec. En tu repo hay {`security-reviewer`, `api-reviewer`}. ¿Cuáles añadimos como revisores?
 
-Respuesta: `{"option": "agentes", "agents": ["security-reviewer"]}` (lista vacía si no elige ninguno). Después propón `[review.paths]` para los que solo aplican a un área.
+- Una opción por agente del repo, con su `description` como descripción. Si el repo no tiene agentes, omite esta pregunta.
+
+**Pregunta 2 (catálogo):** El plugin trae agentes listos para instalar en el repo, adaptados a su configuración y con un guard que limita lo que pueden ejecutar. Te propongo el perfil `base`. ¿Cuáles instalamos?
+
+- Una opción por agente del perfil `base`, **todas marcadas**: `revisor-seguridad`, `revisor-fallos`, `revisor-adr`, `revisor-diseno`, `revisor-parsimonia` (revisores) y `diagnosticador`, `explorador-specs` (trabajadores). Desmarca de antemano `diagnosticador` si no habrá `commands.test`, y cualquiera cuyo nombre ya use un agente del repo (sería una colisión: se resuelve después con `mth agents add --replace`).
+- Menciona los opcionales (`ingeniero-rendimiento`, `analista-evals`, `lector-estado`, `respondedor-incidencias`) solo si el inventario muestra benchmarks, evals, bases SQLite de estado o un fork; si elige alguno, pide sus variables obligatorias (`bench`, `results`, `databases`).
+
+Respuesta: `{"option": "agentes", "agents": ["security-reviewer"], "catalog": ["revisor-seguridad", "revisor-fallos"], "vars": {"lector-estado": {"databases": {"estado": "data/state.db"}}}}`. `agents` es la lista de agentes del repo (vacía si no elige ninguno); `catalog` y `vars` son opcionales. Después propón `[review.paths]` para los del repo que solo aplican a un área.
 
 ## `colision`
 
