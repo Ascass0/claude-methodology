@@ -79,7 +79,7 @@ Señales que detecta:
 | `specs` | — | `specs` |
 | `decisiones` | — | `adrs` |
 | `tests` | — | hay ficheros versionados y los candidatos no son exactamente uno |
-| `revisores` | — | `agents` |
+| `revisores` | todos (desde [SPEC-0012](SPEC-0012-catalogo-de-agentes.md)) | — |
 | `colision` | — | algún agente tiene el nombre de uno del plugin |
 | `instrucciones` | — | `instructions` |
 | `autonomia` | todos | — |
@@ -87,7 +87,7 @@ Señales que detecta:
 | `ci` | — | no hay `ci` |
 | `modelos` | todos | — |
 
-Un repo nuevo hace como mucho cuatro preguntas (`autonomia`, `idioma`, `ci`, `modelos`).
+Un repo nuevo hace como mucho cinco preguntas (`revisores`, `autonomia`, `idioma`, `ci`, `modelos`). `revisores` se hace siempre porque también ofrece los agentes del catálogo ([SPEC-0012](SPEC-0012-catalogo-de-agentes.md)).
 
 `mth survey` muestra el perfil, las señales encontradas y las preguntas. Con `--json` escribe un objeto `{"profile", "signals", "questions"}`, en el que cada pregunta lleva su ID y la evidencia que la dispara.
 
@@ -110,7 +110,7 @@ JSON `{"answers": {"<id>": {"option": "<opción>", ...}}}`. Opciones y efecto:
 | `versiones` | `continuar`, `prefijo` (`tag_prefix`); en ambas, `version_files` opcional | `release.tag_prefix` (el detectado con `continuar`) y `release.version_files` |
 | `specs`, `decisiones` | `mapear` (`path`, `kind`, `pattern`), `convertir`, `archivar` | `mapear`: `paths.specs` o `paths.adr`, `ids.<kind>` y `trace.spec_kind` o `trace.adr_kind` |
 | `tests` | `comando` (`command`), `ninguno` | `commands.test` |
-| `revisores` | `agentes` (`agents`: lista) | `review.agents` = `verificador` y la lista, en ese orden |
+| `revisores` | `agentes` (`agents`: lista; opcionales `catalog`: lista de agentes del catálogo y `vars`: sus variables) | `review.agents` = `verificador` y la lista, en ese orden; los agentes de `catalog` se instalan como con `mth agents add` y `vars` pasa a `[agents.*]` ([SPEC-0012](SPEC-0012-catalogo-de-agentes.md)) |
 | `colision` | `renombrar` (`renames`: {viejo: nuevo}), `mantener` | `review.agents` y `roles` con los nombres nuevos |
 | `instrucciones` | `metodologia`, `repo` (`exceptions`: lista de textos) | Ninguno; solo el ADR |
 | `autonomia` | `full`, `until-pr`, `supervised` | `autonomy.level` ([SPEC-0007](SPEC-0007-autonomia-configurable.md)) |
@@ -151,7 +151,7 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 - **AC-02**: Sin `methodology.toml`, el guard no bloquea comandos que sí bloquea en un repo adoptado (push a `main`, rebase).
 - **AC-03**: `mth init --decline` desactiva el plugin en `.claude/settings.local.json` conservando las demás claves, es idempotente y falla sin sobrescribir si el fichero no es JSON válido.
 - **AC-04**: `mth survey --json` clasifica como `new` un repo con solo README, como `existing` uno con código y sin señales de proceso, como `methodology` uno con specs, agentes o un hook ajeno, y como `fork` uno con remoto `upstream`.
-- **AC-05**: Las preguntas del inventario son las de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo produce como mucho `autonomia`, `idioma`, `ci` y `modelos`.
+- **AC-05**: Las preguntas del inventario son las de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo produce como mucho `revisores`, `autonomia`, `idioma`, `ci` y `modelos`.
 - **AC-06**: El inventario detecta specs y ADR con su patrón de ID, agentes y colisiones de nombre, gestores de hooks, herramientas de publicación, ficheros de versión, candidatos a comando de tests e idioma, y no modifica el repo.
 - **AC-07**: `mth survey` falla en un repo adoptado, y un fichero ilegible durante el inventario produce un aviso sin detener el resto.
 - **AC-08**: `mth init --answers` rechaza, sin modificar nada, un JSON inválido, una pregunta pedida sin responder, una pregunta no pedida, una opción o un parámetro desconocidos y unas claves `otro` que dejan la configuración inválida.
