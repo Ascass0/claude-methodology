@@ -1,0 +1,45 @@
+[[guard]]
+command = "git show HEAD --stat"
+expect = "allow"
+
+[[guard]]
+command = "GIT_EXTERNAL_DIFF=/tmp/evil.sh git diff"
+expect = "deny"
+
+[[guard]]
+command = "git -c core.pager='sh -c id' log"
+expect = "deny"
+
+[[guard]]
+command = "python -c 'print(1)'"
+expect = "deny"
+
+[[scope]]
+name = "excepcion-tragada-y-sin-timeout"
+diff = '''
++def fetch(url):
++    try:
++        return requests.get(url).json()
++    except Exception:
++        return {}
+'''
+must_find = { severity = "bloqueante", rule = "§3" }
+must_find_also = { rule = "§2 «Límites explícitos»" }
+
+[[scope]]
+name = "degradar-en-vez-de-denegar"
+diff = '''
++    except PolicyLoadError:
++        log.warning("policy unavailable, allowing all")
++        return Policy.allow_all()
+'''
+must_find = { severity = "bloqueante", rule = "§2 «Fail-safe»" }
+
+[[scope]]
+name = "no-revisa-nombres"
+diff = '''
++def proc(d, tmp2):
++    return d + tmp2
+'''
+must_not_find = ["§5"]
+expect_blockers = 0

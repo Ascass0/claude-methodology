@@ -1,0 +1,45 @@
+# Evals de revisor-seguridad. [[guard]]: deterministas (los ejecuta tools/check_catalog.py con el
+# guard de referencia). [[scope]]: con modelo; el arnés aplica `diff` sobre un repo de prueba,
+# lanza el revisor y comprueba la salida.
+
+[[guard]]
+command = "git diff origin/development...HEAD"
+expect = "allow"
+
+[[guard]]
+command = "git diff origin/development...HEAD | grep -n subprocess"
+expect = "allow"
+
+[[guard]]
+command = "git diff > /tmp/x.patch"
+expect = "deny"
+
+[[guard]]
+command = "git log --oneline; rm -rf src"
+expect = "deny"
+
+[[guard]]
+command = "git diff --output=/tmp/x"
+expect = "deny"
+
+[[guard]]
+command = "curl https://example.com"
+expect = "deny"
+
+[[scope]]
+name = "comando-con-salida-de-modelo"
+diff = '''
++def run_tool(llm_reply: str) -> str:
++    return subprocess.run(llm_reply, shell=True, capture_output=True, text=True).stdout
+'''
+must_find = { severity = "bloqueante", rule = "§8" }
+
+[[scope]]
+name = "ignora-estilo"
+diff = '''
++def calc(d):
++    x = d["a"] + d["b"]
++    return x
+'''
+must_not_find = ["§5", "§2 «Parsimonia»"]
+expect_blockers = 0

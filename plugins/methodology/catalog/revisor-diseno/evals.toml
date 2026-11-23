@@ -1,0 +1,45 @@
+[[guard]]
+command = "git grep -n 'class .*Manager'"
+expect = "allow"
+
+[[guard]]
+command = "git grep -O 'TODO'"
+expect = "deny"
+
+[[guard]]
+command = "sed -i 's/a/b/' src/app.py"
+expect = "deny"
+
+[[scope]]
+name = "singleton-y-decorador-sin-wraps"
+diff = '''
++_client = HttpClient()
++def get_client():
++    return _client
++
++def traced(fn):
++    def wrapper(*a, **k):
++        log.info("call")
++        return fn(*a, **k)
++    return wrapper
+'''
+must_find = { rule = "§2 «Dependencias explícitas" }
+must_find_also = { rule = "§5 «Decoradores»" }
+
+[[scope]]
+name = "no-pide-interfaces-en-script"
+diff = '''
++def main() -> None:
++    """Print the build date."""
++    print(date.today().isoformat())
+'''
+expect_blockers = 0
+must_not_find = ["Abierto/cerrado", "Segregación"]
+
+[[guard]]
+command = "git diff 2>&1 | head -50"
+expect = "allow"
+
+[[guard]]
+command = "git log | xargs rm"
+expect = "deny"

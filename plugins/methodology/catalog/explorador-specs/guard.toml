@@ -1,0 +1,4 @@
+# explorador-specs solo lee (Read, Grep, Glob). Este guard es defensa en profundidad: si alguien
+# amplía sus `tools`, Bash y la escritura siguen bloqueados (ADR-0008, decisión 5).
+[bash]
+mode = "deny"

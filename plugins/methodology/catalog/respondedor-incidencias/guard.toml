@@ -1,0 +1,17 @@
+# Solo lectura sobre git y GitHub. `gh api` solo con GET: se rechazan las opciones que cambian el
+# método o envían cuerpo. `git fetch` se admite (solo actualiza referencias remotas), salvo con
+# opciones que ejecutan programas.
+[bash]
+mode = "allowlist"
+allow = [
+  "git diff", "git log", "git show", "git blame", "git grep", "git status", "git ls-files",
+  "git rev-parse", "git fetch", "git branch --list", "git branch -a", "git branch -r", "git tag --list",
+  "gh run list", "gh run view", "gh pr list", "gh pr view", "gh pr checks", "gh issue list",
+  "gh issue view", "gh release list", "gh release view", "gh api",
+]
+filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut", "jq"]
+deny_operators = [">", "$(", "`", "<("]
+deny_flags = [
+  "--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager", "--upload-pack",
+  "-X", "--method", "-f", "-F", "--field", "--raw-field", "--input", "--web",
+]
