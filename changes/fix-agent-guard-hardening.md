@@ -10,5 +10,5 @@ refs: SPEC-0012
 - Sin lanzador (plugin ausente o anterior a 0.8.0), solo se bloquea a los agentes del catálogo; `verificador`, `documentador` y los demás siguen funcionando.
 - `mth agents add` escribe el shim y la entrada del hook antes que los agentes, con escrituras atómicas, y al quitar el hook conserva los hooks propios que compartan entrada.
 - `mth db-query` solo abre bases dentro del repositorio, exige límites positivos y acota la longitud de los valores y de las celdas.
-- Cada decisión del guard sobre un agente del catálogo queda registrada en `.git/mth/agent-guard.jsonl` (privado, sin el comando completo y con las credenciales redactadas), con traceback si es un error interno; el shim registra los cortes que el guard no puede registrar.
+- Cada decisión del guard sobre un agente del catálogo queda registrada en `.git/mth/agent-guard.jsonl` (privado, sin el comando completo y con las credenciales redactadas), con traceback si es un error interno; el shim registra los bloqueos que decide él mismo (sin lanzador, o una salida inesperada del guard) con hora, agente, sesión y herramienta.
 - `mth agents` informa de un fallo al escribir un fichero (disco lleno, permisos) como un error reanudable y no como un bug, y conserva los permisos de los ficheros que reescribe.
