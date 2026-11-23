@@ -75,7 +75,8 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 |---|---|---|
 | El informe declara un número distinto del que cuenta `mth` | Comparación de `declared` y `blocking` | Registro `failed` con `reason`; error; la integración sigue bloqueada |
 | Formato ilegible (sección ausente o repetida, líneas desconocidas, falta la última línea) | Lectura estricta | Registro `failed`; error con el motivo |
-| Informe ausente, vacío, ilegible por codificación o de más de 256 KiB | Lectura del fichero | Registro `failed` sin huella; error |
+| Informe ausente, vacío o de más de 256 KiB | Lectura del fichero | Registro `failed` sin huella; error |
+| Informe que no es UTF-8 | Decodificación | Se archiva tal cual (es la evidencia), con su huella; registro `failed`; error |
 | No se puede archivar el informe (disco, permisos) | Error de escritura | No se registra nada y la revisión sigue pendiente; error reanudable |
 | Informe repetido en el mismo intento (ruta de archivo ocupada) | El archivo existe | El número de intento sube hasta uno libre; nunca se sobrescribe |
 | Segundo intento fallido | `attempts` ≥ 2 con `failed` | El mensaje manda detenerse y avisar, no relanzar |

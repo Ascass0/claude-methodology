@@ -447,6 +447,34 @@ class ReviewReportTests(RepoTestCase):
         self.assertIn("intento 1", ctx.exception.message)
         self.assertEqual(review.describe(None), (False, "pendiente"))
 
+    def test_a_report_that_is_not_utf8_is_archived_and_failed(self):
+        # verifies: SPEC-0013/AC-03
+        report = self.tmp / "bin.txt"
+        report.write_bytes(b"HALLAZGOS\nninguno\n\xff\xfe\nBLOQUEANTES: 0\n")
+        self.record(str(report), ok=False)
+        entry = self.recorded()["verificador"]
+        self.assertEqual(entry["status"], "failed")
+        self.assertIn("UTF-8", entry["reason"])
+        self.assertEqual(Path(entry["report"]).read_bytes(), report.read_bytes())
+
+    def test_a_report_already_in_the_archive_is_not_copied(self):
+        # verifies: SPEC-0013/AC-05
+        sha = self.git("rev-parse", "HEAD").strip()
+        folder = self.work / ".work" / "reviews"
+        folder.mkdir(parents=True)
+        own = folder / f"{sha}-verificador-1.md"
+        own.write_text("HALLAZGOS\nninguno\nBLOQUEANTES: 0\n", encoding="utf-8")
+        self.record(str(own), ok=True)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), [own.name])
+
+    def test_status_shows_the_failed_review_and_its_attempts(self):
+        # verifies: SPEC-0013/AC-07
+        from mthlib import review
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        approved, state = review.describe(self.recorded()["verificador"])
+        self.assertFalse(approved)
+        self.assertTrue(state.startswith("fallida (intento 1): el revisor declara 1"))
+
     def test_an_unarchivable_report_records_nothing(self):
         # verifies: SPEC-0013/AC-08
         (self.work / ".work").mkdir(exist_ok=True)
