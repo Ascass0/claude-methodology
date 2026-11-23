@@ -190,6 +190,20 @@ class AddTests(AgentsTestCase):
         files.atomic_write(self.root / "ok.txt", "b")
         self.assertEqual((self.root / "ok.txt").stat().st_mode & 0o777, 0o640)
 
+    def test_the_decision_log_tolerates_a_concurrent_rotation(self):
+        from mthlib.log import Tracer
+        tracer = Tracer(self.root / ".git", "x", "t.jsonl", max_bytes=1)
+        (self.root / ".git/mth").mkdir(exist_ok=True)
+        (self.root / ".git/mth/t.jsonl").write_text("lleno", encoding="utf-8")
+        real = Path.replace
+
+        def racing(self_path, target):
+            real(self_path, target)
+            raise FileNotFoundError  # another process rotated first
+        with mock.patch.object(Path, "replace", racing):
+            tracer.event("a")
+        self.assertIn('"event": "a"', (self.root / ".git/mth/t.jsonl").read_text(encoding="utf-8"))
+
     def test_settings_with_an_unexpected_shape_are_rejected(self):
         self.write(".claude/settings.json", json.dumps({"hooks": {"PreToolUse": {"x": 1}}}))
         with self.assertRaises(MthError) as ctx:

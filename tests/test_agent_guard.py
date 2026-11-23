@@ -235,6 +235,15 @@ class AllowlistHardeningTests(GuardTestCase):
 
 
 class TimeoutTests(GuardTestCase):
+    def test_the_alarm_is_skipped_outside_the_main_thread(self):
+        import threading
+        results = []
+        thread = threading.Thread(target=lambda: results.append(
+            self.repo.guard(self.repo.payload("revisor-fallos", command="git log"))))
+        thread.start()
+        thread.join()
+        self.assertEqual(results, [0])
+
     def test_the_guard_bounds_its_own_decision(self):
         # verifies: SPEC-0012/AC-24
         import time
@@ -434,7 +443,27 @@ class ShimTests(GuardTestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("Instala coreutils o perl", proc.stderr)
 
+    def test_blocks_decided_by_the_shim_are_logged_and_the_log_rotates(self):
+        # verifies: SPEC-0012/AC-22
+        # verifies: SPEC-0012/AC-27
+        self.assertEqual(self.run_shim(self.repo.payload("revisor-seguridad", command="git log")).returncode, 2)
+        event = self.last_event()
+        self.assertEqual((event["category"], event["agent"], event["tool"]), ("launcher-missing", "revisor-seguridad", "Bash"))
+        log = self.common / "mth" / "agent-guard.jsonl"
+        log.write_text("x" * (1024 * 1024 + 1), encoding="utf-8")
+        self.run_shim(self.repo.payload("revisor-seguridad", command="git log"))
+        self.assertTrue(log.with_name("agent-guard.jsonl.1").is_file())
+        self.assertEqual(len(log.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_the_shim_and_the_guard_agree_on_what_a_template_header_is(self):
+        # verifies: SPEC-0012/AC-22
+        agent = self.repo.root / ".claude/agents/revisor-adr.md"
+        agent.write_text("---\nname: revisor-adr\n---\n   <!-- mth:template revisor-adr@1.0.0 sha256=x -->\n", encoding="utf-8")
+        (self.repo.root / ".claude/mth/agents/revisor-adr.guard.toml").unlink()
+        self.assertEqual(self.run_shim(self.repo.payload("revisor-adr", command="git log")).returncode, 2)
+
     def test_any_unexpected_exit_of_the_guard_is_logged_as_a_crash(self):
+        # verifies: SPEC-0012/AC-24
         self.fake_launcher("exit 1\n")
         self.assertEqual(self.run_shim(self.repo.payload("revisor-adr", command="git log")).returncode, 2)
         event = self.last_event()
