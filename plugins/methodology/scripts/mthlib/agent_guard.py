@@ -467,7 +467,10 @@ def _on_alarm(_signum, _frame) -> None:
 def _arm_alarm(seconds: int) -> None:
     """Bound the whole decision even where the shim has no timeout(1) (SPEC-0012/AC-24); 0 disarms."""
     if hasattr(signal, "SIGALRM"):
-        signal.signal(signal.SIGALRM, _on_alarm)
+        try:
+            signal.signal(signal.SIGALRM, _on_alarm)
+        except ValueError:  # not the main thread (tests, programmatic use): the shim limit still applies
+            return
         signal.alarm(seconds)
 
 

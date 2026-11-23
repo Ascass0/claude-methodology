@@ -33,7 +33,10 @@ class Tracer:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             if self.max_bytes is not None and self.path.is_file() and self.path.stat().st_size > self.max_bytes:
-                self.path.replace(self.path.with_name(self.path.name + ".1"))
+                try:
+                    self.path.replace(self.path.with_name(self.path.name + ".1"))
+                except FileNotFoundError:  # another process rotated first: keep writing
+                    pass
             fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)  # local and private
             with os.fdopen(fd, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")

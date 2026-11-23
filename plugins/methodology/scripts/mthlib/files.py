@@ -11,13 +11,11 @@ from .errors import MthError
 def atomic_write(path: Path, text: str, mode: int | None = None) -> None:
     """Replace ``path`` with ``text`` atomically: readers see the old or the new file, never half.
 
-    The file keeps its current permissions (0644 when new) unless ``mode`` is given.
+    The file keeps its current permissions (0644 when new) unless ``mode`` is given. A symbolic
+    link is replaced by a regular file.
 
     Raises:
         MthError: The file cannot be written (permissions, full disk); the operation can be re-run.
-
-    Raises:
-        OSError: The directory cannot be created or written.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
