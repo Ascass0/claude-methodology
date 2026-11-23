@@ -106,7 +106,7 @@ Informa de todos los problemas a la vez y termina con error si hay alguno. Los `
 ### Agentes que fallan
 
 - **Implementadores:** una tarea no ejecutada o no completada se relanza una sola vez. Si vuelve a fallar, la sesión principal la implementa ella misma o rehace el plan (corrigiendo la spec en un commit), y lo deja anotado en el PR. Nunca se edita un manifiesto para que pase la verificación.
-- **Revisores:** `mth review record <agente> --report <fichero> --summary "…"` toma el número de bloqueantes de la última línea no vacía del informe del revisor, que debe ser `BLOQUEANTES: <n>`. Un informe que no existe, está vacío, supera 256 KiB o no termina en esa línea es un revisor **no ejecutado**: no se registra nada y la revisión sigue pendiente. La sesión principal lo relanza una vez; si vuelve a fallar, se aplica la regla de los tres fallos (PRINCIPLES §11). El número de bloqueantes ya no se escribe a mano (`--blocking` desaparece).
+- **Revisores:** `mth review record <agente> --report <fichero> --summary "…"` toma el número de bloqueantes de la última línea no vacía del informe del revisor, que debe ser `BLOQUEANTES: <n>` (desde [SPEC-0013](SPEC-0013-registro-de-revisiones-calculado-por-mth.md), `mth` lo calcula contando los hallazgos `[bloqueante]` y contrasta esa línea; un informe que falla se registra como fallido en lugar de no registrarse). Un informe que no existe, está vacío, supera 256 KiB o no termina en esa línea es un revisor **no ejecutado**: no se registra nada y la revisión sigue pendiente. La sesión principal lo relanza una vez; si vuelve a fallar, se aplica la regla de los tres fallos (PRINCIPLES §11). El número de bloqueantes ya no se escribe a mano (`--blocking` desaparece).
 
 ## Modos de fallo
 
