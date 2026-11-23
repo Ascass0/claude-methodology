@@ -1,6 +1,6 @@
 # SPEC-0012 · Catálogo de agentes instalables
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-23
 - ADRs: [ADR-0008](../adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md)
 - Sustituye a: —
@@ -94,7 +94,7 @@ La entrada de `.claude/settings.json`:
    - **`agent_type` que no es un agente del catálogo**: permite. Se considera del catálogo un nombre válido de plantilla con `.claude/agents/<agente>.md` y cabecera de plantilla. Quedan fuera los agentes del plugin (`methodology:verificador`), los integrados (`Explore`) y los propios del repo sin cabecera;
    - **agente del catálogo**: aplica `.claude/mth/agents/<agente>.guard.toml`. Si no existe, bloquea y pide `mth agents sync`;
    - sale con 0 para permitir y con 2 para bloquear, con el motivo en stderr. Falla cerrado ante cualquier error;
-   - semántica de `[bash]` y de `[write] allow`: la de `tools/reference/agent_guard.py` de la entrega.
+   - semántica de `[bash]` y de `[write] allow`: la de `mthlib/agent_guard.py`, portada de la implementación de referencia de la entrega; se documenta en [docs/catalogo-de-agentes.md](../../docs/catalogo-de-agentes.md).
 3. **Raíz y worktrees.** El `cwd` del payload tiene que pertenecer al mismo repositorio que `CLAUDE_PROJECT_DIR` (mismo `git-common-dir`); si no, se bloquea.
    - Con `in_worktree = true`, la escritura solo se permite si el `cwd` está en un worktree vinculado, no en el árbol principal, y la ruta queda dentro de ese worktree.
    - Sin `in_worktree`, los globs de `[write] allow` son relativos a la raíz del proyecto.
@@ -117,7 +117,7 @@ La entrada de `.claude/settings.json`:
 - **`mth agents diff <agente>`**: diferencia entre lo instalado y lo que renderizaría hoy.
 - **`mth agents remove <agente>`**: borra el `.md` y el guard, y lo saca de `review.agents` y de `[review.paths]`. Si era el último agente del catálogo, quita también la entrada de `.claude/settings.json` y el shim.
 - **`mth agent-guard`**: el guard por agente (ver «Despacho del guard»). No reutiliza el punto de entrada del guard global, que falla abierto.
-- **`mth db-query --db <alias> [--schema | "<SQL>"]`**: consulta SQLite de solo lectura sobre los alias de `[agents.lector-estado].databases`, con `max_rows` y timeout. Semántica: `tools/reference/db_query.py` de la entrega.
+- **`mth db-query --db <alias> [--schema | "<SQL>"]`**: consulta SQLite de solo lectura sobre los alias de `[agents.lector-estado].databases`, con `max_rows` y timeout. Semántica: `mthlib/db_query.py`, portada de la implementación de referencia de la entrega.
 
 ### Integración con lo existente
 
@@ -186,6 +186,6 @@ La entrada de `.claude/settings.json`:
 
 ## Notas
 
-- La validación de referencia de la entrega (`tools/check_catalog.py`) pasa a `tests/` con `verifies:` sobre esta spec.
+- La validación de referencia de la entrega (`check_catalog.py`, no versionada) pasó a `tests/test_catalog.py` y `tests/test_agent_guard.py`, con `verifies:` sobre esta spec.
 - La prueba de humo que dio origen al diseño se hizo en Claude Code 2.1.330 con `claude -p`. Su procedimiento queda en la documentación del catálogo para repetirlo al actualizar Claude Code.
 - Origen de los conceptos: el artículo *I built 100 Claude Code subagents* (S. Khaitan, dev.to). Se reutilizan los nombres de rol y los principios de diseño; no se copia texto.
