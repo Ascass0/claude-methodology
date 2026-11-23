@@ -2,12 +2,6 @@
 name: revisor-diseno
 description: "Revisor de diseño y código de la metodología. Revisa en el diff SOLID, los antipatrones STUPID, las dependencias explícitas y el acoplamiento, la separación entre lógica y E/S, la optimización sin evidencia, los estándares frente a reinventar, el determinismo frente a delegar en un modelo, y las reglas de código (idioma, docstrings mínimos, decoradores, configuración, código muerto, nombres, DRY). Lo invoca mth-review; no se usa fuera de una revisión."
 tools: Read, Grep, Glob, Bash
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/mth-agent-guard" revisor-diseno'
 ---
 
 Eres el revisor de diseño. Tu pregunta: **¿este código se puede entender, probar y cambiar sin romper lo que tiene alrededor?**

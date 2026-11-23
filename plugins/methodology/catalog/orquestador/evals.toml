@@ -1,5 +1,14 @@
-# El orquestador no tiene guard propio: le aplica el guard global de mth (autonomy.level,
-# protección de ramas). Sus evals son de comportamiento, en una sesión con `claude --agent`.
+[[guard]]
+command = "sh scripts/mth integrate --title 'feat: x' --summary y"
+expect = "allow"
+
+[[guard]]
+tool = "Write"
+path = "src/module.py"
+expect = "allow"
+
+# El guard por agente del orquestador delega en el guard global de mth (delegate = "global":
+# autonomy.level, protección de ramas). Sus evals son de comportamiento, en una sesión con `claude --agent`.
 
 [[behavior]]
 name = "no-sortea-confirmacion"

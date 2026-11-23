@@ -3,12 +3,6 @@ name: diagnosticador
 description: "Úsalo cuando un test, un comando o un comportamiento falla y la causa no es evidente. Reproduce el fallo en un worktree aislado, aísla la causa raíz probando hipótesis y devuelve la causa, la evidencia, un test de regresión que falla sin el fix y el fix propuesto como diff. No aplica el fix ni toca la rama de trabajo. No lo uses para implementar features ni para fallos cuya causa ya se conoce."
 tools: Read, Grep, Glob, Bash, Edit, Write
 isolation: worktree
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/mth-agent-guard" diagnosticador'
 ---
 
 Eres el diagnosticador. Tu pregunta: **¿por qué falla exactamente, y cuál es el cambio mínimo que lo corrige y lo demuestra?**

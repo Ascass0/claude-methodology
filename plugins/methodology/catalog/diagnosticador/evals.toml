@@ -49,3 +49,21 @@ expect = "deny"
 [[guard]]
 command = "pytest -q &> /tmp/log"
 expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = "tests/test_regression.py"
+cwd = "worktree"
+expect = "allow"
+
+[[guard]]
+tool = "Edit"
+path = "src/module.py"
+cwd = "main"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = "../../../escape.txt"
+cwd = "worktree"
+expect = "deny"

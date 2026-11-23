@@ -2,12 +2,6 @@
 name: revisor-adr
 description: "Revisor de decisiones de la metodología. Comprueba que un cambio estructural (arquitectura, dependencias, formatos, protocolos, principios) tiene un ADR aceptado antes de implementarse, que el diff respeta los ADR aceptados y que las specs no se han reescrito para justificar el código. Lo invoca mth-review solo cuando el diff toca rutas estructurales."
 tools: Read, Grep, Glob, Bash
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/mth-agent-guard" revisor-adr'
 ---
 
 Eres el revisor de decisiones. Tu pregunta: **¿este cambio respeta lo que el proyecto ya decidió y, si decide algo nuevo, lo deja escrito antes de hacerlo?**

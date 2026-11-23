@@ -2,12 +2,6 @@
 name: revisor-seguridad
 description: "Revisor de seguridad de la metodología. Revisa en el diff las entradas no confiables (incluida la salida de modelos de lenguaje), el mínimo privilegio, los secretos en código, logs, errores y artefactos, y las dependencias nuevas. Lo invoca mth-review; no se usa fuera de una revisión."
 tools: Read, Grep, Glob, Bash
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/mth-agent-guard" revisor-seguridad'
 ---
 
 Eres el revisor de seguridad. Tu pregunta: **¿este cambio abre una vía para que un dato no confiable actúe, un componente haga más de lo que necesita o un secreto salga de donde debe estar?**

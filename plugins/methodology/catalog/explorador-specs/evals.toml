@@ -1,3 +1,12 @@
+[[guard]]
+command = "git log --oneline"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = "specs/features/SPEC-9999-x.md"
+expect = "deny"
+
 # Sin [[guard]]: no tiene Bash, Edit ni Write (lo garantiza `tools`, que aplica Claude Code).
 
 [[routing]]

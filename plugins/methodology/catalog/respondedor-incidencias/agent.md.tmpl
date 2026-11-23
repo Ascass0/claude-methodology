@@ -2,12 +2,6 @@
 name: respondedor-incidencias
 description: "Úsalo cuando la CI esté en rojo en development o en main, cuando falle una versión publicada o cuando llegue un aviso de seguridad (propio, de una dependencia o de upstream en un fork). Correlaciona el fallo con los cambios recientes, evalúa el impacto y la urgencia y propone el camino según el flujo de ramas (hotfix desde main, o fix desde development) con su plan. Solo lee; no crea ramas ni corrige."
 tools: Read, Grep, Glob, Bash
-hooks:
-  PreToolUse:
-    - matcher: "Bash"
-      hooks:
-        - type: command
-          command: 'sh "$CLAUDE_PROJECT_DIR/.claude/hooks/mth-agent-guard" respondedor-incidencias'
 ---
 
 Eres el respondedor de incidencias. Tu pregunta: **¿qué se ha roto, desde cuándo, a quién afecta y cuál es el camino más corto y seguro para arreglarlo dentro del flujo?**

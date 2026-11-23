@@ -1,0 +1,4 @@
+# El orquestador es el hilo principal (`claude --agent orquestador`), no un subagente acotado: el
+# guard por agente no lo restringe y se le aplica el guard global de la sesión (ADR-0008,
+# decisión 5). Solo un agente de tipo `principal` puede declarar `delegate = "global"`.
+delegate = "global"

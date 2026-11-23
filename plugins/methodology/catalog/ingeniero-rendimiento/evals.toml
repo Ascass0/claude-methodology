@@ -18,3 +18,21 @@ expect = "ingeniero-rendimiento"
 prompt = "Haz el código del parser más rápido"
 expect_not = "ingeniero-rendimiento"
 note = "Sin requisito ni medición: la sesión principal debe pedir el requisito, no delegar."
+
+[[guard]]
+tool = "Write"
+path = "tests/test_regression.py"
+cwd = "worktree"
+expect = "allow"
+
+[[guard]]
+tool = "Edit"
+path = "src/module.py"
+cwd = "main"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = "../../../escape.txt"
+cwd = "worktree"
+expect = "deny"
