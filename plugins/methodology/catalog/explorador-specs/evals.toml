@@ -4,7 +4,7 @@ expect = "deny"
 
 [[guard]]
 tool = "Write"
-path = "specs/features/SPEC-9999-x.md"
+path = "specs/features/nueva-spec.md"
 expect = "deny"
 
 # Sin [[guard]]: no tiene Bash, Edit ni Write (lo garantiza `tools`, que aplica Claude Code).
