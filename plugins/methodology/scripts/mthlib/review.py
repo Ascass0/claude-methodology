@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,7 +92,7 @@ def parse_report(text: str) -> Parsed:
                           else "no tiene sección HALLAZGOS")
     counts = dict.fromkeys(SEVERITIES, 0)
     said_none = False
-    for line in lines[starts[0] + 1:]:
+    for number, line in enumerate(lines[starts[0] + 1:], start=1):
         stripped = line.strip()
         if not stripped or line[0] in " \t":
             continue
@@ -102,7 +104,7 @@ def parse_report(text: str) -> Parsed:
         elif _NONE.match(stripped):
             said_none = True
         else:
-            raise ReportError(f"línea no admitida en HALLAZGOS: «{stripped[:60]}»")
+            raise ReportError(f"línea {number} de HALLAZGOS no admitida (ni hallazgo numerado ni «ninguno»)")
     marks = len(re.findall(r"\[bloqueante\]", text, re.IGNORECASE))
     if marks != counts["bloqueante"]:
         raise ReportError(f"hay {marks} marcas [bloqueante] y solo {counts['bloqueante']} son líneas de "
@@ -117,6 +119,8 @@ def parse_report(text: str) -> Parsed:
 def read_report(path: Path) -> bytes:
     """Bytes of the report, or a ``ReportError`` if it cannot be used."""
     try:
+        if not stat.S_ISREG(path.stat().st_mode):  # a FIFO or a device would block forever
+            raise ReportError("no es un fichero regular")
         with open(path, "rb") as fh:
             data = fh.read(MAX_REPORT_BYTES + 1)
     except OSError as exc:
@@ -126,6 +130,13 @@ def read_report(path: Path) -> bytes:
     if not data.strip():
         raise ReportError("el informe está vacío")
     return data
+
+
+def require_inside(root: Path, path: Path, what: str) -> None:
+    """Refuse a path that resolves outside the repository (symbolic links, ``..``, absolute paths)."""
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise MthError(f"{path} queda fuera del repositorio: {what}.",
+                       hint="Usa una ruta dentro del repo (los informes van en .work/tmp/); no se ha registrado nada.")
 
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -144,9 +155,7 @@ def archive(root: Path, directory: Path, sha: str, agent: str, first: int, data:
     if not (_SAFE.fullmatch(sha) and _SAFE.fullmatch(agent)) or ".." in agent:
         raise MthError(f"Nombre no válido para archivar el informe ({agent}, {sha[:12]}).",
                        hint="El agente y el commit solo pueden llevar letras, dígitos, '.', '_' y '-'.")
-    if not directory.resolve().is_relative_to(root.resolve()):
-        raise MthError(f"{directory} apunta fuera del repositorio: no se archiva el informe.",
-                       hint="Sustituye el enlace simbólico por un directorio real; no se ha registrado nada.")
+    require_inside(root, directory, "no se archiva el informe")
     n = first
     try:
         directory.mkdir(parents=True, exist_ok=True)
@@ -169,6 +178,26 @@ def archive(root: Path, directory: Path, sha: str, agent: str, first: int, data:
                        hint="Comprueba permisos y espacio y repite el registro: no se ha registrado nada.") from exc
 
 
+@contextmanager
+def _locked(git_dir: Path):
+    """Exclusive lock around the read-modify-write of ``reviews.json`` (parallel ``record`` calls)."""
+    try:
+        import fcntl
+    except ImportError:  # no flock (Windows): records are sequential there
+        yield
+        return
+    lock = _store(git_dir).with_name("reviews.lock")
+    try:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(lock, "a")
+    except OSError as exc:
+        raise MthError(f"No se pudo abrir el bloqueo {lock}: {exc}.",
+                       hint="Comprueba permisos y espacio; no se ha registrado nada.") from exc
+    with fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+
+
 def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha: str, agent: str,
                   report: Path, summary: str) -> dict:
     """Record a review computed from the report; failures are recorded as ``failed`` (SPEC-0013).
@@ -179,35 +208,37 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
     Raises:
         MthError: The report cannot be archived (nothing is recorded).
     """
-    previous = results(git_dir, branch, sha).get(agent, {})
-    attempt = int(previous.get("attempts", 0)) + 1
-    entry: dict = {"summary": summary.strip()}
-    try:
-        data = read_report(report)
-    except ReportError as exc:
-        data, entry["reason"] = None, str(exc)
-    if data is not None:
-        # An archive already at that path (--report points at it) is kept as is.
-        same = report.resolve() == (reviews_dir / f"{sha}-{agent}-{attempt}.md").resolve()
-        if same:
-            path = report
-        else:
-            path, attempt = archive(root, reviews_dir, sha, agent, attempt, data)
-        entry["report"] = str(path)
-        entry["report_sha256"] = hashlib.sha256(data).hexdigest()
+    require_inside(root, report, "el informe no se lee")
+    with _locked(git_dir):
+        previous = results(git_dir, branch, sha).get(agent, {})
+        attempt = int(previous.get("attempts", 0)) + 1
+        entry: dict = {"summary": summary.strip()}
         try:
-            parsed = parse_report(data.decode("utf-8"))
-            entry.update(blocking=parsed.blocking, declared=parsed.declared, findings=parsed.findings)
-        except UnicodeDecodeError:
-            entry["reason"] = "el informe no es UTF-8"
+            data = read_report(report)
         except ReportError as exc:
-            entry["reason"] = str(exc)
-    entry["status"] = "failed" if "reason" in entry else "ok"
-    entry["attempts"] = attempt
-    # Consecutive failures drive the "stop" advice; an approved record in between resets them.
-    entry["failures"] = int(previous.get("failures", 0)) + 1 if entry["status"] == "failed" else 0
-    record(git_dir, branch, sha, agent, entry)
-    return entry
+            data, entry["reason"] = None, str(exc)
+        if data is not None:
+            # An archive already at that path (--report points at it) is kept as is.
+            same = report.resolve() == (reviews_dir / f"{sha}-{agent}-{attempt}.md").resolve()
+            if same:
+                path = report
+            else:
+                path, attempt = archive(root, reviews_dir, sha, agent, attempt, data)
+            entry["report"] = str(path)
+            entry["report_sha256"] = hashlib.sha256(data).hexdigest()
+            try:
+                parsed = parse_report(data.decode("utf-8"))
+                entry.update(blocking=parsed.blocking, declared=parsed.declared, findings=parsed.findings)
+            except UnicodeDecodeError:
+                entry["reason"] = "el informe no es UTF-8"
+            except ReportError as exc:
+                entry["reason"] = str(exc)
+        entry["status"] = "failed" if "reason" in entry else "ok"
+        entry["attempts"] = attempt
+        # Consecutive failures drive the "stop" advice; an approved record in between resets them.
+        entry["failures"] = int(previous.get("failures", 0)) + 1 if entry["status"] == "failed" else 0
+        record(git_dir, branch, sha, agent, entry)
+        return entry
 
 
 def record(git_dir: Path, branch: str, sha: str, agent: str, entry: dict) -> None:

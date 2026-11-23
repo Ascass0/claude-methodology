@@ -81,6 +81,10 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 | No se puede archivar el informe (disco, permisos) | Error de escritura | No se registra nada y la revisión sigue pendiente; error reanudable |
 | `.work/reviews` es un enlace simbólico que sale del repo, o el agente o el SHA llevan caracteres no seguros | Resolución de la ruta y validación del nombre | No se archiva ni se registra nada; error |
 | El disco falla a mitad de la copia | `OSError` al escribir | Se borra el archivo parcial; no se registra nada |
+| `--report` apunta fuera del repo (una clave, `~/.config`) o no es un fichero regular (FIFO, dispositivo) | Resolución de la ruta y `S_ISREG` | Fuera del repo: error sin leer ni registrar nada. No regular: registro `failed`. El motivo nunca cita contenido del informe, solo el número de línea |
+| Dos `mth review record` a la vez | Bloqueo exclusivo (`flock`) sobre leer-modificar-escribir | Se serializan: no se pierde ninguna entrada ni se estropean los contadores. Sin `fcntl` (Windows) el registro es secuencial |
+| `reviews.json` corrupto | Lectura del registro | Error antes de archivar; no se registra nada |
+| Falla la escritura del registro tras archivar | `atomic_write` | Error reanudable; queda un archivo huérfano y el siguiente intento salta su número |
 | Informe repetido en el mismo intento (ruta de archivo ocupada) | El archivo existe | El número de intento sube hasta uno libre; nunca se sobrescribe |
 | Segundo fallo seguido | `failures` ≥ 2 | El mensaje manda detenerse y avisar, no relanzar |
 | `mth integrate` con un revisor `failed` | `review.check` | Rechaza con «revisión fallida» y el motivo, distinto de «falta» |
@@ -97,11 +101,13 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 - **AC-08**: Si no se puede archivar el informe, no se registra nada.
 - **AC-10**: Una marca `[bloqueante]` fuera de las líneas de hallazgo contadas (sangrada, tras otra cabecera, en prosa) deja la revisión `failed`, aunque el informe declare 0.
 - **AC-11**: Si `.work/reviews` resuelve fuera del repo, o el agente o el SHA no son nombres seguros, no se archiva ni se registra nada; si la copia falla a medias no queda un archivo parcial.
+- **AC-12**: `--report` fuera del repo se rechaza sin registrar nada, un fichero no regular se registra como `failed`, falta de `--report` es un error claro y el motivo del fallo nunca cita el contenido del informe.
+- **AC-13**: Registros simultáneos de agentes distintos no pierden ninguna entrada.
 - **AC-09**: Un registro `ok` tras un `failed` deja la revisión aprobada con los bloqueantes calculados.
 
 ## Notas
 
-Límite aceptado: la cuenta solo detecta incoherencias. Un revisor que omite un hallazgo sigue produciendo un `ok`; que los hallazgos sean correctos y estén bien clasificados es juicio del revisor.
+Límites aceptados: entre comprobar el enlace simbólico del archivo y abrirlo hay una ventana (TOCTOU) que exige escribir en el checkout local, y `xb` no sigue enlaces en el último componente; `check` no vuelve a verificar el `report_sha256` contra el archivo. Además, la cuenta solo detecta incoherencias. Un revisor que omite un hallazgo sigue produciendo un `ok`; que los hallazgos sean correctos y estén bien clasificados es juicio del revisor.
 
 
 La skill `mth-review` y el README describen el flujo de reintento con `SendMessage`. Los registros existentes (sin `status`) se leen como `ok`.

@@ -339,8 +339,14 @@ class ReviewReportTests(RepoTestCase):
         sha = self.git("rev-parse", "HEAD").strip()
         return review.results(self.work / ".git", "feat/demo", sha)
 
+    @property
+    def inbox(self) -> Path:
+        folder = self.work / ".work" / "tmp"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
     def report_file(self, name: str, body: str) -> str:
-        path = self.tmp / name
+        path = self.inbox / name
         path.write_text(body, encoding="utf-8")
         return str(path)
 
@@ -396,7 +402,7 @@ class ReviewReportTests(RepoTestCase):
         # verifies: SPEC-0013/AC-04
         # verifies: SPEC-0001/AC-12
         huge = self.report_file("huge.txt", "x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n")
-        cases = ((str(self.tmp / "missing.txt"), "no se puede leer"), (self.report_file("empty.txt", ""), "vacío"),
+        cases = ((str(self.inbox / "missing.txt"), "no se puede leer"), (self.report_file("empty.txt", ""), "vacío"),
                  (huge, "supera"))
         for report, reason in cases:
             with self.subTest(report=report):
@@ -409,7 +415,7 @@ class ReviewReportTests(RepoTestCase):
     def test_the_report_is_archived_verbatim_and_never_overwritten(self):
         # verifies: SPEC-0013/AC-05
         body = "HALLAZGOS\r\nninguno\r\nBLOQUEANTES: 0\r\n"
-        report = self.tmp / "r.txt"
+        report = self.inbox / "r.txt"
         report.write_bytes(body.encode())
         self.record(str(report), ok=True)
         sha = self.git("rev-parse", "HEAD").strip()
@@ -437,6 +443,7 @@ class ReviewReportTests(RepoTestCase):
         self.record(good, ok=True)
         entry = self.recorded()["verificador"]
         self.assertEqual((entry["status"], entry["attempts"], entry["blocking"]), ("ok", 3, 0))
+        self.assertEqual(entry["failures"], 0)
         self.git("commit", "--allow-empty", "-q", "-m", "chore: next\n\nRefs: n/a")
         self.assertNotIn("verificador", self.recorded())  # a new SHA starts from zero
 
@@ -454,7 +461,7 @@ class ReviewReportTests(RepoTestCase):
 
     def test_a_report_that_is_not_utf8_is_archived_and_failed(self):
         # verifies: SPEC-0013/AC-03
-        report = self.tmp / "bin.txt"
+        report = self.inbox / "bin.txt"
         report.write_bytes(b"HALLAZGOS\nninguno\n\xff\xfe\nBLOQUEANTES: 0\n")
         self.record(str(report), ok=False)
         entry = self.recorded()["verificador"]
@@ -524,9 +531,10 @@ class ReviewReportTests(RepoTestCase):
         from mthlib import review
         from mthlib.errors import MthError
         folder = self.work / ".work" / "reviews"
-        for agent in ("../x", "a/b", ".."):
-            with self.subTest(agent=agent), self.assertRaises(MthError):
-                review.archive(self.work, folder, "abc123", agent, 1, b"x")
+        for agent, sha in (("../x", "abc123"), ("a/b", "abc123"), ("..", "abc123"),
+                           ("verificador", "../abc"), ("verificador", "a/b")):
+            with self.subTest(agent=agent, sha=sha), self.assertRaises(MthError):
+                review.archive(self.work, folder, sha, agent, 1, b"x")
         real_open = open
 
         def failing(path, mode="r", *a, **k):
@@ -546,6 +554,41 @@ class ReviewReportTests(RepoTestCase):
         self.record(good, ok=True)
         self.assertIn("UNA corrección", self.record(bad, ok=False))  # a failure after an ok is the first
         self.assertEqual(self.recorded()["verificador"]["failures"], 1)
+
+    def test_a_report_outside_the_repository_or_not_a_regular_file_is_refused(self):
+        # verifies: SPEC-0013/AC-12
+        secret = self.tmp / "secret.txt"
+        secret.write_text("clave privada\n", encoding="utf-8")
+        out = self.record(str(secret), ok=False)
+        self.assertIn("fuera del repositorio", out)
+        self.assertNotIn("verificador", self.recorded())
+        fifo = self.inbox / "pipe"
+        os.mkfifo(fifo)
+        self.record(str(fifo), ok=False)
+        self.assertIn("no es un fichero regular", self.recorded()["verificador"]["reason"])
+
+    def test_a_failure_reason_never_quotes_the_report(self):
+        # verifies: SPEC-0013/AC-12
+        self.record(self.report_file("leak.txt", "HALLAZGOS\nclave-secreta-123\nBLOQUEANTES: 0\n"), ok=False)
+        self.assertNotIn("clave-secreta", json.dumps(self.recorded()["verificador"]["reason"]))
+
+    def test_parallel_records_do_not_lose_updates(self):
+        # verifies: SPEC-0013/AC-13
+        from concurrent.futures import ThreadPoolExecutor
+
+        from mthlib import review
+        sha = self.git("rev-parse", "HEAD").strip()
+        good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+        agents = [f"agente-{i}" for i in range(12)]
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            list(pool.map(lambda a: review.record_report(
+                self.work / ".git", self.work, self.work / ".work" / "reviews", "feat/demo", sha, a, good, "s"), agents))
+        self.assertEqual(sorted(review.results(self.work / ".git", "feat/demo", sha)), sorted(agents))
+
+    def test_a_missing_report_option_is_a_clear_error(self):
+        # verifies: SPEC-0013/AC-12
+        out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
+        self.assertIn("necesita", out)
 
     def test_an_unarchivable_report_records_nothing(self):
         # verifies: SPEC-0013/AC-08

@@ -31,7 +31,7 @@ Bloqueante = incumple una regla DEBE, un criterio de aceptación, o introduce un
 Termina con: BLOQUEANTES: <n>
 ```
 
-Guarda el informe de cada revisor **tal cual lo devolvió**, sin resumir ni retocar, en un fichero temporal (por ejemplo `.work/tmp/<agente>.md`). `mth review record` lo archiva byte a byte en `.work/reviews/<sha>-<agente>-<n>.md` (`<n>` = número de intento) y es el registro de la revisión. Si quieres un resumen, que sea un fichero aparte que enlace al original; nunca lo sustituye. El informe incluye siempre la sección `HALLAZGOS` y termina con `BLOQUEANTES: <n>`.
+Guarda el informe de cada revisor **tal cual lo devolvió**, sin resumir ni retocar, en `.work/tmp/<agente>.md` (`mth` solo lee informes dentro del repo). `mth review record` lo archiva byte a byte en `.work/reviews/<sha>-<agente>-<n>.md` (`<n>` = número de intento) y es el registro de la revisión. Si quieres un resumen, que sea un fichero aparte que enlace al original; nunca lo sustituye. El informe incluye siempre la sección `HALLAZGOS` y termina con `BLOQUEANTES: <n>`.
 
 **El número de bloqueantes lo calcula `mth`:** cuenta las líneas `N. [bloqueante] …` de `HALLAZGOS` y contrasta la línea `BLOQUEANTES: <n>` del agente. Si no coinciden, o `mth` no sabe leer el formato (sección ausente, viñetas, texto suelto, severidad desconocida, informe vacío o ausente), registra la revisión como **fallida**: no aprueba nada y `mth review status` la muestra con su motivo y su número de intento.
 
