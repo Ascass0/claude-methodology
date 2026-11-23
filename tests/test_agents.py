@@ -176,6 +176,20 @@ class AddTests(AgentsTestCase):
         left = json.loads(self.read(".claude/settings.json"))["hooks"]["PreToolUse"]
         self.assertEqual(left, [{"matcher": agents.HOOK_MATCHER, "hooks": [{"type": "command", "command": "echo propio"}]}])
 
+    def test_write_errors_are_reported_as_resumable_environment_errors(self):
+        from mthlib import files
+        target = self.root / "bloqueado" / "x.json"
+        (self.root / "bloqueado").write_text("no es un directorio", encoding="utf-8")
+        with self.assertRaises(MthError) as ctx:
+            files.atomic_write(target, "{}")
+        self.assertIn("No se pudo escribir", ctx.exception.message)
+        self.assertIn("reanudable", ctx.exception.hint)
+        self.assertIsInstance(ctx.exception.__cause__, OSError)
+        files.atomic_write(self.root / "ok.txt", "a")
+        (self.root / "ok.txt").chmod(0o640)
+        files.atomic_write(self.root / "ok.txt", "b")
+        self.assertEqual((self.root / "ok.txt").stat().st_mode & 0o777, 0o640)
+
     def test_settings_with_an_unexpected_shape_are_rejected(self):
         self.write(".claude/settings.json", json.dumps({"hooks": {"PreToolUse": {"x": 1}}}))
         with self.assertRaises(MthError) as ctx:

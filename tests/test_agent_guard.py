@@ -196,7 +196,8 @@ class AllowlistHardeningTests(GuardTestCase):
                   "git grep $'-Ocmd' x", "git diff *", "git log ?", "git diff ~/x", "git log `id`",
                   "git diff | sort -o /tmp/x", "git log | sort --out=/tmp/x", "git log | uniq a b",
                   "git log | sort -S1 --compress-program=sh", 'git log --grep="$HOME"',
-                  "git grep --open=sh -n x", "git grep --open-files-in-p=sh x", "git diff --out=/tmp/x"]
+                  "git grep --open=sh -n x", "git grep --open-files-in-p=sh x", "git diff --out=/tmp/x",
+                  "git grep -nOsh x", "git grep -Otrue x"]
         for command in denied:
             with self.subTest(command=command):
                 self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command=command)), 2)
@@ -208,7 +209,12 @@ class AllowlistHardeningTests(GuardTestCase):
 
     def test_jq_only_filters_stdin(self):
         # verifies: SPEC-0012/AC-23
+        gh = {"gh api -iXPOST repos/x": 2, "gh api -XPOST repos/x": 2, "gh api repos/x": 0, "gh run list -L 5": 0}
+        for command, expected in gh.items():
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("respondedor-incidencias", command=command)), expected)
         for command, expected in {"gh run list --json name | jq '.[].name'": 0, "gh run list | jq -n env": 2,
+                                  "gh run list | jq -nf prog.jq": 2, "gh run list | jq -rf prog.jq": 2,
                                   "gh run list | jq -n '$ENV.GH_TOKEN'": 2, "gh run list | jq --rawfile a x .": 2,
                                   "gh run list | jq -f filtro.jq": 2, "gh run list | jq 'input_filename'": 2}.items():
             with self.subTest(command=command):
@@ -229,6 +235,17 @@ class AllowlistHardeningTests(GuardTestCase):
 
 
 class TimeoutTests(GuardTestCase):
+    def test_the_guard_bounds_its_own_decision(self):
+        # verifies: SPEC-0012/AC-24
+        import time
+        with mock.patch.object(agent_guard, "GUARD_TIMEOUT", 1), \
+                mock.patch.object(agent_guard, "evaluate", side_effect=lambda *a: time.sleep(5)):
+            started = time.monotonic()
+            rc = self.repo.guard(self.repo.payload("revisor-fallos", command="git log"))
+        self.assertEqual(rc, 2)
+        self.assertLess(time.monotonic() - started, 4)
+
+
     def test_git_that_does_not_answer_in_time_blocks(self):
         # verifies: SPEC-0012/AC-24
         with mock.patch.object(agent_guard, "GIT_TIMEOUT", 1e-6):
@@ -251,6 +268,14 @@ class ProtectedPathTests(GuardTestCase):
                 rc = self.repo.guard(self.repo.payload("diagnosticador", "Write", wt, file_path=str(wt / rel), content="x"))
                 self.assertEqual(rc, 2)
         self.assertEqual(self.repo.guard(self.repo.payload("diagnosticador", "Edit", wt, file_path=str(wt / "src/a.py"))), 0)
+
+    def test_the_protection_ignores_case(self):
+        # verifies: SPEC-0012/AC-25
+        wt = self.repo.worktree
+        for rel in (".Claude/Hooks/mth-agent-guard", ".CLAUDE/Settings.JSON", ".GIT/hooks/x", ".claude/MTH/agents/a.toml"):
+            with self.subTest(path=rel):
+                self.assertEqual(self.repo.guard(self.repo.payload("diagnosticador", "Write", wt,
+                                                                   file_path=str(wt / rel), content="x")), 2)
 
 
 class DecisionLogTests(GuardTestCase):
@@ -283,7 +308,23 @@ class DecisionLogTests(GuardTestCase):
         self.assertNotIn("--grep", text)
         self.assertEqual([e["target"] for e in self.events()], ["GH_TOKEN=[redactado] git", "gh api"])
         self.assertEqual((self.repo.root / ".git/mth/agent-guard.jsonl").stat().st_mode & 0o777, 0o600)
-        self.assertEqual(agent_guard.redact("Authorization: Bearer abc x"), "Authorization: Bearer [redactado] x")
+        for raw, clean in {"Authorization: Bearer abc x": "Authorization: Bearer [redactado] x",
+                           "Authorization: token abc": "Authorization: token [redactado]",
+                           '{"password": "hunter2"}': '{"password": "[redactado]"}',
+                           "GH_TOKEN=ghp_x1 y": "GH_TOKEN=[redactado] y", "sin secretos": "sin secretos"}.items():
+            self.assertEqual(agent_guard.redact(raw), clean)
+
+    def test_an_unwritable_log_does_not_change_the_decision(self):
+        # verifies: SPEC-0012/AC-27
+        (self.repo.root / ".git/mth/agent-guard.jsonl").mkdir(parents=True)  # a directory: appending fails
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            allowed = agent_guard.main(json.dumps(self.repo.payload("revisor-seguridad", command="git log")),
+                                       {"CLAUDE_PROJECT_DIR": str(self.repo.root)})
+            blocked = agent_guard.main(json.dumps(self.repo.payload("revisor-seguridad", command="git push")),
+                                       {"CLAUDE_PROJECT_DIR": str(self.repo.root)})
+        self.assertEqual((allowed, blocked), (0, 2))
+        self.assertIn("No se pudo escribir la traza", err.getvalue())
 
     def test_the_log_rotates(self):
         # verifies: SPEC-0012/AC-27
@@ -353,41 +394,60 @@ class ShimTests(GuardTestCase):
         self.assertEqual(self.run_shim(log).returncode, 0)
         self.assertEqual(self.run_shim(log, project=wt).returncode, 0)
 
-    def path_with(self, tools: dict[str, str]) -> str:
-        """A PATH with stub executables first; ``tools`` maps a name to its script body."""
-        stubs = self.repo.tmp / "stubs"
-        stubs.mkdir(exist_ok=True)
-        for name, body in tools.items():
-            (stubs / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
-            (stubs / name).chmod(0o755)
-        return f"{stubs}{os.pathsep}{os.environ['PATH']}"
+    def run_slow_guard(self, path: str) -> subprocess.CompletedProcess:
+        self.fake_launcher("exec sleep 5\n")
+        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root), "PATH": path, "MTH_AGENT_GUARD_TIMEOUT": "1"}
+        payload = {**self.repo.payload("revisor-adr", command="git log"), "session_id": "sesion-7"}
+        return subprocess.run([shutil.which("sh"), str(self.shim)], input=json.dumps(payload), env=env,
+                              capture_output=True, text=True, timeout=4)
 
-    def test_a_guard_cut_by_the_time_limit_blocks_and_is_logged(self):
+    def last_event(self) -> dict:
+        return json.loads((self.common / "mth" / "agent-guard.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+
+    def test_a_guard_that_never_ends_is_cut_by_timeout_and_logged_with_correlation(self):
+        # verifies: SPEC-0012/AC-24
+        if shutil.which("timeout") is None:
+            self.skipTest("timeout no disponible")
+        proc = self.run_slow_guard(os.environ["PATH"])
+        self.assertEqual(proc.returncode, 2)
+        event = self.last_event()
+        self.assertEqual((event["category"], event["agent"], event["session"], event["tool"]),
+                         ("timeout", "revisor-adr", "sesion-7", "Bash"))
+        self.assertRegex(event["ts"], r"^\d{4}-\d\d-\d\dT")
+
+    def test_without_timeout_perl_cuts_a_guard_that_never_ends(self):
+        # verifies: SPEC-0012/AC-24
+        if shutil.which("perl") is None:
+            self.skipTest("perl no disponible")
+        proc = self.run_slow_guard(self.limited_path("sh", "git", "sed", "head", "grep", "cat", "mkdir", "perl",
+                                                     "sleep", "date", "printf"))
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(self.last_event()["category"], "timeout")
+
+    def test_without_timeout_and_perl_subagents_are_blocked(self):
         # verifies: SPEC-0012/AC-24
         self.fake_launcher("exit 0\n")
         env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root),
-               "PATH": self.path_with({"timeout": 'shift; [ "$1" = git ] && exec "$@"; exit 124'})}
-        proc = subprocess.run(["sh", str(self.shim)], input=json.dumps(self.repo.payload("revisor-adr", command="git log")),
-                              env=env, capture_output=True, text=True)
+               "PATH": self.limited_path("sh", "git", "sed", "head", "cat")}
+        proc = subprocess.run([shutil.which("sh"), str(self.shim)], env=env, capture_output=True, text=True,
+                              input=json.dumps(self.repo.payload("revisor-adr", command="git log")))
         self.assertEqual(proc.returncode, 2)
-        log = (self.common / "mth" / "agent-guard.jsonl").read_text(encoding="utf-8")
-        self.assertEqual(json.loads(log.splitlines()[-1])["category"], "timeout")
+        self.assertIn("Instala coreutils o perl", proc.stderr)
 
-    def test_without_timeout_the_shim_falls_back_to_perl(self):
-        if shutil.which("perl") is None:
-            self.skipTest("perl no disponible")
+    def test_any_unexpected_exit_of_the_guard_is_logged_as_a_crash(self):
+        self.fake_launcher("exit 1\n")
+        self.assertEqual(self.run_shim(self.repo.payload("revisor-adr", command="git log")).returncode, 2)
+        event = self.last_event()
+        self.assertEqual((event["category"], event["agent"]), ("crash", "revisor-adr"))
+        self.assertIn("código 1", event["reason"])
+
+    def limited_path(self, *tools: str) -> str:
         bin_dir = self.repo.tmp / "bin"
-        bin_dir.mkdir()
-        for tool in ("sh", "git", "sed", "head", "grep", "cat", "mkdir", "perl", "sleep"):
-            if shutil.which(tool):
+        bin_dir.mkdir(exist_ok=True)
+        for tool in tools:
+            if shutil.which(tool) and not (bin_dir / tool).exists():
                 (bin_dir / tool).symlink_to(shutil.which(tool))
-        env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.repo.root), "PATH": str(bin_dir)}
-        run = lambda: subprocess.run([shutil.which("sh"), str(self.shim)], env=env, capture_output=True, text=True,
-                                     input=json.dumps(self.repo.payload("revisor-adr", command="git log")))
-        self.fake_launcher("exit 0\n")
-        self.assertEqual(run().returncode, 0)
-        self.fake_launcher("exit 2\n")
-        self.assertEqual(run().returncode, 2)
+        return str(bin_dir)
 
     def test_any_failure_of_the_launcher_blocks(self):
         self.fake_launcher("exit 1\n")
