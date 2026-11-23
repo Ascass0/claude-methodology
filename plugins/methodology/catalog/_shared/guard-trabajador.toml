@@ -3,7 +3,7 @@
 # frente a errores del agente. NO es una frontera de seguridad frente a un agente malicioso:
 # `python script.py` puede hacer lo que quiera. La frontera real es `isolation: worktree` (el árbol
 # de trabajo) y los rulesets de GitHub (las ramas compartidas). Riesgo residual aceptado: ver
-# README, «Riesgos».
+# README de claude-methodology, «Límites conocidos».
 [bash]
 mode = "denylist"
 deny = [

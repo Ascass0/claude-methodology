@@ -100,6 +100,7 @@ class FailClosedTests(GuardTestCase):
         self.assertEqual(self.repo.guard(self.repo.payload("revisor-fallos", command="git log")), 2)
         self.assertEqual(self.repo.guard("{no es json"), 2)
         self.assertEqual(self.repo.guard("[1, 2]"), 2)
+        self.assertEqual(self.repo.guard(self.repo.payload("diagnosticador", command='pytest -k "sin cerrar')), 2)
         payload = self.repo.payload("revisor-diseno", command="git log")
         del payload["agent_type"]
         self.assertEqual(self.repo.guard(payload), 2)

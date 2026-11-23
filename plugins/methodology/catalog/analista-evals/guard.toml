@@ -2,5 +2,5 @@ extends = "_shared/guard-trabajador.toml"
 
 [write]
 # Write y Edit solo dentro del directorio de informes. Ojo: un script lanzado con Bash puede
-# escribir donde quiera; esto evita errores del agente, no es una frontera (README, «Riesgos»).
+# escribir donde quiera; esto evita errores del agente, no es una frontera (README de claude-methodology, «Límites conocidos»).
 allow = ["{{vars.reports}}/**"]
