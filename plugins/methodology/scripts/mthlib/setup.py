@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from . import adoption, changelog, commits, lang, survey, versions, work
+from . import adoption, agents, changelog, commits, lang, survey, versions, work
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
 from .errors import MthError
@@ -492,6 +492,13 @@ def doctor(start: Path) -> int:
         if agent:
             where = agent_location(git.root, agent)
             report(where is not None, f"Rol {role} → {agent} ({where or 'no encontrado'})")
+    installed = agents.installed_names(git.root)
+    if installed:  # SPEC-0012: warnings only
+        findings = agents.doctor_findings(git.root, cfg, git.common_dir() / LAUNCHER)
+        for finding in findings:
+            report(False, finding, blocking=False)
+        if not findings:
+            report(True, f"Agentes del catálogo: {', '.join(installed)}")
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)

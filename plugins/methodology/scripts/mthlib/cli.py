@@ -7,7 +7,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import (__version__, agent_guard, branches, catalog, changelog, commits, db_query, flow, guard, plan,
+from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan,
                review, session, setup, survey)
 from .config import load
 from .errors import MthError
@@ -274,6 +274,23 @@ def _cmd_db_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_agents(args: argparse.Namespace) -> int:
+    git = Git.discover(Path.cwd())
+    manager = agents.Manager(load(git.root))
+    if args.action == "list":
+        manager.list()
+        return 0
+    if args.action == "add":
+        return EXIT_ERROR if manager.add(args.names, args.profile, args.replace) else 0
+    if args.action == "sync":
+        return EXIT_ERROR if manager.sync(args.names, args.force) else 0
+    if args.action == "diff":
+        print(manager.diff(args.name), end="")
+        return 0
+    manager.remove(args.name)
+    return 0
+
+
 def _cmd_status(_: argparse.Namespace) -> int:
     for line in session._state(Path.cwd()):
         print(line)
@@ -359,6 +376,20 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="posición de la rama actual en el flujo")
     sub.add_parser("guard", help="hook PreToolUse (stdin JSON)")
     sub.add_parser("agent-guard", help="guard de los agentes del catálogo (stdin JSON; falla cerrado)")
+    s = sub.add_parser("agents", help="agentes del catálogo: list, add, sync, diff, remove")
+    actions = s.add_subparsers(dest="action", required=True)
+    actions.add_parser("list", help="agentes del catálogo y su estado en el repo")
+    a = actions.add_parser("add", help="renderiza e instala agentes")
+    a.add_argument("names", nargs="*")
+    a.add_argument("--profile", help="instala los agentes de un perfil (base, opcional, autonomo)")
+    a.add_argument("--replace", action="store_true", help="sustituye un agente del repo sin cabecera del catálogo")
+    a = actions.add_parser("sync", help="vuelve a renderizar los agentes instalados conservando su sección local")
+    a.add_argument("names", nargs="*")
+    a.add_argument("--force", action="store_true", help="sobrescribe ediciones manuales de la parte generada")
+    a = actions.add_parser("diff", help="diferencias entre lo instalado y lo que se renderizaría hoy")
+    a.add_argument("name")
+    a = actions.add_parser("remove", help="desinstala un agente del catálogo")
+    a.add_argument("name")
     s = sub.add_parser("db-query", help="consulta SQLite de solo lectura sobre [agents.lector-estado].databases")
     s.add_argument("--db", required=True, help="alias declarado de la base")
     s.add_argument("--schema", action="store_true", help="lista tablas y vistas con su SQL")
@@ -412,6 +443,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_status(args)
     if c == "db-query":
         return _cmd_db_query(args)
+    if c == "agents":
+        return _cmd_agents(args)
     ctx = _ctx(c)
     if c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
