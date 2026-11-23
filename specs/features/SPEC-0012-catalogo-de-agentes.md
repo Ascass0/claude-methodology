@@ -1,6 +1,6 @@
 # SPEC-0012 · Catálogo de agentes instalables
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-23
 - ADRs: [ADR-0008](../adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md)
 - Sustituye a: —
