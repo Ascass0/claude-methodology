@@ -133,5 +133,6 @@ docs = "es"
 # [agents.lector-estado]
 # databases = { estado = "data/state.db" }                         # obligatorio: alias → ruta
 # max_rows = 200
+# timeout_s = 10
 # [agents.respondedor-incidencias]
 # upstream_remote = "upstream"
