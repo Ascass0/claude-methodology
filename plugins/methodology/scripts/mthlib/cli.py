@@ -309,6 +309,18 @@ def _cmd_agents(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_smoke(args: argparse.Namespace) -> int:
+    from . import smoke  # lazy: it builds on agents and setup
+    git = Git.discover(Path.cwd())
+    result = smoke.smoke(git, args.claude, args.model, args.timeout)
+    say(result.summary)
+    for line in result.details:
+        say(f"  {line}")
+    if result.outcome == smoke.PASS:
+        say(f"  Registrado en {smoke.RECORD}: mth session y mth doctor avisarán si Claude Code cambia.")
+    return result.outcome
+
+
 def _cmd_status(_: argparse.Namespace) -> int:
     for line in session._state(Path.cwd()):
         print(line)
@@ -335,6 +347,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--answers", required=True, help="respuestas de la reestructuración (JSON, skill mth-reconfigure)")
     s.add_argument("--only", help="las mismas preguntas o bloques que en mth survey --reconfigure")
     sub.add_parser("doctor", help="comprueba la adopción")
+    s = sub.add_parser("smoke", help="prueba con Claude Code real que el guard de los agentes bloquea")
+    s.add_argument("--claude", help="ruta de la CLI de Claude Code (por defecto MTH_CLAUDE, CLAUDE_CODE_EXECPATH o el PATH)")
+    s.add_argument("--model", default="haiku", help="modelo barato de la prueba (por defecto haiku)")
+    s.add_argument("--timeout", type=float, default=180.0, help="plazo en segundos (por defecto 180)")
     s = sub.add_parser("github", help="aplica ajustes de merge y ruleset en GitHub")
 
     s = sub.add_parser("doc", help="crea una spec o un ADR")
@@ -463,6 +479,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_db_query(args)
     if c == "agents":
         return _cmd_agents(args)
+    if c == "smoke":
+        return _cmd_smoke(args)
     ctx = _ctx(c)
     if c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
