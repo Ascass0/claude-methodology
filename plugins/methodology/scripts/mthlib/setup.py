@@ -243,6 +243,12 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
             config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
     cfg = parse(root, config, config_file or answers_file or "plantilla")  # validate before any mutation
     check_hook_mode(git, cfg["hooks"]["commit_msg"])
+    chosen = plan.catalog if plan is not None else []
+    blockers = agents.Manager(cfg).blockers(chosen)  # SPEC-0012: before any mutation
+    if blockers:
+        raise MthError("No se pueden instalar los agentes del catálogo elegidos:\n"
+                       + "\n".join(f"  - {b}" for b in blockers),
+                       hint="Quítalos de 'catalog' en la respuesta 'revisores' o completa su configuración.")
     for ref in cfg["commits"]["external_refs"]:
         if not git.ok("rev-parse", "--verify", "--quiet", ref):
             raise MthError(f"No existe la referencia externa {ref}.", hint="Trae el remoto externo (git fetch upstream).")
@@ -270,6 +276,8 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     install_hook(git, cfg["hooks"]["commit_msg"])
     if plan is not None:
         _write_adoption_adr(root, cfg, git, inventory, plan)
+    if chosen and agents.Manager(load(root)).add(chosen, None, False):
+        raise MthError("No se instalaron todos los agentes del catálogo elegidos.")
 
     git.out("add", "-A")
     message = commits.build("chore", "methodology", "adopt claude-methodology",

@@ -31,11 +31,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "calidad": ("tests", "revisores", "colision"),
     "agente": ("autonomia", "modelos"),
 }
+# "revisores" is always asked: it also offers the catalog agents (SPEC-0012).
 BASE: dict[str, tuple[str, ...]] = {
-    "new": ("autonomia", "idioma", "modelos"),
-    "existing": ("alcance", "autonomia", "modelos"),
-    "methodology": ("alcance", "autonomia", "modelos"),
-    "fork": ("alcance", "versiones", "autonomia", "modelos"),
+    "new": ("revisores", "autonomia", "idioma", "modelos"),
+    "existing": ("alcance", "revisores", "autonomia", "modelos"),
+    "methodology": ("alcance", "revisores", "autonomia", "modelos"),
+    "fork": ("alcance", "versiones", "revisores", "autonomia", "modelos"),
 }
 PROCESS_SIGNALS = ("specs", "adrs", "agents", "claude_dirs", "instructions", "commit_hook",
                    "hook_managers", "release_tools")

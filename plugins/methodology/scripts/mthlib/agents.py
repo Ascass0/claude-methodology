@@ -323,6 +323,22 @@ class Manager:
                     f"→ {self.status(name)}")
                 say(f"      {meta['summary']}")
 
+    def blockers(self, names: list[str]) -> list[str]:
+        """Why each of ``names`` could not be installed now (empty: all can), without writing."""
+        out = []
+        for name in names:
+            try:
+                meta = catalog.load_meta(self.catalog, name)
+            except MthError as exc:
+                out.append(exc.message)
+                continue
+            if read_copy(self.root, name).md is not None:
+                out.append(f"{name}: ya existe {AGENTS_DIR}/{name}.md en el repo")
+            missing = catalog.missing_requirements(meta, self.cfg.data)
+            if missing:
+                out.append(f"{name}: requisitos sin configurar: {', '.join(missing)}")
+        return out
+
     def add(self, names: list[str], profile: str | None, replace: bool) -> int:
         """Install agents. Returns the number of requested agents that could not be installed."""
         requested = set(names)  # unmet requirements fail only for agents named explicitly
