@@ -87,6 +87,8 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 | Otro registro mantiene el bloqueo más de 30 s | `flock` no bloqueante con espera creciente y plazo | Error accionable; no se registra nada |
 | `--summary` de más de 4 KiB | Tamaño | Error; no se registra nada |
 | `reviews.json` corrupto | Lectura del registro | Error antes de archivar; no se registra nada |
+| `reviews.json` es JSON válido pero la entrada del agente tiene otra forma (contadores no numéricos) | Validación de la entrada previa | Error de etapa `store` con la pista de borrarlo; no se registra nada |
+| El sistema de ficheros no admite `flock` | `OSError` distinto de «ocupado» | Error inmediato de etapa `lock`, sin esperar 30 s |
 | Falla la escritura del registro tras archivar | `atomic_write` | Error reanudable; queda un archivo huérfano y el siguiente intento salta su número |
 | Informe repetido en el mismo intento (ruta de archivo ocupada) | El archivo existe | El número de intento sube hasta uno libre; nunca se sobrescribe |
 | Segundo fallo seguido | `failures` ≥ 2 | El mensaje manda detenerse y avisar, no relanzar |
@@ -106,7 +108,7 @@ Ante un registro `failed`, la sesión principal pide **una** corrección al **mi
 - **AC-11**: Si `.work/reviews` resuelve fuera del repo, o el agente o el SHA no son nombres seguros, no se archiva ni se registra nada; si la copia falla a medias no queda un archivo parcial.
 - **AC-12**: `--report` fuera del repo se rechaza sin registrar nada, un fichero no regular se registra como `failed`, falta de `--report` es un error claro y el motivo del fallo nunca cita el contenido del informe.
 - **AC-13**: Registros simultáneos de agentes distintos no pierden ninguna entrada.
-- **AC-14**: Un `reviews.json` corrupto, un bloqueo que no se obtiene a tiempo o un `--summary` de más de 4 KiB son errores que no registran nada, y el evento de traza `review.not_recorded` lleva la etapa (`rejected`, `archive`, `lock`, `store`) y la ruta de un archivo huérfano si lo hay.
+- **AC-14**: Un `reviews.json` corrupto, un bloqueo que no se obtiene a tiempo o un `--summary` de más de 4 KiB son errores que no registran nada, y el evento de traza `review.not_recorded` (y `review.failed`, con motivo y fallos, cuando se registra una revisión fallida) lleva la etapa (`rejected`, `archive`, `lock`, `store`) y la ruta de un archivo huérfano si lo hay.
 - **AC-09**: Un registro `ok` tras un `failed` deja la revisión aprobada con los bloqueantes calculados.
 
 ## Notas

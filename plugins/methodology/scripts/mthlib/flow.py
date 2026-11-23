@@ -180,6 +180,11 @@ def _merge_message(title: str, number: int, head: str, base: str,
     return f"{title} (#{number})", "\n".join(lines)
 
 
+def _cell(text: str) -> str:
+    """A table cell from free text: one line, pipes escaped (no backslash inside an f-string: Python 3.11)."""
+    return text.replace("\n", " ").replace("|", "\\|")
+
+
 def _pr_body(summary: str, refs: list[str], frag: changelog.Fragment | None,
              tests: str, reviews: dict[str, dict]) -> str:
     parts = ["## Resumen", summary.strip(), "", "## Referencias",
@@ -189,7 +194,7 @@ def _pr_body(summary: str, refs: list[str], frag: changelog.Fragment | None,
     parts += ["## Verificación", f"- Tests: {tests}", "- Trazabilidad: OK"]
     if reviews:
         parts += ["", "## Revisión", "| Revisor | Bloqueantes | Resumen |", "|---|---|---|"]
-        parts += [f"| {a} | {r['blocking']} | {r['summary'].replace(chr(10), ' ').replace('|', '\\|')} |"
+        parts += [f"| {a} | {r['blocking']} | {_cell(r['summary'])} |"
                   for a, r in reviews.items()]
     parts += ["", "---", "_Generado por claude-methodology._"]
     return "\n".join(parts) + "\n"

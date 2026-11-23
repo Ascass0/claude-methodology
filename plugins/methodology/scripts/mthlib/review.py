@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import stat
 import time
@@ -132,9 +133,11 @@ def parse_report(text: str) -> Parsed:
 def read_report(path: Path) -> bytes:
     """Bytes of the report, or a ``ReportError`` if it cannot be used."""
     try:
-        if not stat.S_ISREG(path.stat().st_mode):  # a FIFO or a device would block forever
-            raise ReportError("no es un fichero regular")
-        with open(path, "rb") as fh:
+        # O_NONBLOCK: opening a FIFO must not wait for a writer; the type is checked on the open descriptor.
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(fd, "rb") as fh:
+            if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                raise ReportError("no es un fichero regular")
             data = fh.read(MAX_REPORT_BYTES + 1)
     except OSError as exc:
         raise ReportError(f"no se puede leer el informe ({exc.strerror or exc})") from exc
@@ -225,12 +228,15 @@ def _locked(git_dir: Path, timeout: float | None = None):
             try:
                 fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
-            except OSError:
+            except BlockingIOError:  # held by another record; any other OSError is a real failure
                 if time.monotonic() >= deadline:
                     raise ReviewError("lock", "Otro `mth review record` tiene el registro bloqueado.",
                                       hint="Espera a que termine y repite; no se ha registrado nada.") from None
                 time.sleep(delay)
                 delay = min(delay * 2, 0.5)
+            except OSError as exc:
+                raise ReviewError("lock", f"No se pudo tomar el bloqueo {lock}: {exc}.",
+                                  hint="El sistema de ficheros no admite flock; no se ha registrado nada.") from exc
         yield
 
 
@@ -254,9 +260,15 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
     with _locked(git_dir):
         try:
             previous = results(git_dir, branch, sha).get(agent, {})
+            if not isinstance(previous, dict):
+                raise TypeError("la entrada no es un objeto")
+            counters = (int(previous.get("attempts", 0)), int(previous.get("failures", 0)))
         except MthError as exc:
             raise ReviewError("store", exc.message, exc.hint) from exc
-        attempt = int(previous.get("attempts", 0)) + 1
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ReviewError("store", f"{_store(git_dir)} tiene una entrada inesperada para {agent}: {exc}.",
+                              hint="Bórralo y repite las revisiones; no se ha registrado nada.") from exc
+        attempt = counters[0] + 1
         entry: dict = {"summary": summary.strip()}
         try:
             data = read_report(report)
@@ -281,7 +293,7 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
         entry["status"] = "failed" if "reason" in entry else "ok"
         entry["attempts"] = attempt
         # Consecutive failures drive the "stop" advice; an approved record in between resets them.
-        entry["failures"] = int(previous.get("failures", 0)) + 1 if entry["status"] == "failed" else 0
+        entry["failures"] = counters[1] + 1 if entry["status"] == "failed" else 0
         if previous:  # the overwritten entry stays visible in the trace and in the record
             entry["previous_status"] = previous.get("status", "ok")
         try:

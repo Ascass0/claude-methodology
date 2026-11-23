@@ -644,6 +644,37 @@ class ReviewReportTests(RepoTestCase):
         body = flow._pr_body("r", [], None, "ok", {"verificador": {"blocking": 0, "summary": "a | b\nc"}})
         self.assertIn("| verificador | 0 | a \\| b c |", body)
 
+    def test_a_store_entry_of_the_wrong_shape_is_a_clear_store_error(self):
+        # verifies: SPEC-0013/AC-14
+        from mthlib import review
+        sha = self.git("rev-parse", "HEAD").strip()
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        for entry in ({"attempts": "dos"}, "no es un objeto"):
+            with self.subTest(entry=entry):
+                store.write_text(json.dumps({"feat/demo": {sha: {"verificador": entry}}}), encoding="utf-8")
+                good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+                with self.assertRaises(review.ReviewError) as caught:
+                    review.record_report(self.work / ".git", self.work, self.work / ".work" / "reviews",
+                                         "feat/demo", sha, "verificador", good, "s")
+                self.assertEqual(caught.exception.stage, "store")
+
+    def test_a_lock_error_that_is_not_contention_fails_at_once(self):
+        # verifies: SPEC-0013/AC-14
+        import fcntl
+
+        from mthlib import review
+        with mock.patch.object(fcntl, "flock", side_effect=OSError(37, "ENOLCK")), \
+                self.assertRaises(review.ReviewError) as caught, review._locked(self.work / ".git", timeout=30):
+            pass
+        self.assertEqual(caught.exception.stage, "lock")
+
+    def test_a_pipe_cell_has_no_backslash_inside_an_f_string(self):
+        # verifies: SPEC-0013/AC-12
+        import re as regex
+        source = (Path(__file__).resolve().parent.parent / "plugins/methodology/scripts/mthlib/flow.py").read_text()
+        self.assertIsNone(regex.search(r"""f"[^"\n]*\{[^}"\n]*\\""", source))  # Python 3.11 rejects it
+
     def test_an_overwritten_entry_is_visible_as_previous_status(self):
         # verifies: SPEC-0013/AC-14
         self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=True)

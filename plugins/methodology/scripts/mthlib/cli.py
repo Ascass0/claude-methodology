@@ -109,7 +109,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
                              stage=getattr(exc, "stage", "unknown"), error=exc.message,
                              orphan=str(getattr(exc, "archived", None) or "") or None)
             raise
-        ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
+        ctx.tracer.event("review.failed" if entry["status"] == "failed" else "review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
                          blocking=entry.get("blocking"), attempts=entry["attempts"],
                          reason=entry.get("reason"), previous_status=entry.get("previous_status"))
         if entry["status"] == "failed":
