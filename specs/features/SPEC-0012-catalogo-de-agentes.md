@@ -1,6 +1,6 @@
 # SPEC-0012 · Catálogo de agentes instalables
 
-- Estado: implementada
+- Estado: aprobada
 - Fecha: 2026-11-23
 - ADRs: [ADR-0008](../adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md)
 - Sustituye a: —
@@ -89,18 +89,20 @@ La entrada de `.claude/settings.json`:
    - lee el lanzador de `<git-common-dir>/mth/launcher`;
    - si no es un repositorio git, sale con 2;
    - si no encuentra el lanzador (plugin ausente o anterior a 0.8.0), bloquea solo a los subagentes del catálogo (`.claude/mth/agents/<agente>.guard.toml` o cabecera de plantilla) y a los que no puede identificar; los demás (`verificador`, `Explore`...) siguen funcionando;
-   - si lo encuentra, le pasa el payload con `agent-guard`, acotado en tiempo; cualquier salida distinta de 0, también por tiempo agotado, bloquea.
+   - si lo encuentra, le pasa el payload con `agent-guard`, acotado en tiempo con `timeout` o, si no existe (macOS), con `perl`; cualquier salida distinta de 0, también por tiempo agotado, bloquea. Si el guard muere por tiempo, el shim añade una línea al registro.
 2. **`mth agent-guard`.** Lee el JSON del hook por stdin:
    - **sin `agent_type`** (pero con `agent_id`): bloquea;
    - **`agent_type` que no es un agente del catálogo**: permite. Es del catálogo un nombre válido de plantilla que tiene **cabecera de plantilla en `.claude/agents/<agente>.md` o un `.claude/mth/agents/<agente>.guard.toml`**. Quedan fuera los agentes del plugin (`methodology:verificador`), los integrados (`Explore`) y los propios del repo sin cabecera ni guard;
    - **agente del catálogo**: aplica `.claude/mth/agents/<agente>.guard.toml`. Si no existe, bloquea y pide `mth agents sync`. Si existe el guard pero el `.md` perdió la cabecera, bloquea con «agente del catálogo editado: mth agents sync o remove»: un agente adaptado a mano no queda sin restricciones (ADR-0008, decisión 7);
-   - cada decisión sobre un agente del catálogo, y cada bloqueo de un subagente sin identificar, se registra en `<git-common-dir>/mth/agent-guard.jsonl` (JSON por línea: agente, herramienta, resultado, categoría, `session_id`; con traceback si es un error interno). El fichero se rota al superar 1 MiB;
-   - las llamadas a `git` del guard tienen timeout; si vence, bloquea;
+   - cada decisión sobre un agente del catálogo, y cada bloqueo de un subagente sin identificar, se registra en `<git-common-dir>/mth/agent-guard.jsonl` (JSON por línea: agente, herramienta, programa y subcomando o ruta, resultado, categoría, motivo, `session_id`; con traceback si es un error interno). No guarda el comando completo y redacta credenciales en el motivo (§4 «Secretos nunca»). El fichero se crea con permisos 0600 y se rota al superar 1 MiB;
+   - las llamadas a `git` del guard tienen timeout, y el guard entero un límite propio; si vencen, bloquea;
    - sale con 0 para permitir y con 2 para bloquear, con el motivo en stderr. Falla cerrado ante cualquier error;
    - semántica de `[bash]` y de `[write] allow`: la de `mthlib/agent_guard.py`, portada de la implementación de referencia de la entrega; se documenta en [docs/catalogo-de-agentes.md](../../docs/catalogo-de-agentes.md). En modo `allowlist`, además:
      - el programa no puede llevar ruta (`./git`, `/x/git`), salvo el `mth` del propio plugin (`sh <plugin>/scripts/mth`, `python <plugin>/scripts/mth.py`) o `$MTH`;
      - se bloquea toda expansión de shell que el tokenizador no modela: `$` fuera de comillas simples (salvo `$MTH` como programa), comillas invertidas, llaves, `~` y comodines (`*`, `?`, `[`) fuera de comillas;
-     - en los filtros tras `|` se aplican también `deny_flags`, y no se admiten las opciones que escriben o ejecutan (`sort -o/--output/--compress-program/-T`) ni ficheros posicionales en `uniq`;
+     - `deny_flags` cubre también las abreviaturas de las opciones largas (`git grep --open=sh` es `--open-files-in-pager`);
+     - en los filtros tras `|` se aplican también `deny_flags`, y no se admiten las opciones que escriben o ejecutan (`sort -o/--output/--compress-program/-T`), ficheros posicionales en `uniq` ni lecturas del entorno o de ficheros en `jq` (`env`, `$ENV`, `input_filename`, `-f`, `--rawfile`, `--slurpfile`);
+     - `~` solo cuenta como expansión al inicio de una palabra (`HEAD~1` se admite);
    - `[write]` nunca permite escribir en `.git`, `.claude/hooks/`, `.claude/mth/`, `.claude/agents/`, `.claude/settings*.json` ni `.claude/methodology.toml`, aunque `allow` sea `**`: un trabajador no puede relajar sus propias restricciones.
 3. **Raíz y worktrees.** El `cwd` del payload tiene que pertenecer al mismo repositorio que `CLAUDE_PROJECT_DIR` (mismo `git-common-dir`); si no, se bloquea.
    - Con `in_worktree = true`, la escritura solo se permite si el `cwd` está en un worktree vinculado, no en el árbol principal, y la ruta queda dentro de ese worktree.
@@ -155,7 +157,9 @@ La entrada de `.claude/settings.json`:
 | Agente del catálogo cuyo `.md` perdió la cabecera (guard presente) | `mth agent-guard` | Bloquea: «agente del catálogo editado»; `doctor` avisa del guard sin cabecera |
 | Cabecera de plantilla sin guard | `mth agent-guard` / `doctor` | Bloquea y pide `mth agents sync`; `doctor` avisa |
 | Plugin ausente o anterior a 0.8.0 (sin lanzador) | Shim | Bloquea a los subagentes del catálogo o sin identificar; los demás siguen |
-| `git` o el guard no responden a tiempo | Timeouts del guard y del shim | Bloquea (exit 2), antes de que venza el timeout del hook de Claude Code |
+| `git` o el guard no responden a tiempo | Timeouts del guard y del shim | Bloquea (exit 2), antes de que venza el timeout del hook de Claude Code; el shim registra el corte |
+| No hay `timeout` en el sistema (macOS sin coreutils) | Shim | Usa `perl` para acotar; el guard tiene además su propio límite (`signal.alarm`) |
+| No se puede escribir el registro de decisiones | `mth agent-guard` | La decisión se aplica igual; aviso en stderr. Una prueba de humo que dependa del registro falla, así que no pasa inadvertido |
 | Programa con ruta, expansión de shell o filtro que escribe en un agente de allowlist | `mth agent-guard` | Bloquea |
 | Escritura de un trabajador en los ficheros que definen sus restricciones | `mth agent-guard` | Bloquea, aunque `allow` lo cubra |
 | Fallo a mitad de `mth agents add` | Orden de escritura | El shim y la entrada del hook se escriben antes que los agentes, y cada fichero de forma atómica: nunca queda un agente instalado sin guard |
@@ -200,11 +204,11 @@ La entrada de `.claude/settings.json`:
 - **AC-20**: `mth init --answers` con agentes en `catalog` los instala en el commit de adopción; si alguno no puede instalarse (requisitos, colisión, nombre desconocido), no cambia nada.
 - **AC-21**: Un agente con guard instalado cuyo `.md` no tiene cabecera de plantilla queda bloqueado (exit 2, «agente del catálogo editado»), y `mth doctor` avisa de los guards sin cabecera y de las cabeceras sin guard.
 - **AC-22**: Sin lanzador, el shim bloquea a los subagentes del catálogo y a los no identificables, y deja pasar a los demás.
-- **AC-23**: En modo `allowlist`, `mth agent-guard` bloquea los programas con ruta (salvo el `mth` del plugin), las expansiones de shell sin comillas y las opciones de filtros que escriben o ejecutan.
-- **AC-24**: Si `git` no responde a tiempo durante la decisión, `mth agent-guard` bloquea.
+- **AC-23**: En modo `allowlist`, `mth agent-guard` bloquea los programas con ruta (salvo el `mth` del plugin), las expansiones de shell sin comillas, las abreviaturas de opciones prohibidas y las opciones de filtros que escriben, ejecutan o leen el entorno.
+- **AC-24**: Si `git` no responde a tiempo durante la decisión, `mth agent-guard` bloquea; si el guard entero no termina a tiempo, el shim bloquea y lo registra.
 - **AC-25**: `[write]` nunca permite escribir en `.git`, `.claude/hooks/`, `.claude/mth/`, `.claude/agents/`, `.claude/settings*.json` ni `.claude/methodology.toml`.
 - **AC-26**: `mth db-query` rechaza los alias que apuntan fuera del repositorio y los límites no positivos, y recorta las celdas largas.
-- **AC-27**: Cada decisión de `mth agent-guard` sobre un agente del catálogo queda registrada en `<git-common-dir>/mth/agent-guard.jsonl`, con traceback si es un error interno.
+- **AC-27**: Cada decisión de `mth agent-guard` sobre un agente del catálogo queda registrada en `<git-common-dir>/mth/agent-guard.jsonl`, con traceback si es un error interno, sin el comando completo ni credenciales, con permisos 0600 y rotación al superar 1 MiB.
 
 ## Notas
 
