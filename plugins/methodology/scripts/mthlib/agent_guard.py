@@ -58,9 +58,12 @@ _FILTER_DENIED = {"sort": {"short": "oT", "long": ("output", "compress-program",
 _UNIQ_VALUE_OPTIONS = {"-f", "-s", "-w"}
 # jq must not read the environment (tokens) nor files: it filters stdin only.
 _JQ_DENIED_OPTIONS = ("-f", "--from-file", "--rawfile", "--slurpfile", "-L")
+_JQ_SHORT_DENIED = ("-f", "-L")
 _JQ_DENIED_TEXT = re.compile(r"\benv\b|\$ENV|input_filename|\$__loc__")
-_SECRET = re.compile(r"(?i)(\b[A-Z][A-Z0-9_]*=|authorization:?\s*(bearer\s+)?|token[=:\s]+|password[=:\s]+)\S+"
-                     r"|\bgh[pousr]_[A-Za-z0-9]+|\bsk-[A-Za-z0-9_-]+")
+_SECRET = re.compile(
+    r"(?i)(\b[A-Z][A-Z0-9_]*=|\bauthorization[\"']?\s*[:=]\s*[\"']?(?:bearer\s+|token\s+|basic\s+)?"
+    r"|\b(?:token|password|passwd|secret)[\"']?\s*[:=\s]\s*[\"']?)[^\s\"']+"
+    r"|\bgh[pousr]_[A-Za-z0-9]+|\bsk-[A-Za-z0-9_-]+")
 
 
 class Denied(Exception):
@@ -176,8 +179,8 @@ def _has_flag(args: list[str], flags: list[str]) -> str | None:
                 return f
             if f.startswith("--") and typed.startswith("--") and len(typed) > 2 and f.startswith(typed):
                 return f  # git and GNU tools accept unique prefixes: --open=sh is --open-files-in-pager
-            if len(f) == 2 and f.startswith("-") and not a.startswith("--") and a.startswith(f) and len(a) > 2:
-                return f  # -XPOST, -Ffoo
+            if len(f) == 2 and f.startswith("-") and a.startswith("-") and not a.startswith("--") and f[1] in a[1:]:
+                return f  # -XPOST, -Ffoo, and groups: -iXPOST, -nOsh (a false positive denies: fail closed)
     return None
 
 
@@ -198,7 +201,8 @@ def _check_filter(words: list[str], deny_flags: list[str]) -> None:
                 raise Denied(f"Opción no permitida en `{program}`: `{a}`.")
     if program == "jq":
         for a in args:
-            if a.split("=", 1)[0] in _JQ_DENIED_OPTIONS or _JQ_DENIED_TEXT.search(a):
+            grouped = a.startswith("-") and not a.startswith("--") and any(o[1] in a[1:] for o in _JQ_SHORT_DENIED)
+            if a.split("=", 1)[0] in _JQ_DENIED_OPTIONS or grouped or _JQ_DENIED_TEXT.search(a):
                 raise Denied(f"`jq` solo filtra la entrada estándar: no se admite `{a}`.")
     if program == "uniq":  # uniq [INPUT [OUTPUT]]: a positional argument may be an output file
         previous = ""
@@ -338,7 +342,7 @@ def check_write(rules: dict, tool_input: dict, place: Place) -> None:
         rel = target.relative_to(root).as_posix()
     except ValueError as exc:
         raise Denied(f"Ruta fuera {'de su worktree' if write.get('in_worktree') else 'del repositorio'}: {raw}") from exc
-    if globs.match_any(rel, list(PROTECTED)):
+    if globs.match_any(rel.lower(), [p.lower() for p in PROTECTED]):  # macOS/Windows ignore case
         raise Denied(f"Este agente no puede modificar los ficheros que definen sus restricciones: {rel}")
     if not globs.match_any(rel, allow):
         raise Denied(f"Este agente solo puede escribir en: {', '.join(allow)}. Ruta: {rel}")
@@ -429,7 +433,7 @@ def _common_dir(project: Path) -> Path | None:
 
 def redact(text: str) -> str:
     """``text`` with values that look like credentials replaced (PRINCIPLES §4)."""
-    return _SECRET.sub(lambda m: (m.group(1) or "") + "[redactado]" if m.group(1) else "[redactado]", text)
+    return _SECRET.sub(lambda m: (m.group(1) or "") + "[redactado]", text)
 
 
 def _target(tool_input: dict) -> str:

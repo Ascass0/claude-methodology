@@ -4,6 +4,18 @@
 
 # Evasiones de la allowlist encontradas en la revisión retroactiva de v0.8.0 (SPEC-0012/AC-23).
 [[guard]]
+command = "git grep -nOsh x"
+expect = "deny"
+
+[[guard]]
+command = "git grep -Otrue x"
+expect = "deny"
+
+[[guard]]
+command = "git log -n 5 --oneline"
+expect = "allow"
+
+[[guard]]
 command = "./git log"
 expect = "deny"
 

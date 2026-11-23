@@ -26,17 +26,22 @@ esac
 bounded() {
   secs=$1; shift
   if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"
-  elif command -v perl >/dev/null 2>&1; then perl -e 'alarm shift; exec @ARGV or exit 127' "$secs" "$@"
-  else "$@"
+  else perl -e 'alarm shift; exec @ARGV or exit 127' "$secs" "$@"
   fi
 }
+if ! command -v timeout >/dev/null 2>&1 && ! command -v perl >/dev/null 2>&1; then
+  echo "[mth-agent-guard] Faltan timeout y perl: sin un límite de tiempo no se garantiza el bloqueo. Instala coreutils o perl." >&2
+  exit 2
+fi
+# Campos del payload para correlacionar el registro (sin intérprete): el valor no lleva comillas ni barras.
+field() { printf '%s' "$input" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"\\\\]*\)\".*/\1/p" | head -n 1; }
 dir="${CLAUDE_PROJECT_DIR:-.}"
 common=$(bounded 5 git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
   echo "[mth-agent-guard] No es un repositorio git: se bloquea la herramienta." >&2; exit 2; }
 python=$(sed -n 1p "$common/mth/launcher" 2>/dev/null)
 script=$(sed -n 2p "$common/mth/launcher" 2>/dev/null)
 if [ -z "$python" ] || [ ! -x "$python" ] || [ -z "$script" ] || [ ! -f "$script" ]; then
-  agent=$(printf '%s' "$input" | sed -n 's/.*"agent_type"[[:space:]]*:[[:space:]]*"\([^"\\]*\)".*/\1/p' | head -n 1)
+  agent=$(field agent_type)
   case "$agent" in
     "") ;;                                  # sin identificar: se bloquea
     *[!a-z0-9-]*|-*) exit 0 ;;              # no es un nombre del catálogo (methodology:verificador, Explore)
@@ -48,14 +53,15 @@ if [ -z "$python" ] || [ ! -x "$python" ] || [ -z "$script" ] || [ ! -f "$script
   echo "[mth-agent-guard] claude-methodology no encontrado: abre una sesión nueva de Claude Code con el plugin >= 0.8.0." >&2
   exit 2
 fi
-printf '%s' "$input" | bounded 20 "$python" "$script" agent-guard
+printf '%s' "$input" | bounded "${MTH_AGENT_GUARD_TIMEOUT:-20}" "$python" "$script" agent-guard
 rc=$?
 [ "$rc" -eq 0 ] && exit 0
 [ "$rc" -eq 2 ] && exit 2
 echo "[mth-agent-guard] El guard terminó con código $rc: se bloquea por seguridad." >&2
-case "$rc" in 124|142)  # timeout(1) / SIGALRM de perl: el guard no pudo registrarlo él mismo
-  ( umask 077; mkdir -p "$common/mth" &&
-    printf '{"event": "agent_guard.decision", "cmd": "shim", "result": "deny", "category": "timeout", "reason": "el guard no terminó a tiempo (código %s)"}\n' "$rc" \
-      >> "$common/mth/agent-guard.jsonl" ) 2>/dev/null ;;
-esac
+# El guard no pudo registrarlo él mismo: timeout(1) = 124, SIGALRM de perl = 142; cualquier otro código es un fallo.
+case "$rc" in 124|142) category=timeout ;; *) category=crash ;; esac
+( umask 077; mkdir -p "$common/mth" &&
+  printf '{"ts": "%s", "event": "agent_guard.decision", "cmd": "shim", "agent": "%s", "session": "%s", "tool": "%s", "result": "deny", "category": "%s", "reason": "el guard terminó con código %s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" "$(field agent_type)" "$(field session_id)" "$(field tool_name)" "$category" "$rc" \
+    >> "$common/mth/agent-guard.jsonl" ) 2>/dev/null
 exit 2
