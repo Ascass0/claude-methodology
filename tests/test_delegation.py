@@ -9,6 +9,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -339,29 +340,402 @@ class ReviewReportTests(RepoTestCase):
         sha = self.git("rev-parse", "HEAD").strip()
         return review.results(self.work / ".git", "feat/demo", sha)
 
+    @property
+    def inbox(self) -> Path:
+        folder = self.work / ".work" / "tmp"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    def report_file(self, name: str, body: str) -> str:
+        path = self.inbox / name
+        path.write_text(body, encoding="utf-8")
+        return str(path)
+
     def record(self, report, ok):
         return self.mth("review", "record", "verificador", "--report", report, "--summary", "s", ok=ok)
 
-    def test_blocking_count_comes_from_report(self):
-        # verifies: SPEC-0001/AC-12
-        report = self.tmp / "r.txt"
-        report.write_text("HALLAZGOS\n1. [bloqueante] a.py:1 — x.\n\nBLOQUEANTES: 1\n\n", encoding="utf-8")
-        self.assertIn("(1 bloqueantes)", self.record(str(report), ok=True))
-        self.assertEqual(self.recorded()["verificador"]["blocking"], 1)
+    def test_blocking_count_is_computed_from_the_findings(self):
+        # verifies: SPEC-0013/AC-01
+        report = self.report_file("r.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\n2. [Importante] b.py:2 — y.\n"
+                            "   continuación de la línea anterior\nRESUMEN: r\nBLOQUEANTES: 1\n\n")
+        self.assertIn("(1 bloqueantes, intento 1)", self.record(report, ok=True))
+        entry = self.recorded()["verificador"]
+        self.assertEqual((entry["status"], entry["blocking"]), ("ok", 1))
+        self.assertEqual(entry["findings"], {"bloqueante": 1, "importante": 1, "sugerencia": 0})
 
-    def test_unfinished_reviewer_is_not_recorded(self):
+    def test_ninguno_counts_zero(self):
+        # verifies: SPEC-0013/AC-01
+        report = self.report_file("r.txt", "CRITERIOS\n- AC-01: sí\nHALLAZGOS\nninguno\nRESUMEN: r\nBLOQUEANTES: 0\n")
+        self.record(report, ok=True)
+        self.assertEqual(self.recorded()["verificador"]["blocking"], 0)
+
+    def test_a_declared_figure_that_differs_is_a_failed_review(self):
+        # verifies: SPEC-0013/AC-02
+        for name, body in (("lower.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n"),
+                           ("higher.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")):
+            with self.subTest(name=name):
+                out = self.record(self.report_file(name, body), ok=False)
+                self.assertIn("declara", out)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+                from mthlib import review
+                approved, state = review.describe(self.recorded()["verificador"])
+                self.assertFalse(approved)
+                self.assertIn("fallida (intento", state)
+
+    def test_an_unreadable_format_is_a_failed_review(self):
+        # verifies: SPEC-0013/AC-03
+        cases = {
+            "nosection": "RESUMEN: r\nBLOQUEANTES: 0\n",
+            "twice": "HALLAZGOS\nninguno\nHALLAZGOS\nninguno\nBLOQUEANTES: 0\n",
+            "bullets": "HALLAZGOS\n- [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "severity": "HALLAZGOS\n1. [grave] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "both": "HALLAZGOS\nninguno\n1. [sugerencia] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "stray": "HALLAZGOS\nninguno\nAfirmaciones y estado:\nBLOQUEANTES: 0\n",
+            "cut": "HALLAZGOS\n1. [importante] a.py:1 — x.\n",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                self.record(self.report_file(f"{name}.txt", body), ok=False)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+                self.assertNotIn("blocking", self.recorded()["verificador"])
+
+    def test_missing_empty_or_oversized_reports_are_failed_reviews(self):
+        # verifies: SPEC-0013/AC-04
         # verifies: SPEC-0001/AC-12
-        empty = self.tmp / "empty.txt"
-        empty.write_text("", encoding="utf-8")
-        cut = self.tmp / "cut.txt"
-        cut.write_text("HALLAZGOS\n1. [importante] a.py:1 — x.\n", encoding="utf-8")
-        huge = self.tmp / "huge.txt"
-        huge.write_text("x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n", encoding="utf-8")
-        for report in (str(self.tmp / "missing.txt"), str(empty), str(cut), str(huge)):
+        huge = self.report_file("huge.txt", "x" * (256 * 1024 + 1) + "\nBLOQUEANTES: 0\n")
+        cases = ((str(self.inbox / "missing.txt"), "no se puede leer"), (self.report_file("empty.txt", ""), "vacío"),
+                 (huge, "supera"))
+        for report, reason in cases:
             with self.subTest(report=report):
-                out = self.record(report, ok=False)
-                self.assertIn("revisor no ejecutado", out)
-                self.assertNotIn("verificador", self.recorded())
+                self.record(report, ok=False)
+                entry = self.recorded()["verificador"]
+                self.assertEqual(entry["status"], "failed")
+                self.assertIn(reason, entry["reason"])
+                self.assertNotIn("report_sha256", entry)
+
+    def test_the_report_is_archived_verbatim_and_never_overwritten(self):
+        # verifies: SPEC-0013/AC-05
+        body = "HALLAZGOS\r\nninguno\r\nBLOQUEANTES: 0\r\n"
+        report = self.inbox / "r.txt"
+        report.write_bytes(body.encode())
+        self.record(str(report), ok=True)
+        sha = self.git("rev-parse", "HEAD").strip()
+        entry = self.recorded()["verificador"]
+        archived = self.work / ".work" / "reviews" / f"{sha}-verificador-1.md"
+        self.assertEqual(archived.read_bytes(), body.encode())
+        self.assertEqual(entry["report"], str(archived))
+        import hashlib
+        self.assertEqual(entry["report_sha256"], hashlib.sha256(body.encode()).hexdigest())
+        archived.write_text("otro", encoding="utf-8")  # a second record must not touch attempt 1
+        self.record(str(report), ok=True)
+        self.assertEqual(archived.read_text(encoding="utf-8"), "otro")
+        self.assertTrue((self.work / ".work" / "reviews" / f"{sha}-verificador-2.md").is_file())
+
+    def test_attempts_are_counted_and_survive_a_later_success(self):
+        # verifies: SPEC-0013/AC-06
+        # verifies: SPEC-0013/AC-09
+        bad = self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")
+        good = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("UNA corrección", self.record(bad, ok=False))
+        self.assertEqual(self.recorded()["verificador"]["attempts"], 1)
+        out = self.record(bad, ok=False)
+        self.assertIn("detente", out)
+        self.assertEqual(self.recorded()["verificador"]["attempts"], 2)
+        self.record(good, ok=True)
+        entry = self.recorded()["verificador"]
+        self.assertEqual((entry["status"], entry["attempts"], entry["blocking"]), ("ok", 3, 0))
+        self.assertEqual(entry["failures"], 0)
+        self.git("commit", "--allow-empty", "-q", "-m", "chore: next\n\nRefs: n/a")
+        self.assertNotIn("verificador", self.recorded())  # a new SHA starts from zero
+
+    def test_integration_tells_a_failed_review_from_a_missing_one(self):
+        # verifies: SPEC-0013/AC-07
+        from mthlib import review
+        from mthlib.errors import MthError
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        sha = self.git("rev-parse", "HEAD").strip()
+        with self.assertRaises(MthError) as ctx:
+            review.check(self.work / ".git", "feat/demo", sha, ["verificador"])
+        self.assertIn("Revisión fallida", ctx.exception.message)
+        self.assertIn("intento 1", ctx.exception.message)
+        self.assertEqual(review.describe(None), (False, "pendiente"))
+
+    def test_a_report_that_is_not_utf8_is_archived_and_failed(self):
+        # verifies: SPEC-0013/AC-03
+        report = self.inbox / "bin.txt"
+        report.write_bytes(b"HALLAZGOS\nninguno\n\xff\xfe\nBLOQUEANTES: 0\n")
+        self.record(str(report), ok=False)
+        entry = self.recorded()["verificador"]
+        self.assertEqual(entry["status"], "failed")
+        self.assertIn("UTF-8", entry["reason"])
+        self.assertEqual(Path(entry["report"]).read_bytes(), report.read_bytes())
+
+    def test_a_report_already_in_the_archive_is_not_copied(self):
+        # verifies: SPEC-0013/AC-05
+        sha = self.git("rev-parse", "HEAD").strip()
+        folder = self.work / ".work" / "reviews"
+        folder.mkdir(parents=True)
+        own = folder / f"{sha}-verificador-1.md"
+        own.write_text("HALLAZGOS\nninguno\nBLOQUEANTES: 0\n", encoding="utf-8")
+        self.record(str(own), ok=True)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), [own.name])
+
+    def test_status_shows_the_failed_review_and_its_attempts(self):
+        # verifies: SPEC-0013/AC-07
+        from unittest import mock
+
+        from mthlib import cli, review
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        approved, state = review.describe(self.recorded()["verificador"])
+        self.assertFalse(approved)
+        self.assertTrue(state.startswith("fallida (intento 1): el revisor declara 1"))
+        # The command prints that state; the test repo has no remote, so the branch lookup is stubbed.
+        info = mock.Mock()
+        with mock.patch.object(cli.branches, "parse", return_value=info), \
+                mock.patch.object(cli, "required_reviewers", return_value=["verificador"]), \
+                mock.patch.object(cli, "_ctx") as ctx, mock.patch("builtins.print") as shown:
+            ctx.return_value.git.current_branch.return_value = "feat/demo"
+            ctx.return_value.git.sha.return_value = self.git("rev-parse", "HEAD").strip()
+            ctx.return_value.git.git_dir.return_value = self.work / ".git"
+            ctx.return_value.cfg = {"review": {"agents": ["verificador"]}}
+            cli._cmd_review(mock.Mock(action="status", agent=None))
+        self.assertIn("fallida (intento 1)", shown.call_args.args[0])
+
+    def test_a_blocker_mark_outside_the_counted_findings_fails_the_review(self):
+        # verifies: SPEC-0013/AC-10
+        cases = {
+            "indented": "HALLAZGOS\n  1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "after": "HALLAZGOS\nninguno\nFUERA DE ALCANCE\n1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 0\n",
+            "prose": "HALLAZGOS\nninguno\nRESUMEN: hay un [Bloqueante] sin contar\nBLOQUEANTES: 0\n",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                out = self.record(self.report_file(f"{name}.txt", body), ok=False)
+                self.assertIn("marcas [bloqueante]", out)
+                self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+
+    def test_an_archive_that_escapes_the_repository_is_refused(self):
+        # verifies: SPEC-0013/AC-11
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (self.work / ".work").mkdir(exist_ok=True)
+        (self.work / ".work" / "reviews").symlink_to(outside)
+        report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("queda fuera de", self.record(report, ok=False))
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertNotIn("verificador", self.recorded())
+
+    def test_unsafe_names_and_partial_copies(self):
+        # verifies: SPEC-0013/AC-11
+        from mthlib import review
+        from mthlib.errors import MthError
+        folder = self.work / ".work" / "reviews"
+        for agent, sha in (("../x", "abc123"), ("a/b", "abc123"), ("..", "abc123"),
+                           ("verificador", "../abc"), ("verificador", "a/b")):
+            with self.subTest(agent=agent, sha=sha), self.assertRaises(MthError):
+                review.archive(self.work, folder, sha, agent, 1, b"x")
+        real_open = open
+
+        def failing(path, mode="r", *a, **k):
+            fh = real_open(path, mode, *a, **k)
+            if mode == "xb":
+                fh.write = mock.Mock(side_effect=OSError("disco lleno"))
+            return fh
+
+        with mock.patch("builtins.open", failing), self.assertRaises(MthError) as partial:
+            review.archive(self.work, folder, "abc123", "verificador", 1, b"x")
+        self.assertEqual(partial.exception.stage, "archive")
+        self.assertEqual(list(folder.iterdir()), [])
+
+    def test_the_stop_advice_counts_consecutive_failures(self):
+        # verifies: SPEC-0013/AC-06
+        bad = self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n")
+        good = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.record(good, ok=True)
+        self.assertIn("UNA corrección", self.record(bad, ok=False))  # a failure after an ok is the first
+        self.assertEqual(self.recorded()["verificador"]["failures"], 1)
+
+    def test_a_report_outside_the_repository_or_not_a_regular_file_is_refused(self):
+        # verifies: SPEC-0013/AC-12
+        secret = self.tmp / "secret.txt"
+        secret.write_text("clave privada\n", encoding="utf-8")
+        out = self.record(str(secret), ok=False)
+        self.assertIn("queda fuera de", out)
+        self.assertNotIn("verificador", self.recorded())
+        fifo = self.inbox / "pipe"
+        os.mkfifo(fifo)
+        self.record(str(fifo), ok=False)
+        self.assertIn("no es un fichero regular", self.recorded()["verificador"]["reason"])
+
+    def test_a_failure_reason_never_quotes_the_report(self):
+        # verifies: SPEC-0013/AC-12
+        self.record(self.report_file("leak.txt", "HALLAZGOS\nclave-secreta-123\nBLOQUEANTES: 0\n"), ok=False)
+        self.assertNotIn("clave-secreta", json.dumps(self.recorded()["verificador"]["reason"]))
+
+    def test_parallel_records_do_not_lose_updates(self):
+        # verifies: SPEC-0013/AC-13
+        from concurrent.futures import ThreadPoolExecutor
+
+        from mthlib import review
+        sha = self.git("rev-parse", "HEAD").strip()
+        good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+        agents = [f"agente-{i}" for i in range(12)]
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            list(pool.map(lambda a: review.record_report(
+                self.work / ".git", self.work, self.work / ".work" / "reviews", "feat/demo", sha, a, good, "s"), agents))
+        self.assertEqual(sorted(review.results(self.work / ".git", "feat/demo", sha)), sorted(agents))
+
+    def test_a_missing_report_option_is_a_clear_error(self):
+        # verifies: SPEC-0013/AC-12
+        out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
+        self.assertIn("necesita", out)
+
+    def test_store_failures_and_limits_record_nothing_and_name_their_stage(self):
+        # verifies: SPEC-0013/AC-14
+        from mthlib import review
+        from mthlib.errors import MthError
+        sha = self.git("rev-parse", "HEAD").strip()
+        git_dir, folder = self.work / ".git", self.work / ".work" / "reviews"
+        good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+
+        def attempt(summary="s"):
+            return review.record_report(git_dir, self.work, folder, "feat/demo", sha, "verificador", good, summary)
+
+        with self.assertRaises(review.ReviewError) as long:
+            attempt("x" * (review.MAX_SUMMARY + 1))
+        self.assertEqual(long.exception.stage, "rejected")
+        store = git_dir / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        store.write_text("{no es json", encoding="utf-8")
+        with self.assertRaises(review.ReviewError) as corrupt:
+            attempt()
+        self.assertEqual(corrupt.exception.stage, "store")
+        self.assertFalse(folder.exists())  # nothing archived before the store was read
+        store.unlink()
+        import fcntl
+        with open(store.with_name("reviews.lock"), "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            with mock.patch.object(review, "LOCK_TIMEOUT", 0.2), self.assertRaises(review.ReviewError) as busy:
+                attempt()
+        self.assertEqual(busy.exception.stage, "lock")
+        self.assertNotIn("verificador", review.results(git_dir, "feat/demo", sha))
+        with mock.patch.object(review, "record", side_effect=MthError("disco lleno")), \
+                self.assertRaises(review.ReviewError) as orphan:
+            attempt()
+        self.assertEqual(orphan.exception.stage, "store")
+        self.assertTrue(orphan.exception.archived.is_file())
+
+    def test_the_cli_traces_not_recorded_with_its_stage_and_orphan(self):
+        # verifies: SPEC-0013/AC-14
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        store.write_text("{no es json", encoding="utf-8")
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        event = [e for e in events if e["event"] == "review.not_recorded"][-1]
+        self.assertEqual((event["stage"], event["agent"]), ("store", "verificador"))
+        self.assertIsNone(event["orphan"])
+        out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
+        self.assertIn("necesita", out)
+
+    def test_the_cli_traces_review_failed_with_its_reason_and_failures(self):
+        # verifies: SPEC-0013/AC-14
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        failed = [e for e in events if e["event"] == "review.failed"]
+        self.assertEqual([e["failures"] for e in failed], [1, 2])
+        self.assertIn("declara", failed[-1]["reason"])
+
+    def test_the_cli_traces_the_orphan_archive_when_the_store_cannot_be_written(self):
+        # verifies: SPEC-0013/AC-14
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.mkdir(parents=True)  # reading finds no file, replacing a directory fails after archiving
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=False)
+        events = [json.loads(line) for line in (self.work / ".git" / "mth" / "trace.jsonl").read_text().splitlines()]
+        event = [e for e in events if e["event"] == "review.not_recorded"][-1]
+        self.assertEqual(event["stage"], "store")
+        self.assertTrue(Path(event["orphan"]).is_file())
+
+    def test_integration_refuses_a_failed_review(self):
+        # verifies: SPEC-0013/AC-07
+        from unittest import mock
+
+        from mthlib import branches, flow
+        from mthlib.errors import MthError
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        ctx = mock.Mock()
+        ctx.cfg = {"review": {"agents": ["verificador"], "required_for": ["feat"]}}
+        ctx.git.git_dir.return_value = self.work / ".git"
+        ctx.git.sha.return_value = self.git("rev-parse", "HEAD").strip()
+        info = mock.Mock(is_child=False, kind="feat")
+        with mock.patch.object(flow, "required_reviewers", return_value=["verificador"]), \
+                self.assertRaises(MthError) as caught:
+            flow._review(ctx, info, "feat/demo")
+        self.assertIn("Revisión fallida", caught.exception.message)
+
+    def test_a_summary_with_carriage_returns_stays_on_one_row(self):
+        # verifies: SPEC-0013/AC-12
+        from mthlib import flow
+        self.assertEqual(flow._cell("a\r\nb | c\td"), "a b \\| c d")
+
+    def test_a_report_outside_work_is_refused_even_inside_the_repository(self):
+        # verifies: SPEC-0013/AC-12
+        env = self.work / ".env"
+        env.write_text("TOKEN=abc\n", encoding="utf-8")
+        self.assertIn("queda fuera de", self.record(str(env), ok=False))
+        self.assertNotIn("verificador", self.recorded())
+
+    def test_a_summary_pipe_cannot_break_the_pr_table(self):
+        # verifies: SPEC-0013/AC-12
+        from mthlib import flow
+        body = flow._pr_body("r", [], None, "ok", {"verificador": {"blocking": 0, "summary": "a | b\nc"}})
+        self.assertIn("| verificador | 0 | a \\| b c |", body)
+
+    def test_a_store_entry_of_the_wrong_shape_is_a_clear_store_error(self):
+        # verifies: SPEC-0013/AC-14
+        from mthlib import review
+        sha = self.git("rev-parse", "HEAD").strip()
+        store = self.work / ".git" / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        for entry in ({"attempts": "dos"}, "no es un objeto"):
+            with self.subTest(entry=entry):
+                store.write_text(json.dumps({"feat/demo": {sha: {"verificador": entry}}}), encoding="utf-8")
+                good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+                with self.assertRaises(review.ReviewError) as caught:
+                    review.record_report(self.work / ".git", self.work, self.work / ".work" / "reviews",
+                                         "feat/demo", sha, "verificador", good, "s")
+                self.assertEqual(caught.exception.stage, "store")
+
+    def test_a_lock_error_that_is_not_contention_fails_at_once(self):
+        # verifies: SPEC-0013/AC-14
+        import fcntl
+
+        from mthlib import review
+        with mock.patch.object(fcntl, "flock", side_effect=OSError(37, "ENOLCK")), \
+                self.assertRaises(review.ReviewError) as caught, review._locked(self.work / ".git", timeout=30):
+            pass
+        self.assertEqual(caught.exception.stage, "lock")
+
+    def test_a_pipe_cell_has_no_backslash_inside_an_f_string(self):
+        # verifies: SPEC-0013/AC-12
+        import re as regex
+        source = (Path(__file__).resolve().parent.parent / "plugins/methodology/scripts/mthlib/flow.py").read_text()
+        self.assertIsNone(regex.search(r"""f"[^"\n]*\{[^}"\n]*\\""", source))  # Python 3.11 rejects it
+
+    def test_an_overwritten_entry_is_visible_as_previous_status(self):
+        # verifies: SPEC-0013/AC-14
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=True)
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        self.assertEqual(self.recorded()["verificador"]["previous_status"], "ok")
+
+    def test_an_unarchivable_report_records_nothing(self):
+        # verifies: SPEC-0013/AC-08
+        (self.work / ".work").mkdir(exist_ok=True)
+        (self.work / ".work" / "reviews").write_text("no es un directorio", encoding="utf-8")
+        report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        self.assertIn("No se pudo archivar", self.record(report, ok=False))
+        self.assertNotIn("verificador", self.recorded())
 
 
 if __name__ == "__main__":

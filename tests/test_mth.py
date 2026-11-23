@@ -267,7 +267,8 @@ class EndToEndTests(unittest.TestCase):
         return proc.stdout + proc.stderr
 
     def report(self, blocking=0):
-        path = self.tmp / f"report-{blocking}.txt"
+        path = self.work / ".work" / "tmp" / f"report-{blocking}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"HALLAZGOS\nninguno\nBLOQUEANTES: {blocking}\n", encoding="utf-8")
         return str(path)
 
