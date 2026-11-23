@@ -23,6 +23,22 @@ command = "git fetch upstream --upload-pack='touch /tmp/pwned'"
 expect = "deny"
 
 [[guard]]
+command = "git fetch origin +x:refs/heads/main"
+expect = "deny"
+
+[[guard]]
+command = "git branch -r -d origin/x"
+expect = "deny"
+
+[[guard]]
+command = "git branch -r"
+expect = "allow"
+
+[[guard]]
+command = "git tag --list | grep v0"
+expect = "allow"
+
+[[guard]]
 command = "git branch -D development"
 expect = "deny"
 

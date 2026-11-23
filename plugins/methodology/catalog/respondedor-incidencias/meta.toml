@@ -1,5 +1,5 @@
 name = "respondedor-incidencias"
-version = "1.0.0"
+version = "1.0.1"
 kind = "trabajador"
 profiles = ["opcional"]
 summary = "CI en rojo o aviso de seguridad (también de upstream): correlaciona cambios, evalúa el impacto y propone hotfix o fix según el flujo."

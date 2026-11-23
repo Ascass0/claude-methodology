@@ -170,6 +170,108 @@ class WorktreeWriteTests(GuardTestCase):
                                                            command="pytest -q")), 0)
 
 
+class EditedAgentTests(GuardTestCase):
+    def test_a_catalog_agent_that_loses_its_header_stays_blocked(self):
+        # verifies: SPEC-0012/AC-21
+        md = self.repo.root / ".claude/agents/revisor-fallos.md"
+        md.write_text("---\nname: revisor-fallos\ntools: Bash\n---\nAdaptado a mano.\n", encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = agent_guard.main(json.dumps(self.repo.payload("revisor-fallos", command="git log")),
+                                  {"CLAUDE_PROJECT_DIR": str(self.repo.root)})
+        self.assertEqual(rc, 2)
+        self.assertIn("Agente del catálogo editado", err.getvalue())
+        self.assertIn("mth agents sync --force revisor-fallos", err.getvalue())
+
+    def test_header_without_guard_is_blocked(self):
+        # verifies: SPEC-0012/AC-21
+        (self.repo.root / ".claude/mth/agents/revisor-diseno.guard.toml").unlink()
+        self.assertEqual(self.repo.guard(self.repo.payload("revisor-diseno", command="git log")), 2)
+
+
+class AllowlistHardeningTests(GuardTestCase):
+    def test_paths_expansions_and_writing_filters_are_blocked(self):
+        # verifies: SPEC-0012/AC-23
+        denied = ["./git log", "/tmp/evil/git diff", "git diff $'--output=/tmp/x'", "git diff --{output,x}=/tmp/x",
+                  "git grep $'-Ocmd' x", "git diff *", "git log ?", "git diff ~/x", "git log `id`",
+                  "git diff | sort -o /tmp/x", "git log | sort --out=/tmp/x", "git log | uniq a b",
+                  "git log | sort -S1 --compress-program=sh", 'git log --grep="$HOME"']
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command=command)), 2)
+        allowed = ["git log --oneline | sort | uniq -c", "git grep -n 'a.*b' -- '*.py'", "git log --grep='$HOME'",
+                   'git log --grep="fix: x" 2>&1 | head -5']
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command=command)), 0)
+
+    def test_only_this_plugins_mth_passes_with_a_path(self):
+        # verifies: SPEC-0012/AC-23
+        own = Path(agent_guard.__file__).resolve().parents[1]
+        query = 'db-query --db estado "SELECT 1"'
+        for command in (f"sh {own / 'mth'} {query}", f"python3 {own / 'mth.py'} {query}", f"$MTH {query}",
+                        f"mth {query}"):
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("lector-estado", command=command)), 0)
+        for command in (f"sh /tmp/otro/scripts/mth {query}", f"python3 /tmp/otro/mth.py {query}",
+                        f"/tmp/otro/mth {query}"):
+            with self.subTest(command=command):
+                self.assertEqual(self.repo.guard(self.repo.payload("lector-estado", command=command)), 2)
+
+
+class TimeoutTests(GuardTestCase):
+    def test_git_that_does_not_answer_in_time_blocks(self):
+        # verifies: SPEC-0012/AC-24
+        with mock.patch.object(agent_guard, "GIT_TIMEOUT", 1e-6):
+            rc = self.repo.guard(self.repo.payload("revisor-fallos", cwd=self.repo.worktree, command="git log"))
+        self.assertEqual(rc, 2)
+        self.assertIn('"category": "timeout"', self.log_text())
+
+    def log_text(self) -> str:
+        return (self.repo.root / ".git/mth/agent-guard.jsonl").read_text(encoding="utf-8")
+
+
+class ProtectedPathTests(GuardTestCase):
+    def test_workers_cannot_rewrite_their_restrictions(self):
+        # verifies: SPEC-0012/AC-25
+        wt = self.repo.worktree
+        for rel in (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks/mth-agent-guard",
+                    ".claude/mth/agents/diagnosticador.guard.toml", ".claude/agents/diagnosticador.md",
+                    ".claude/methodology.toml", ".git", ".git/config"):
+            with self.subTest(path=rel):
+                rc = self.repo.guard(self.repo.payload("diagnosticador", "Write", wt, file_path=str(wt / rel), content="x"))
+                self.assertEqual(rc, 2)
+        self.assertEqual(self.repo.guard(self.repo.payload("diagnosticador", "Edit", wt, file_path=str(wt / "src/a.py"))), 0)
+
+
+class DecisionLogTests(GuardTestCase):
+    def events(self) -> list[dict]:
+        path = self.repo.root / ".git/mth/agent-guard.jsonl"
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def test_catalog_decisions_are_logged_with_tracebacks_for_bugs(self):
+        # verifies: SPEC-0012/AC-27
+        self.repo.guard(self.repo.payload("revisor-seguridad", command="git log --oneline"))
+        self.repo.guard(self.repo.payload("revisor-seguridad", command="git push"))
+        self.repo.guard(self.repo.payload("Explore", command="git push"))  # foreign: not logged
+        with mock.patch.object(agent_guard, "check_bash", side_effect=RuntimeError("boom")):
+            self.repo.guard(self.repo.payload("revisor-fallos", command="git log"))
+        events = self.events()
+        self.assertEqual([(e["agent"], e["result"], e["category"]) for e in events],
+                         [("revisor-seguridad", "allow", "rule"), ("revisor-seguridad", "deny", "rule"),
+                          ("revisor-fallos", "deny", "internal")])
+        self.assertEqual(events[1]["target"], "git push")
+        self.assertEqual(events[0]["session"], "s")
+        self.assertIn("RuntimeError: boom", events[2]["traceback"])
+
+    def test_the_log_rotates(self):
+        with mock.patch.object(agent_guard, "LOG_MAX_BYTES", 10):
+            for _ in range(3):
+                self.repo.guard(self.repo.payload("revisor-seguridad", command="git log"))
+        self.assertTrue((self.repo.root / ".git/mth/agent-guard.jsonl.1").is_file())
+        self.assertEqual(len(self.events()), 1)
+
+
 class ShimTests(GuardTestCase):
     def setUp(self):
         super().setUp()
@@ -202,6 +304,22 @@ class ShimTests(GuardTestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("abre una sesión nueva", proc.stderr)
         self.assertFalse(marker.exists())
+
+
+
+    def test_without_launcher_only_catalog_or_unidentified_subagents_are_blocked(self):
+        # verifies: SPEC-0012/AC-22
+        self.repo.write(".claude/agents/propio.md", "---\nname: propio\n---\nAgente del repo.\n")
+        (self.repo.root / ".claude/agents/revisor-adr.md").write_text("---\nname: revisor-adr\n---\nsin cabecera\n",
+                                                                    encoding="utf-8")
+        cases = {"methodology:verificador": 0, "Explore": 0, "general-purpose": 0, "propio": 0,
+                 "revisor-seguridad": 2, "revisor-adr": 2}
+        for agent, expected in cases.items():
+            with self.subTest(agent=agent):
+                self.assertEqual(self.run_shim(self.repo.payload(agent, command="git log")).returncode, expected)
+        unidentified = self.repo.payload("revisor-seguridad", command="git log")
+        del unidentified["agent_type"]
+        self.assertEqual(self.run_shim(unidentified).returncode, 2)
 
     def test_real_launcher_from_a_linked_worktree(self):
         # verifies: SPEC-0012/AC-10

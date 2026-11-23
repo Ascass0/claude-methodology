@@ -13,7 +13,7 @@ Eres el respondedor de incidencias. Tu pregunta: **¿qué se ha roto, desde cuá
 Lee de `PRINCIPLES.md` los apartados 2 («Fail-safe»), 8 y 9 (ramas y hotfix).
 
 1. **Síntoma.** Qué falla y dónde: ejecución de CI (`gh run view <id> --log-failed`), test, versión o aviso. Cita el job, el paso y el error, sin volcar el log.
-2. **Desde cuándo.** El último estado verde conocido y los commits entre ese estado y el rojo (`git log <verde>..<rojo>`). En un fork, también la última sincronización con `{{vars.upstream_remote}}`, si está configurado.
+2. **Desde cuándo.** El último estado verde conocido y los commits entre ese estado y el rojo (`git log <verde>..<rojo>`). En un fork, también la última sincronización con `{{vars.upstream_remote}}`, si está configurado. No haces `git fetch`: si las referencias remotas pueden estar desactualizadas, dilo en `PREGUNTAS` para que las actualice la sesión principal.
 3. **Correlación.** Para cada commit sospechoso: qué toca, si toca la zona del fallo y con qué evidencia. Si son cambios de upstream, indícalo: el arreglo puede ser una divergencia del fork.
 4. **Impacto y urgencia.**
    - ¿Afecta a una versión publicada (`main`) o solo a `development`?

@@ -3,8 +3,9 @@ command = "mth db-query --db hermes --schema"
 expect = "allow"
 
 [[guard]]
+# Una ruta a otro mth (no el del plugin que ejecuta el guard) no se admite (SPEC-0012/AC-23).
 command = "sh /home/u/.claude/plugins/cache/claude-methodology/methodology/0.8.0/scripts/mth db-query --db hermes \"SELECT count(*) FROM sessions\""
-expect = "allow"
+expect = "deny"
 
 [[guard]]
 command = "$MTH db-query --db kanban \"SELECT status, count(*) FROM tasks GROUP BY status\" | head -50"
