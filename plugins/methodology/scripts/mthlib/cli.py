@@ -104,12 +104,13 @@ def _cmd_review(args: argparse.Namespace) -> int:
             entry = review.record_report(ctx.git.git_dir(), ctx.root, ctx.root / ".work" / "reviews", branch, sha,
                                          args.agent, Path(args.report), args.summary)
         except MthError as exc:
-            ctx.tracer.event("review.not_archived", branch=branch, sha=sha, agent=args.agent,
-                             error=exc.message)
+            ctx.tracer.event("review.not_recorded", branch=branch, sha=sha, agent=args.agent,
+                             stage=getattr(exc, "stage", "unknown"), error=exc.message,
+                             orphan=str(getattr(exc, "archived", None) or "") or None)
             raise
         ctx.tracer.event("review.record", branch=branch, sha=sha, agent=args.agent, status=entry["status"],
                          blocking=entry.get("blocking"), attempts=entry["attempts"],
-                         reason=entry.get("reason"))
+                         reason=entry.get("reason"), previous_status=entry.get("previous_status"))
         if entry["status"] == "failed":
             stop = entry["failures"] >= 2
             raise MthError(

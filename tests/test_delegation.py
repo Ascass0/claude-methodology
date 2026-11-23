@@ -9,6 +9,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -526,8 +527,6 @@ class ReviewReportTests(RepoTestCase):
 
     def test_unsafe_names_and_partial_copies(self):
         # verifies: SPEC-0013/AC-11
-        from unittest import mock
-
         from mthlib import review
         from mthlib.errors import MthError
         folder = self.work / ".work" / "reviews"
@@ -589,6 +588,47 @@ class ReviewReportTests(RepoTestCase):
         # verifies: SPEC-0013/AC-12
         out = self.mth("review", "record", "verificador", "--summary", "s", ok=False)
         self.assertIn("necesita", out)
+
+    def test_store_failures_and_limits_record_nothing_and_name_their_stage(self):
+        # verifies: SPEC-0013/AC-14
+        from mthlib import review
+        from mthlib.errors import MthError
+        sha = self.git("rev-parse", "HEAD").strip()
+        git_dir, folder = self.work / ".git", self.work / ".work" / "reviews"
+        good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+
+        def attempt(summary="s"):
+            return review.record_report(git_dir, self.work, folder, "feat/demo", sha, "verificador", good, summary)
+
+        with self.assertRaises(review.ReviewError) as long:
+            attempt("x" * (review.MAX_SUMMARY + 1))
+        self.assertEqual(long.exception.stage, "rejected")
+        store = git_dir / "mth" / "reviews.json"
+        store.parent.mkdir(exist_ok=True)
+        store.write_text("{no es json", encoding="utf-8")
+        with self.assertRaises(review.ReviewError) as corrupt:
+            attempt()
+        self.assertEqual(corrupt.exception.stage, "store")
+        self.assertFalse(folder.exists())  # nothing archived before the store was read
+        store.unlink()
+        import fcntl
+        with open(store.with_name("reviews.lock"), "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            with mock.patch.object(review, "LOCK_TIMEOUT", 0.2), self.assertRaises(review.ReviewError) as busy:
+                attempt()
+        self.assertEqual(busy.exception.stage, "lock")
+        self.assertNotIn("verificador", review.results(git_dir, "feat/demo", sha))
+        with mock.patch.object(review, "record", side_effect=MthError("disco lleno")), \
+                self.assertRaises(review.ReviewError) as orphan:
+            attempt()
+        self.assertEqual(orphan.exception.stage, "store")
+        self.assertTrue(orphan.exception.archived.is_file())
+
+    def test_an_overwritten_entry_is_visible_as_previous_status(self):
+        # verifies: SPEC-0013/AC-14
+        self.record(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"), ok=True)
+        self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
+        self.assertEqual(self.recorded()["verificador"]["previous_status"], "ok")
 
     def test_an_unarchivable_report_records_nothing(self):
         # verifies: SPEC-0013/AC-08

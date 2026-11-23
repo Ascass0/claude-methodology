@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import stat
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,6 +54,18 @@ def _load(git_dir: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise MthError(f"{path} está corrupto.", hint="Bórralo y repite las revisiones.") from exc
+
+
+class ReviewError(MthError):
+    """A failure of the recording itself, tagged with the stage that failed for the trace.
+
+    ``archived`` is the path of a report already copied when the failure came later (orphan file).
+    """
+
+    def __init__(self, stage: str, message: str, hint: str | None = None, archived: Path | None = None) -> None:
+        super().__init__(message, hint)
+        self.stage = stage
+        self.archived = archived
 
 
 class ReportError(Exception):
@@ -135,8 +148,8 @@ def read_report(path: Path) -> bytes:
 def require_inside(root: Path, path: Path, what: str) -> None:
     """Refuse a path that resolves outside the repository (symbolic links, ``..``, absolute paths)."""
     if not path.resolve().is_relative_to(root.resolve()):
-        raise MthError(f"{path} queda fuera del repositorio: {what}.",
-                       hint="Usa una ruta dentro del repo (los informes van en .work/tmp/); no se ha registrado nada.")
+        raise ReviewError("rejected", f"{path} queda fuera del repositorio: {what}.",
+                          hint="Usa una ruta dentro del repo (los informes van en .work/tmp/); no se ha registrado nada.")
 
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -153,8 +166,8 @@ def archive(root: Path, directory: Path, sha: str, agent: str, first: int, data:
             a repository one does not trust), or it cannot be written; nothing is recorded.
     """
     if not (_SAFE.fullmatch(sha) and _SAFE.fullmatch(agent)) or ".." in agent:
-        raise MthError(f"Nombre no válido para archivar el informe ({agent}, {sha[:12]}).",
-                       hint="El agente y el commit solo pueden llevar letras, dígitos, '.', '_' y '-'.")
+        raise ReviewError("rejected", f"Nombre no válido para archivar el informe ({agent}, {sha[:12]}).",
+                          hint="El agente y el commit solo pueden llevar letras, dígitos, '.', '_' y '-'.")
     require_inside(root, directory, "no se archiva el informe")
     n = first
     try:
@@ -174,16 +187,23 @@ def archive(root: Path, directory: Path, sha: str, agent: str, first: int, data:
                 raise
             return target, n
     except OSError as exc:
-        raise MthError(f"No se pudo archivar el informe de {agent} en {directory}: {exc}.",
-                       hint="Comprueba permisos y espacio y repite el registro: no se ha registrado nada.") from exc
+        raise ReviewError("archive", f"No se pudo archivar el informe de {agent} en {directory}: {exc}.",
+                          hint="Comprueba permisos y espacio y repite el registro: no se ha registrado nada.") from exc
+
+
+LOCK_TIMEOUT = 30.0  # seconds a record waits for another one before giving up
 
 
 @contextmanager
-def _locked(git_dir: Path):
-    """Exclusive lock around the read-modify-write of ``reviews.json`` (parallel ``record`` calls)."""
+def _locked(git_dir: Path, timeout: float | None = None):
+    """Exclusive lock around the read-modify-write of ``reviews.json`` (parallel ``record`` calls).
+
+    Raises:
+        ReviewError: The lock file cannot be opened or another record holds it past ``timeout``.
+    """
     try:
         import fcntl
-    except ImportError:  # no flock (Windows): records are sequential there
+    except ImportError:  # no flock (Windows): records are sequential there (SPEC-0013)
         yield
         return
     lock = _store(git_dir).with_name("reviews.lock")
@@ -191,11 +211,25 @@ def _locked(git_dir: Path):
         lock.parent.mkdir(parents=True, exist_ok=True)
         fh = open(lock, "a")
     except OSError as exc:
-        raise MthError(f"No se pudo abrir el bloqueo {lock}: {exc}.",
-                       hint="Comprueba permisos y espacio; no se ha registrado nada.") from exc
+        raise ReviewError("lock", f"No se pudo abrir el bloqueo {lock}: {exc}.",
+                          hint="Comprueba permisos y espacio; no se ha registrado nada.") from exc
     with fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
+        deadline = time.monotonic() + (LOCK_TIMEOUT if timeout is None else timeout)
+        delay = 0.01
+        while True:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise ReviewError("lock", "Otro `mth review record` tiene el registro bloqueado.",
+                                      hint="Espera a que termine y repite; no se ha registrado nada.") from None
+                time.sleep(delay)
+                delay = min(delay * 2, 0.5)
         yield
+
+
+MAX_SUMMARY = 4096
 
 
 def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha: str, agent: str,
@@ -208,9 +242,15 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
     Raises:
         MthError: The report cannot be archived (nothing is recorded).
     """
+    if len(summary.encode("utf-8")) > MAX_SUMMARY:
+        raise ReviewError("rejected", f"El resumen supera {MAX_SUMMARY} bytes.",
+                          hint="Resume en una línea; el informe completo se archiva aparte.")
     require_inside(root, report, "el informe no se lee")
     with _locked(git_dir):
-        previous = results(git_dir, branch, sha).get(agent, {})
+        try:
+            previous = results(git_dir, branch, sha).get(agent, {})
+        except MthError as exc:
+            raise ReviewError("store", exc.message, exc.hint) from exc
         attempt = int(previous.get("attempts", 0)) + 1
         entry: dict = {"summary": summary.strip()}
         try:
@@ -237,7 +277,12 @@ def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha
         entry["attempts"] = attempt
         # Consecutive failures drive the "stop" advice; an approved record in between resets them.
         entry["failures"] = int(previous.get("failures", 0)) + 1 if entry["status"] == "failed" else 0
-        record(git_dir, branch, sha, agent, entry)
+        if previous:  # the overwritten entry stays visible in the trace and in the record
+            entry["previous_status"] = previous.get("status", "ok")
+        try:
+            record(git_dir, branch, sha, agent, entry)
+        except MthError as exc:
+            raise ReviewError("store", exc.message, exc.hint, archived=Path(entry["report"]) if "report" in entry else None) from exc
         return entry
 
 
