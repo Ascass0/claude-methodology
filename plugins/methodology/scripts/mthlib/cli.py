@@ -7,7 +7,8 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, agent_guard, branches, changelog, commits, flow, guard, plan, review, session, setup, survey
+from . import (__version__, agent_guard, branches, catalog, changelog, commits, db_query, flow, guard, plan,
+               review, session, setup, survey)
 from .config import load
 from .errors import MthError
 from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
@@ -263,6 +264,16 @@ def _cmd_survey(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_db_query(args: argparse.Namespace) -> int:
+    if args.schema == bool(args.sql):
+        raise MthError("Indica --schema o una consulta SQL, no ambas.")
+    git = Git.discover(Path.cwd())
+    cfg = load(git.root)
+    defaults = catalog.load_meta(catalog.CATALOG_DIR, db_query.AGENT)["vars"]
+    print(db_query.run(cfg["agents"], defaults, git.root, args.db, None if args.schema else args.sql))
+    return 0
+
+
 def _cmd_status(_: argparse.Namespace) -> int:
     for line in session._state(Path.cwd()):
         print(line)
@@ -348,6 +359,10 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="posición de la rama actual en el flujo")
     sub.add_parser("guard", help="hook PreToolUse (stdin JSON)")
     sub.add_parser("agent-guard", help="guard de los agentes del catálogo (stdin JSON; falla cerrado)")
+    s = sub.add_parser("db-query", help="consulta SQLite de solo lectura sobre [agents.lector-estado].databases")
+    s.add_argument("--db", required=True, help="alias declarado de la base")
+    s.add_argument("--schema", action="store_true", help="lista tablas y vistas con su SQL")
+    s.add_argument("sql", nargs="?", help="una única sentencia de lectura")
     sub.add_parser("session", help="hook SessionStart")
     return p
 
@@ -395,6 +410,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_models(args)
     if c == "status":
         return _cmd_status(args)
+    if c == "db-query":
+        return _cmd_db_query(args)
     ctx = _ctx(c)
     if c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)

@@ -20,3 +20,5 @@ vars = ["databases"]
 databases = {}
 # Filas máximas que devuelve una consulta (límite explícito, PRINCIPLES §2).
 max_rows = 200
+# Segundos máximos por consulta: `mth db-query` la corta al superarlos (límite explícito, PRINCIPLES §2).
+timeout_s = 10
