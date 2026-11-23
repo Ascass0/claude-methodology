@@ -1,0 +1,35 @@
+[[guard]]
+command = "git diff --stat origin/development...HEAD | sort | head -20"
+expect = "allow"
+
+[[guard]]
+command = "git diff & sleep 100"
+expect = "deny"
+
+[[scope]]
+name = "fabrica-para-un-caso"
+diff = '''
++class ExporterFactory:
++    _registry: dict[str, type] = {}
++    @classmethod
++    def register(cls, name): ...
++    @classmethod
++    def create(cls, name): return cls._registry[name]()
++ExporterFactory.register("csv")(CsvExporter)
+'''
+context = "La spec solo pide exportar a CSV."
+must_find = { rule = "§2 «Parsimonia»" }
+
+[[scope]]
+name = "respeta-robustez-con-modo-de-fallo"
+diff = '''
++    for attempt in range(3):
++        try:
++            return client.get(url, timeout=5)
++        except Timeout:
++            time.sleep(2 ** attempt)
++    raise DependencyUnavailable(url)
+'''
+context = "La spec declara el modo de fallo 'dependencia lenta o caída' con reintento acotado."
+expect_blockers = 0
+must_not_find = ["§2 «Parsimonia»"]

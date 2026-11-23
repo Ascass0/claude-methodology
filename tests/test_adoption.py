@@ -30,7 +30,7 @@ ENGLISH = "This is the readme of the project and it is for the team that works w
 DEFAULT_ANSWERS = {"alcance": {"option": "gradual"}, "ramas": {"option": "crear"}, "tests": {"option": "ninguno"},
                    "autonomia": {"option": "until-pr"}, "idioma": {"option": "es"}, "ci": {"option": "sin-ci"},
                    "modelos": {"option": "calidad"}, "versiones": {"option": "continuar"},
-                   "instrucciones": {"option": "metodologia"}}
+                   "instrucciones": {"option": "metodologia"}, "revisores": {"option": "agentes", "agents": []}}
 
 
 class RepoCase(unittest.TestCase):
@@ -123,13 +123,13 @@ class SurveyTests(RepoCase):
         self.write("README.md", "# demo\n")
         self.commit()
         new = self.inventory()
-        self.assertTrue(set(new.asked()) <= {"autonomia", "idioma", "ci", "modelos"}, new.asked())
-        self.assertEqual(new.asked(), ["autonomia", "idioma", "ci", "modelos"])
+        self.assertTrue(set(new.asked()) <= {"revisores", "autonomia", "idioma", "ci", "modelos"}, new.asked())
+        self.assertEqual(new.asked(), ["revisores", "autonomia", "idioma", "ci", "modelos"])
         self.write("src/app.py")
         self.write(".github/workflows/ci.yml", "on: push\n")
         self.write("docs/guia.md", "El proyecto es para la gente que trabaja con el código de la casa. " * 6)
         existing = self.inventory()
-        self.assertEqual(existing.asked(), ["alcance", "ramas", "tests", "autonomia", "modelos"])
+        self.assertEqual(existing.asked(), ["alcance", "ramas", "tests", "revisores", "autonomia", "modelos"])
         self.write("tests/test_app.py")  # one test candidate: no question
         self.assertNotIn("tests", self.inventory().asked())
 
@@ -235,13 +235,25 @@ class AnswersTests(unittest.TestCase):
         answers = {"alcance": {"option": "completa"}, "versiones": {"option": "prefijo", "tag_prefix": "fork-v"},
                    "autonomia": {"option": "otro", "config": {"autonomy": {"level": "until-pr"}},
                                  "note": "solo confirmamos la integración"},
-                   "modelos": {"option": "equilibrado"}}
+                   "modelos": {"option": "equilibrado"}, "revisores": {"option": "agentes", "agents": []}}
         cfg = self.config(inventory, answers)
         self.assertEqual((cfg["commands"]["test"], cfg["ci"]["required"]), ("pytest", True))
         self.assertEqual(cfg["paths"]["claude_md"], ".claude/CLAUDE.md")
         self.assertEqual(cfg["commits"]["external_refs"], ["refs/remotes/upstream/main"])
         self.assertEqual((cfg["release"]["tag_prefix"], cfg["autonomy"]["level"]), ("fork-v", "until-pr"))
         self.assertEqual(cfg["trace"]["legacy_base"], "")
+
+    def test_catalog_is_only_for_adoption(self):
+        inventory = survey.Survey(survey.RECONFIGURE, {}, [{"id": "revisores", "evidence": "x"}])
+        with self.assertRaises(MthError) as ctx:
+            adoption.validate(inventory, {"revisores": {"option": "agentes", "agents": [], "catalog": ["revisor-adr"]}})
+        self.assertIn("mth agents add", ctx.exception.message)
+        inventory = self.survey_of("new")
+        with self.assertRaises(MthError) as ctx:
+            adoption.validate(inventory, {**{q: DEFAULT_ANSWERS[q] for q in inventory.asked()},
+                                          "revisores": {"option": "agentes", "agents": [], "catalog": ["revisor-adr"],
+                                                        "vars": {"lector-estado": {"max_rows": 1}}}})
+        self.assertIn("vars.lector-estado", ctx.exception.message)
 
     def test_invalid_answers(self):
         # verifies: SPEC-0004/AC-08
@@ -283,6 +295,38 @@ class AdoptionFlowTests(unittest.TestCase):
         for path in (self.tmp / "bad.json", self.answers({"autonomia": {"option": "yolo"}}), self.answers(invalid_other)):
             with self.subTest(path=path.name):
                 self.mth("init", "--answers", str(path), ok=False)
+                self.assertEqual(self.git("branch", "--list"), "* main")
+                self.assertEqual(self.git("status", "--porcelain"), "")
+                self.assertFalse((self.work / ".claude/methodology.toml").exists())
+
+    def test_catalog_agents_are_installed_in_the_adoption_commit(self):
+        # verifies: SPEC-0012/AC-20
+        reviewers = {"option": "agentes", "agents": [], "catalog": ["revisor-fallos", "revisor-seguridad", "lector-estado"],
+                     "vars": {"lector-estado": {"databases": {"estado": "data/state.db"}}}}
+        self.mth("init", "--answers", str(self.answers({"revisores": reviewers})))
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")
+        files = self.git("show", "--name-only", "--format=", "HEAD").splitlines()
+        for path in (".claude/agents/revisor-seguridad.md", ".claude/mth/agents/lector-estado.guard.toml",
+                     ".claude/hooks/mth-agent-guard", ".claude/settings.json"):
+            self.assertIn(path, files)
+        cfg = tomllib.loads((self.work / ".claude/methodology.toml").read_text())
+        self.assertEqual(cfg["review"]["agents"], ["verificador", "revisor-seguridad", "revisor-fallos"])
+        self.assertEqual(cfg["agents"]["lector-estado"]["databases"], {"estado": "data/state.db"})
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        adr = next((self.work / "specs/adr/methodology").glob("*.md")).read_text()
+        self.assertIn("agentes del catálogo: revisor-fallos, revisor-seguridad, lector-estado", adr)
+
+    def test_catalog_agents_that_cannot_be_installed_change_nothing(self):
+        # verifies: SPEC-0012/AC-20
+        test_mth._write(self.work / ".claude/agents/revisor-adr.md", "---\nname: revisor-adr\n---\nPropio.\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "own agent")
+        self.git("push", "-q", "origin", "main")
+        cases = {"commands.test": ["diagnosticador"], "ya existe": ["revisor-adr"], "no es un agente": ["no-existe"]}
+        for expected, chosen in cases.items():
+            with self.subTest(expected=expected):
+                path = self.answers({"revisores": {"option": "agentes", "agents": [], "catalog": chosen}})
+                self.assertIn(expected, self.mth("init", "--answers", str(path), ok=False))
                 self.assertEqual(self.git("branch", "--list"), "* main")
                 self.assertEqual(self.git("status", "--porcelain"), "")
                 self.assertFalse((self.work / ".claude/methodology.toml").exists())

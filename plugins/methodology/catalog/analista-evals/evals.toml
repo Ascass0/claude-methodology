@@ -1,0 +1,30 @@
+[[guard]]
+command = "python .work/evals/compare.py evals/results/base evals/results/candidate"
+expect = "allow"
+
+[[guard]]
+command = "git push origin HEAD"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = ".work/evals/report-2026-11-23.md"
+expect = "allow"
+
+[[guard]]
+tool = "Write"
+path = "evals/results/base/summary.json"
+expect = "deny"
+
+[[guard]]
+tool = "Edit"
+path = ".work/evals/../../src/runner.py"
+expect = "deny"
+
+[[routing]]
+prompt = "Compara los resultados de evals de la imagen candidata con la base y dime si hay regresión"
+expect = "analista-evals"
+
+[[routing]]
+prompt = "Ejecuta los evals del fork"
+expect_not = "analista-evals"

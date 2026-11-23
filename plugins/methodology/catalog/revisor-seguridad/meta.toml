@@ -1,0 +1,19 @@
+name = "revisor-seguridad"
+version = "1.0.0"
+kind = "revisor"
+profiles = ["base"]
+summary = "Entradas no confiables, mínimo privilegio, secretos y dependencias (lo que no comprueba una herramienta)."
+origin = "Concepto: security-auditor (dev.to, S. Khaitan). Texto propio, adaptado a PRINCIPLES §2, §3, §4 y §8."
+model_role = "review"
+model_hint = "opus"
+local_section = true
+local_required = true      # el modelo de amenazas es del repo: doctor avisa si la sección está vacía
+
+[requires]
+config = []
+vars = []
+
+[review]
+order = 10                 # precedencia: seguridad primero
+branches = ["feat", "fix", "hotfix"]
+paths = []                 # siempre

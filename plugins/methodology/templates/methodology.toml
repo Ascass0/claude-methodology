@@ -121,3 +121,18 @@ docs = "es"
 # De serie: plans, merge-request, security-report, reviews, notes y tmp. Añade aquí los propios del repo.
 # [work]
 # dirs = ["benchmarks"]
+
+# Variables de los agentes del catálogo (mth agents add). Solo hacen falta para los opcionales;
+# cada agente admite únicamente las variables de su meta.toml. Requiere claude-methodology >= 0.8.0.
+# [agents.ingeniero-rendimiento]
+# bench = "pytest tests/bench --benchmark-json=.work/bench.json"   # obligatorio
+# min_gain_pct = 5
+# [agents.analista-evals]
+# results = "evals/results"                                        # obligatorio
+# reports = ".work/evals"
+# [agents.lector-estado]
+# databases = { estado = "data/state.db" }                         # obligatorio: alias → ruta
+# max_rows = 200
+# timeout_s = 10
+# [agents.respondedor-incidencias]
+# upstream_remote = "upstream"

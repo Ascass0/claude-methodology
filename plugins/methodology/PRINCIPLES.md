@@ -205,7 +205,7 @@ feat|fix|chore/<slug> ──●──●──●  (desde development)
 
 ## 10. Revisión
 
-- Los revisores son los agentes que declara cada repositorio. Revisan con **contexto limpio**: diff, specs y ADR afectados y estos principios; nunca la conversación del autor. [criterio]
+- Los revisores son los agentes que declara cada repositorio. Revisan con **contexto limpio**: diff, specs y ADR afectados y estos principios; nunca la conversación del autor. El catálogo del plugin (`mth agents add`) es la forma recomendada de declararlos. [criterio]
 - Antes de la revisión con agentes se ejecuta lo determinista (tests, lint, `mth trace`, escáneres). Un agente no revisa lo que una herramienta puede comprobar. [criterio]
 - Cada hallazgo tiene severidad: **bloqueante** (incumple una regla DEBE, un criterio de aceptación o introduce un riesgo), **importante** (incumple un DEBERÍA) o **sugerencia**. Solo los bloqueantes impiden integrar. [script]
 - Los conflictos entre revisores se resuelven con la precedencia del apartado 0. [criterio]

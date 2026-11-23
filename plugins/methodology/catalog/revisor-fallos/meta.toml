@@ -1,0 +1,19 @@
+name = "revisor-fallos"
+version = "1.0.0"
+kind = "revisor"
+profiles = ["base"]
+summary = "Design for Failure, fail-fast/fail-safe, límites, idempotencia, errores y trazabilidad en ejecución."
+origin = "Concepto: code-reviewer (dev.to, S. Khaitan), partido por apartados. Texto propio, adaptado a PRINCIPLES §2, §3 y §4."
+model_role = "review"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []
+
+[review]
+order = 20                 # precedencia: fail-safe/fail-fast, tras seguridad
+branches = ["feat", "fix", "hotfix"]
+paths = []

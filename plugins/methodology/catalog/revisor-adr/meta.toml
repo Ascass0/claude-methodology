@@ -1,0 +1,26 @@
+name = "revisor-adr"
+version = "1.0.0"
+kind = "revisor"
+profiles = ["base"]
+summary = "Cambios estructurales: ADR previo, cumplimiento de los ADR aceptados y specs no reescritas para justificar el código."
+origin = "Concepto: architect-reviewer (dev.to, S. Khaitan). Texto propio, adaptado a PRINCIPLES §1, §5 y §12."
+model_role = "review"
+model_hint = "opus"
+local_section = true
+local_required = false
+
+[requires]
+config = ["paths.adr"]
+vars = []
+
+[review]
+order = 25                 # corrección respecto a las decisiones; antes de diseño y parsimonia
+branches = ["feat", "fix", "hotfix"]
+# Solo cambios con posible impacto estructural (PRINCIPLES §12). El repo amplía la lista en
+# [review.paths] con sus fronteras: contratos, esquemas, despliegue... Las specs NO van aquí a
+# propósito: casi toda feature toca su spec (cambio de estado) y el revisor correría siempre.
+paths = [
+  "{{config.paths.adr}}/**",
+  "**/pyproject.toml", "**/requirements*.txt", "**/package.json", "**/go.mod", "**/Cargo.toml",
+  "**/Dockerfile*", "**/compose*.y*ml", "**/*.schema.json", ".github/workflows/**",
+]

@@ -1,0 +1,18 @@
+# Guard común de los revisores: git de solo lectura y filtros de texto. Lo heredan los revisores
+# con `extends = "_shared/guard-revisor.toml"`.
+#
+# Semántica (implementación: mthlib/agent_guard.py, `mth agent-guard`):
+# - allowlist: cada segmento del comando (separado por ; && || | y saltos de línea) debe empezar
+#   por un prefijo de `allow`; tras un `|`, también vale un programa de `filters`.
+# - Se rechaza siempre: asignaciones de entorno delante del programa (GIT_EXTERNAL_DIFF=...),
+#   `git -c ...` y `git --exec-path` (permiten ejecutar código arbitrario desde git de solo lectura).
+# - Un `&` suelto (proceso en segundo plano) se rechaza siempre.
+# - deny_operators: subcadenas prohibidas en cualquier parte del comando, comillas incluidas
+#   (fail-closed: un `grep ">"` también se bloquea; es un falso positivo aceptado).
+# - deny_flags: opciones prohibidas en los segmentos de `allow` (no en los filtros).
+[bash]
+mode = "allowlist"
+allow = ["git diff", "git log", "git show", "git blame", "git grep", "git status", "git ls-files", "git rev-parse"]
+filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut"]
+deny_operators = [">", "$(", "`", "<("]
+deny_flags = ["--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager"]

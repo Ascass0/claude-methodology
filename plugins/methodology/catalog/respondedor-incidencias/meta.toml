@@ -1,0 +1,18 @@
+name = "respondedor-incidencias"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "CI en rojo o aviso de seguridad (también de upstream): correlaciona cambios, evalúa el impacto y propone hotfix o fix según el flujo."
+origin = "Concepto: incident-responder (dev.to, S. Khaitan), llevado de producción a la CI y a los avisos de upstream. Texto propio."
+model_role = "task"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []
+
+[vars]
+# Remoto de upstream en un fork (por ejemplo, "upstream"). Vacío si el repo no es un fork.
+upstream_remote = ""

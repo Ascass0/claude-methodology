@@ -1,0 +1,19 @@
+name = "revisor-parsimonia"
+version = "1.0.0"
+kind = "revisor"
+profiles = ["base"]
+summary = "YAGNI y lo más simple que funcione; los tests que sobran; el proceso proporcional al cambio."
+origin = "Revisor propio de los repos (revisor-parsimonia), generalizado al catálogo y adaptado a PRINCIPLES §2, §6 y §12."
+model_role = "review"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []
+
+[review]
+order = 40                 # parsimonia: por debajo de seguridad, fallos, corrección y trazabilidad
+branches = ["feat", "fix", "hotfix"]
+paths = []

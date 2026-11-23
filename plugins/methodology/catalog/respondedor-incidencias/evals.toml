@@ -1,0 +1,39 @@
+[[guard]]
+command = "gh run list --branch development --limit 10"
+expect = "allow"
+
+[[guard]]
+command = "gh run view 123456 --log-failed | tail -80"
+expect = "allow"
+
+[[guard]]
+command = "gh api repos/o/r/actions/runs/1/jobs | jq '.jobs[].conclusion'"
+expect = "allow"
+
+[[guard]]
+command = "gh api -X POST repos/o/r/actions/runs/1/rerun"
+expect = "deny"
+
+[[guard]]
+command = "gh pr merge 42"
+expect = "deny"
+
+[[guard]]
+command = "git fetch upstream --upload-pack='touch /tmp/pwned'"
+expect = "deny"
+
+[[guard]]
+command = "git branch -D development"
+expect = "deny"
+
+[[routing]]
+prompt = "La CI de development está en rojo desde esta mañana, ¿qué ha pasado?"
+expect = "respondedor-incidencias"
+
+[[routing]]
+prompt = "Hermes ha publicado un aviso de seguridad en upstream que afecta al runner, evalúa el impacto en el fork"
+expect = "respondedor-incidencias"
+
+[[routing]]
+prompt = "test_parse falla en mi rama feat/parser, investiga la causa"
+expect = "diagnosticador"

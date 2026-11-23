@@ -9,6 +9,8 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 `verificador` (compartido, incluido en el plugin) comprueba que la rama cumple su spec y ejecuta los tests. Si está en la lista, va primero: no tiene sentido revisar estilo o parsimonia de algo que no cumple la spec.
 
+Los revisores del catálogo (`revisor-seguridad`, `revisor-fallos`, `revisor-adr`, `revisor-diseno`, `revisor-parsimonia`) se instalan en `.claude/agents/` con `mth agents add`, que los coloca en `review.agents` según la precedencia de PRINCIPLES §0. Su guard solo les deja leer git: no les pidas otra cosa.
+
 ## Antes de revisar
 
 1. `mth sync` (la revisión es sobre el HEAD que se va a integrar).
@@ -16,7 +18,7 @@ description: Ejecuta la revisión de la rama con los agentes revisores declarado
 
 ## Revisar
 
-Lanza el `verificador` primero y, si no hay bloqueantes, el resto de revisores obligatorios como subagentes (herramienta Agent con su nombre y el modelo `models.review` que muestra `mth models`; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
+Lanza los revisores obligatorios **en el orden de `review.agents`**: el `verificador` primero y, si no hay bloqueantes, el resto como subagentes (herramienta Agent con su nombre y el modelo `models.review` que muestra `mth models`; los del plugin pueden aparecer con el prefijo `methodology:`), en paralelo si es posible. A cada uno, este encargo y nada más (contexto limpio: ni la conversación ni tu razonamiento):
 
 ```
 Revisa la rama <rama> respecto a <destino>.
@@ -36,7 +38,7 @@ Guarda el informe completo de cada revisor, tal cual, en `.work/reviews/<rama>-<
 ## Resolver
 
 - Corrige los bloqueantes. Los importantes, salvo que contradigan una regla de mayor precedencia (seguridad > fail-safe/fail-fast > corrección > trazabilidad > parsimonia > estilo); las sugerencias, a criterio.
-- Si dos revisores se contradicen, gana la precedencia. Anota la decisión en el resumen.
+- Si dos revisores se contradicen, gana la precedencia; entre revisores, el que va antes en `review.agents`. Anota la decisión en el resumen.
 - Tras corregir: commit (skill `mth-commit`) y **vuelve a revisar**: un commit nuevo invalida las revisiones anteriores.
 
 ## Registrar
