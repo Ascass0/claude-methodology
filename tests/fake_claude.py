@@ -67,6 +67,9 @@ elif mode == "write-unseen":  # the write runs without the hook; the Bash call d
 elif mode == "auth-error":
     print("Error: not logged in. Run /login", file=sys.stderr)
     sys.exit(1)
+elif mode == "leak-then-hang":  # the forbidden command runs, then claude never ends
+    touch_leak(False)
+    time.sleep(600)
 elif mode == "hang":
     time.sleep(600)
 sys.exit(0)

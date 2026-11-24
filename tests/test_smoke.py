@@ -130,6 +130,99 @@ class IsolationTests(SmokeTestCase):
         self.assertNotIn(smoke.CANARY, self.output)
 
 
+class FailureModeTests(SmokeTestCase):
+    def test_a_timeout_with_evidence_of_failure_still_fails(self):
+        # verifies: SPEC-0014/AC-12
+        result = self.run_smoke("leak-then-hang", timeout=1.0)
+        self.assertEqual(result.outcome, smoke.FAIL, result)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(self.probes["pid"].read_text()), 0)
+
+    def test_a_scratch_repo_that_cannot_be_built_is_an_actionable_error(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib.errors import MthError
+        for failure in (OSError("disco lleno"), MthError("git init falló")):
+            with self.subTest(failure=failure), mock.patch.object(smoke, "build_repo", side_effect=failure), \
+                    self.assertRaises(MthError) as caught:
+                self.seed_record()
+                self.run_smoke("obey")
+            self.assertIn("repositorio temporal", caught.exception.message)
+            self.assertIn("no se ha registrado nada", caught.exception.hint)
+            self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
+
+    def test_a_git_that_hangs_in_the_scratch_repo_is_bounded(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib.errors import MthError
+        fake = self.bin / "git"
+        fake.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+        fake.chmod(0o755)
+        with mock.patch.object(smoke, "GIT_TIMEOUT", 0.5), \
+                mock.patch.dict(os.environ, {"PATH": f"{self.bin}:{os.environ['PATH']}"}), \
+                self.assertRaises(MthError) as caught:
+            smoke._git(self.root, "init")
+        self.assertIn("no respondió", caught.exception.message)
+
+    def test_the_callers_git_variables_never_reach_the_scratch_repo(self):
+        # verifies: SPEC-0014/AC-12
+        env = smoke._environment({"GIT_DIR": "/real/.git", "GIT_WORK_TREE": "/real", "HOME": "/h"})
+        self.assertEqual(env, {"HOME": "/h"})
+        with mock.patch.dict(os.environ, {"GIT_DIR": str(self.root / ".git")}):
+            scratch = Path(self.bin / "scratch")
+            scratch.mkdir()
+            smoke.build_repo(scratch)
+        self.assertTrue((scratch / ".git").is_dir())
+        self.assertEqual(subprocess.run(["git", "-C", str(self.root), "log", "--oneline"], capture_output=True,
+                                        text=True).stdout.strip(), "")
+
+    def test_a_record_that_cannot_be_written_keeps_the_verdict(self):
+        # verifies: SPEC-0014/AC-12
+        with mock.patch.object(smoke, "write_record", side_effect=OSError("solo lectura")):
+            passed = self.run_smoke("obey")
+        self.assertEqual(passed.outcome, smoke.PASS)
+        self.assertIn("No se pudo actualizar el registro", " ".join(passed.details))
+        self.seed_record()
+        with mock.patch.object(smoke, "clear_record", side_effect=OSError("solo lectura")):
+            failed = self.run_smoke("ignore-hooks")
+        self.assertEqual(failed.outcome, smoke.FAIL)
+        self.assertIn("bórralo", " ".join(failed.details))
+
+    def test_a_cli_that_cannot_start_is_inconclusive(self):
+        # verifies: SPEC-0014/AC-12
+        broken = self.bin / "broken"
+        broken.write_text("#!/nonexistent/interpreter\n", encoding="utf-8")
+        broken.chmod(0o755)
+        self.seed_record()
+        result = smoke.smoke(self.git, str(broken), "haiku", 5.0, dict(os.environ))
+        self.assertEqual(result.outcome, smoke.INCONCLUSIVE)
+        self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
+
+    def test_a_real_sigterm_cleans_up_and_kills_claude(self):
+        # verifies: SPEC-0014/AC-06
+        import signal
+        import time
+        mth = Path(__file__).resolve().parent.parent / "plugins/methodology/scripts/mth.py"
+        proc = subprocess.Popen([sys.executable, str(mth), "smoke", "--claude", str(self.claude)], cwd=self.root,
+                                env=self.environ("hang"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not (self.probes["pid"].exists() and self.probes["pid"].read_text()):
+            time.sleep(0.05)
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=30)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertFalse(Path(self.probes["cwd"].read_text()).exists())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(self.probes["pid"].read_text()), 0)
+        self.assertIsNone(self.record())
+
+    def test_every_verdict_is_traced(self):
+        # verifies: SPEC-0014/AC-12
+        self.run_smoke("ignore-hooks")
+        lines = (self.git.common_dir() / "mth" / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+        event = json.loads(lines[-1])
+        self.assertEqual((event["event"], event["outcome"]), ("smoke.verdict", smoke.FAIL))
+        self.assertTrue(event["evidence"]["leak_file"])
+
+
 class LimitsTests(SmokeTestCase):
     def test_the_command_line_bounds_cost_and_isolates_settings(self):
         # verifies: SPEC-0014/AC-08
@@ -167,6 +260,14 @@ class LocatingTests(SmokeTestCase):
         del env["CLAUDE_CODE_EXECPATH"]
         self.assertEqual(smoke.find_claude(None, env), shadow)
         self.assertIsNone(smoke.find_claude("/nonexistent/claude", env))  # the first one given wins
+        # A relative or empty PATH entry would pick a file of the current directory (the repository).
+        cwd = os.getcwd()
+        os.chdir(self.bin)  # holds an executable `claude`
+        try:
+            self.assertTrue(smoke.shutil.which("claude", path=":."))  # the hazard is real...
+            self.assertIsNone(smoke.find_claude(None, {"PATH": ":."}))  # ...and refused
+        finally:
+            os.chdir(cwd)
 
     def test_a_missing_cli_is_inconclusive_with_a_hint(self):
         # verifies: SPEC-0014/AC-09

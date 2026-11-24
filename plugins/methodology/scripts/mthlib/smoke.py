@@ -13,7 +13,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,7 +21,7 @@ from . import __version__, agent_guard, agents, catalog
 from .errors import MthError
 from .files import atomic_write
 from .git import Git
-from .proc import run
+from .log import Tracer
 from .setup import register_launcher
 
 PASS, FAIL, INCONCLUSIVE = 0, 1, 3  # exit codes; 2 stays for usage errors
@@ -29,6 +29,9 @@ CANARY = "mth-canary"
 OK_FILE, LEAK_FILE, OK_TEXT = "canary-ok.txt", "canary-leak.txt", "mth-canary"
 DEFAULT_MODEL, MAX_TURNS, MAX_BUDGET_USD, DEFAULT_TIMEOUT = "haiku", "8", "0.5", 180.0
 VERSION_TIMEOUT = 2.0
+GIT_TIMEOUT = 30.0
+KILL_GRACE = 5.0  # seconds to collect the output after killing claude
+MAX_OUTPUT = 4096  # bytes of claude's output kept (the tail)
 RECORD = Path("mth") / "smoke"
 # Variables of the session that launches the test: the nested Claude Code must start as a fresh one.
 _SESSION_VARS = ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID",
@@ -78,7 +81,8 @@ def find_claude(explicit: str | None, environ: dict[str, str] | None = None) -> 
             path = Path(candidate)
             return path if path.is_file() and os.access(path, os.X_OK) else None  # the first one given wins
     found = shutil.which("claude", path=environ.get("PATH"))
-    return Path(found) if found else None
+    # A relative or empty PATH entry would resolve to the current directory, i.e. a file of the repository.
+    return Path(found) if found and Path(found).is_absolute() else None
 
 
 def claude_version(claude: Path) -> str | None:
@@ -145,11 +149,25 @@ def warnings(git: Git, catalog_installed: bool, environ: dict[str, str] | None =
 
 
 # -- the throwaway repository -----------------------------------------------------------
+def _git(root: Path, *args: str) -> None:
+    """``git`` in the scratch repo, bounded in time and blind to the GIT_* variables of the caller."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        proc = subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True,
+                              timeout=GIT_TIMEOUT, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as exc:
+        raise MthError(f"git {args[0]} no respondió en {GIT_TIMEOUT:.0f} s.") from exc
+    except OSError as exc:
+        raise MthError(f"No se puede ejecutar git: {exc}.") from exc
+    if proc.returncode != 0:
+        raise MthError(f"git {args[0]} falló: {(proc.stderr or proc.stdout).strip()[:200]}")
+
+
 def build_repo(root: Path) -> Git:
     """A repository with the guard installed exactly as ``mth agents add`` does, plus the canary."""
-    run(["git", "init", "-q"], cwd=root)
-    run(["git", "-c", "user.name=mth-smoke", "-c", "user.email=smoke@example.invalid",
-         "commit", "-q", "--allow-empty", "-m", "chore: init"], cwd=root)
+    _git(root, "init", "-q")
+    _git(root, "-c", "user.name=mth-smoke", "-c", "user.email=smoke@example.invalid",
+         "commit", "-q", "--allow-empty", "-m", "chore: init")
     shim = (catalog.CATALOG_DIR / "_shared" / "mth-agent-guard.sh").read_text(encoding="utf-8")
     atomic_write(root / agents.SHIM, shim, 0o755)
     atomic_write(root / agents.SETTINGS, agents._settings_text(agents.with_hook({})))
@@ -175,27 +193,32 @@ def command(claude: Path, model: str, text: str) -> list[str]:
 
 
 def _environment(environ: dict[str, str]) -> dict[str, str]:
-    return {k: v for k, v in environ.items() if k not in _SESSION_VARS}
+    return {k: v for k, v in environ.items() if k not in _SESSION_VARS and not k.startswith("GIT_")}
 
 
 def run_claude(args: list[str], cwd: Path, environ: dict[str, str], timeout: float) -> tuple[int | None, str]:
     """Run claude in its own process group and kill the group on timeout or interruption.
 
+    The output goes to a temporary file and only its tail is read, so it cannot grow in memory.
+
     Returns:
-        The exit code (None when it timed out) and the tail of its output.
+        The exit code (None when it timed out) and the last line of its output.
     """
-    proc = subprocess.Popen(args, cwd=cwd, env=_environment(environ), stdin=subprocess.DEVNULL,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill(proc)
-        out = proc.communicate()[0] or ""
-        return None, _tail(out)
-    except BaseException:  # Ctrl+C, SIGTERM turned into an exception: never leave claude running
-        _kill(proc)
-        raise
-    return proc.returncode, _tail(out or "")
+    with tempfile.TemporaryFile() as sink:
+        proc = subprocess.Popen(args, cwd=cwd, env=_environment(environ), stdin=subprocess.DEVNULL,
+                                stdout=sink, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            proc.wait(timeout=timeout)
+            finished: int | None = proc.returncode
+        except subprocess.TimeoutExpired:
+            _kill(proc)
+            finished = None
+        except BaseException:  # Ctrl+C, SIGTERM turned into an exception: never leave claude running
+            _kill(proc)
+            raise
+        sink.seek(0, os.SEEK_END)
+        sink.seek(max(0, sink.tell() - MAX_OUTPUT))
+        return finished, _tail(sink.read().decode("utf-8", "replace"))
 
 
 def _kill(proc: subprocess.Popen) -> None:
@@ -203,7 +226,10 @@ def _kill(proc: subprocess.Popen) -> None:
         os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
         proc.kill()
-    proc.wait()
+    try:
+        proc.wait(timeout=KILL_GRACE)
+    except subprocess.TimeoutExpired:  # not reaped: report instead of hanging
+        pass
 
 
 def _tail(text: str) -> str:
@@ -265,9 +291,16 @@ def judge(found: Evidence, finished: int | None, last_line: str) -> Result:
 
 
 # -- the command ------------------------------------------------------------------------
+def _on_term(_signum, _frame) -> None:
+    raise KeyboardInterrupt  # runs the same cleanup as Ctrl+C
+
+
 def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, timeout: float = DEFAULT_TIMEOUT,
           environ: dict[str, str] | None = None) -> Result:
-    """Run the test; only a pass records the Claude Code version, a failure clears the record."""
+    """Run the test; only a pass records the Claude Code version, a failure clears the record.
+
+    A failure to write or clear the record never hides the verdict: it is added to the details.
+    """
     environ = dict(os.environ if environ is None else environ)
     claude = find_claude(explicit, environ)
     if claude is None:
@@ -277,19 +310,44 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
     if version is None:
         return Result(INCONCLUSIVE, f"NO CONCLUYENTE: {claude} --version no responde.")
     scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
+    previous = _arm_term()
+    found = Evidence()
     try:
         try:
             repo = build_repo(scratch)
         except (MthError, OSError) as exc:
-            raise MthError(f"No se pudo preparar el repositorio temporal de la prueba: {exc}.",
-                           hint="Comprueba el espacio y los permisos de TMPDIR; no se ha registrado nada.") from exc
+            raise MthError(f"No se pudo preparar el repositorio temporal de la prueba: "
+                           f"{getattr(exc, 'message', exc)}",
+                           hint="Comprueba el espacio, los permisos de TMPDIR y que git responde; "
+                                "no se ha registrado nada.") from exc
         finished, last_line = run_claude(command(claude, model, prompt(scratch)), scratch, environ, timeout)
-        result = judge(evidence(repo), finished, last_line)
+        found = evidence(repo)
+        result = judge(found, finished, last_line)
     finally:
+        _disarm_term(previous)
         shutil.rmtree(scratch, ignore_errors=True)
     result.details.insert(0, f"Claude Code: {version} ({claude})")
-    if result.outcome == PASS:
-        write_record(git, version, claude)
-    elif result.outcome == FAIL:
-        clear_record(git)
+    try:
+        if result.outcome == PASS:
+            write_record(git, version, claude)
+        elif result.outcome == FAIL:
+            clear_record(git)
+    except (MthError, OSError) as exc:
+        result.details.append(f"No se pudo actualizar el registro de la versión ({getattr(exc, 'message', exc)}): "
+                              f"{'bórralo' if result.outcome == FAIL else 'repite la prueba'} a mano; "
+                              "el resultado de arriba es el de la prueba.")
+    Tracer(git.common_dir(), "smoke").event("smoke.verdict", outcome=result.outcome, claude_version=version,
+                                            evidence=asdict(found), summary=result.summary)
     return result
+
+
+def _arm_term():
+    try:
+        return signal.signal(signal.SIGTERM, _on_term)
+    except ValueError:  # not the main thread (tests, programmatic use)
+        return None
+
+
+def _disarm_term(previous) -> None:
+    if previous is not None:
+        signal.signal(signal.SIGTERM, previous)

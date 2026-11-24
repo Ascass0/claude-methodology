@@ -88,6 +88,8 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 | Interrupción (Ctrl+C, SIGTERM) | Señal | Limpia el repo temporal y mata a `claude`; no registra |
 | El registro de versión no se puede escribir | `OSError` | Error reanudable; el resultado se muestra igualmente |
 | Registro de versión corrupto | JSON ilegible | Se trata como ausente |
+| `claude` en el `PATH` es una entrada relativa o vacía (resolvería a un fichero del repo) | Ruta no absoluta | No se usa |
+| `git` no responde al preparar el repo temporal | Plazo de 30 s | Error accionable; no registra |
 
 ## Criterios de aceptación
 
@@ -102,6 +104,7 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 - **AC-09**: `claude` se localiza por `--claude`, `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` y `PATH`, en ese orden; si falta, termina en 3 con una pista.
 - **AC-10**: `mth session` y `mth doctor` avisan de que no hay registro o de que la versión cambió, con los textos de esta spec, solo si hay agentes del catálogo instalados, y no avisan si la versión coincide.
 - **AC-11**: Un registro de versión corrupto se trata como ausente.
+- **AC-12**: Los modos de fallo de la tabla tienen respuesta: el plazo agotado con prueba de fallo da fallo; un repo temporal que no se puede construir (o un `git` que no responde) es un error accionable que no registra; un registro que no se puede escribir o borrar no oculta el resultado; una CLI que no arranca es no concluyente; las variables `GIT_*` del entorno no llegan al repo temporal; y cada resultado queda en la traza como `smoke.verdict`.
 
 ## Notas
 
