@@ -6,6 +6,22 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.11.0] - 2026-11-24
+
+### Añadido
+- `mth release --plan` decide, sin escribir nada, si hay que publicar y con qué nivel: imprime los fragmentos con su nivel, el nivel resultante (SemVer), la versión propuesta y una decisión con sus motivos (`publicar`, `esperar`, `no publicar` o `bloqueado`), que queda en la traza. (SPEC-0017, ADR-0013)
+- Cada fragmento tiene un nivel mínimo: `feat` → `minor`, el resto → `patch`, y eliminar funcionalidad (sección `Eliminado`) → `minor` en `0.y.z` y `major` desde `1.0.0`. `mth integrate` y `mth release` rechazan un `bump` por debajo del mínimo. (SPEC-0017, ADR-0013)
+- `mth release --allow-major`: `1.0.0` declara la API estable y solo se publica con esa decisión explícita; sin ella, un nivel `major` antes de `1.0.0` queda bloqueado. (SPEC-0017, ADR-0013)
+- Clave `forge` (`github`, `gitlab` o `none`), deducida de la URL del remoto en la adopción (pregunta `forja`, siempre deducida) y escrita por `mth init`. Con `github` nada cambia. (SPEC-0016, ADR-0012)
+- Con `gitlab` o `none`, `mth integrate` y `mth release` hacen solo la parte local y terminan con la lista de pasos manuales, sin llamar a `gh` y sin fusionar: `integrate` deja el título y la descripción del MR en `.work/merge-request/`, y `release` prepara `release/vX.Y.Z` con el `CHANGELOG.md` y marca los pasos que git confirma al repetirse. (SPEC-0016, ADR-0012)
+- El guard bloquea `glab mr merge` igual que `gh pr merge`. (SPEC-0016, ADR-0012)
+
+### Cambiado
+- Las skills `mth-release` y `mth-develop` indican que, tras integrar en `development`, el agente decide solo si publicar con `mth release --plan` y publica cuando recomienda `publicar`. (SPEC-0017, ADR-0013)
+- Sin GitHub, la adopción deduce `ci: sin-ci` y `versiones: continuar` (con etiquetas con prefijo y sin herramienta de publicación) en lugar de desactivar `mth integrate` y `mth release`; el plan previo las muestra como activas solo en su parte local. (SPEC-0016, ADR-0012)
+- `mth doctor` no pide `gh` ni `ci.required` cuando `forge` no es `github`. (SPEC-0016, ADR-0012)
+- `mth hotfix finish` falla antes de tocar nada con `gitlab` o `none`: fusionar sin poder comprobar la CI sería degradar. (SPEC-0016, ADR-0012)
+
 ## [0.10.0] - 2026-11-24
 
 ### Añadido
