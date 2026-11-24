@@ -95,7 +95,8 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 | `gh` no está instalado y `forge` no es `github` | `mth integrate`, `mth release` | No se usa: los comandos funcionan igual |
 | Versión ya publicada a mano sin rama de release | `mth release` | Los gates y el cálculo de versión son los de siempre: la persona decide qué hacer con la etiqueta existente |
 | Etiqueta ya existente al retomar | `mth release` | El paso 2 se marca como hecho y no se vuelve a crear, pero solo si la etiqueta está en el remoto y apunta a un commit de `main`; una etiqueta solo local o puesta en otro commit no cuenta y no se borra la rama |
-| La forja borra la rama de release al fusionar el MR | `mth release` | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development`, y retoma esa publicación sin calcular otra versión |
+| `main` trae una versión anterior a la última etiqueta, o sin etiqueta histórica | `mth release` | Es historia, no una publicación pendiente: no retiene una release nueva |
+| La forja borra la rama de release al fusionar el MR | `mth release` | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development`, y retoma esa publicación sin calcular otra versión. Mientras `main` no haya vuelto a `development` (o la etiqueta no exista), no se calcula una versión nueva: la salida es hacer los pasos que lista |
 
 ## Criterios de aceptación
 

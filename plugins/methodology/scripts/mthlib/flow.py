@@ -461,6 +461,7 @@ def _unfinished_manual_release(ctx: Ctx) -> str | None:
     """Version of a release merged into ``main`` by hand whose branch the forge already deleted, if it is unfinished.
 
     It is unfinished while its tag is not published or ``main`` has not come back into ``development``.
+    A version older than the latest tag is history, not a pending release: it never holds back a new one.
     """
     g, cfg = ctx.git, ctx.cfg
     if not g.remote_has(cfg.main):
@@ -470,6 +471,8 @@ def _unfinished_manual_release(ctx: Ctx) -> str | None:
     if not m:
         return None
     version = m.group(1)
+    if tuple(map(int, version.split("."))) < g.latest_version(cfg.tag_prefix):
+        return None
     done = _tag_on_main(g, f"{cfg.tag_prefix}{version}", cfg.main) and g.is_ancestor(g.remote_ref(cfg.main),
                                                                                     g.remote_ref(cfg.development))
     return None if done else version
@@ -494,6 +497,7 @@ def _release_manual(ctx: Ctx, head: str, version: str) -> None:
     if merged and tagged and back:
         g.checkout_synced(cfg.development)
         g.delete_branch(head)
+        ctx.tracer.event("release.manual.cleaned", version=version, head=head)
         say(f"✓ Versión {tag} publicada a mano; {head} borrada y {cfg.development} sincronizada.")
         return
     mark = lambda done: "✓" if done else "·"  # noqa: E731

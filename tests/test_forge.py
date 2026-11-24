@@ -199,6 +199,26 @@ class ManualForgeTests(unittest.TestCase):
         self.assert_no_gh()
         self.assertEqual(self.git("branch", "--show-current"), "development")
 
+    def test_an_old_untagged_version_in_main_does_not_hold_back_a_new_release(self):
+        # verifies: SPEC-0016/AC-07
+        self.prepare_release()
+        self.person_merges("release/v0.1.0", "main")
+        self.git("fetch", "-q", "origin")
+        self.git("tag", "-a", "v0.5.0", "-m", "v0.5.0", "origin/main")  # newer than the untagged 0.1.0 in the changelog
+        self.git("push", "-q", "origin", "v0.5.0")
+        self.git("push", "-q", "origin", "--delete", "release/v0.1.0")  # the forge removed the branch on merge
+        self.person_merges("main", "development")
+        self.git("checkout", "-q", "development")
+        self.git("pull", "-q", "--ff-only", "origin", "development")
+        test_mth._write(self.work / "changes/feat-gadget.md", "---\nbump: minor\nrefs:\n---\n### Añadido\n- Gadget.\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "add gadget fragment")
+        self.git("push", "-q", "origin", "development")
+        out = self.mth("release")
+        self.assertNotIn("Reanudando la publicación manual", out)
+        self.assertIn("release/v0.6.0 preparada", out)
+        self.assert_no_gh()
+
     def test_a_tag_that_is_not_published_on_main_does_not_count(self):
         # verifies: SPEC-0016/AC-07
         self.prepare_release()
