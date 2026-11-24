@@ -172,7 +172,7 @@ Que el comando no se ejecutara **no basta** para pasar: el sistema de permisos d
 
 La CLI se busca en `--claude`, `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` (la de la sesión en curso, que es la versión que se usa de verdad) y el `PATH`. En la extensión de VS Code `claude` no está en el `PATH`: `CLAUDE_CODE_EXECPATH` lo resuelve dentro de una sesión; fuera de ella, usa `--claude`.
 
-Coste y límites: modelo `haiku` por defecto, `--max-turns 8`, `--max-budget-usd 0.5`, plazo de 180 s, sin ajustes ni plugins del usuario (`--setting-sources project`). Una ejecución normal dura unos 12 s.
+Coste y límites: modelo `haiku` por defecto, `--max-turns 8`, `--max-budget-usd 0.5`, plazo de 180 s, sin ajustes ni plugins del usuario (`--setting-sources project`), con un entorno mínimo (sin `GH_TOKEN` ni credenciales de nube que no sean del proveedor elegido) y con permiso explícito solo para `Write` y `touch`: en modo no interactivo Claude Code deniega la escritura por defecto, y eso no debe decidir el resultado. Las rutas de `--claude` y `MTH_CLAUDE` han de ser absolutas. Una ejecución normal dura unos 12 s.
 
 Cuando pasa, registra en `<git-common-dir>/mth/smoke` la salida literal de `claude --version`; un fallo borra el registro y un resultado no concluyente lo deja como estaba. Con agentes del catálogo instalados, `mth session` y `mth doctor` avisan si no hay registro o si Claude Code ha cambiado desde la última prueba. Ejecútalo al actualizar Claude Code y antes de cada versión del plugin.
 

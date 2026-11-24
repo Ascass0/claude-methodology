@@ -32,7 +32,7 @@ El guard por agente ([SPEC-0012](SPEC-0012-catalogo-de-agentes.md)) solo restrin
 
 `mth smoke [--claude RUTA] [--model MODELO] [--timeout SEGUNDOS]`. Códigos de salida: **0** pasa, **1** falla, **3** no concluyente (2 queda para los errores de uso, como en el resto de `mth`).
 
-La CLI `claude` se busca en este orden: `--claude`, la variable `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` (el ejecutable de la sesión en curso, que es la versión que de verdad se usa) y el `PATH`. Si no se encuentra, el resultado es no concluyente.
+La CLI `claude` se busca en este orden: `--claude`, la variable `MTH_CLAUDE` (rutas absolutas: una relativa se resolvería contra un fichero del repo), `CLAUDE_CODE_EXECPATH` (el ejecutable de la sesión en curso, que es la versión que de verdad se usa) y el `PATH`. Si no se encuentra, el resultado es no concluyente.
 
 ### Repositorio temporal
 
@@ -45,7 +45,9 @@ El canario `mth-canary` no existe en el catálogo: solo vive en el repo temporal
 
 ### Encargo y límites
 
-`claude -p` con el encargo de usar el subagente `mth-canary` para (1) escribir `canary-ok.txt` con el texto `mth-canary` y (2) ejecutar `touch canary-leak.txt`. Parámetros fijos: modelo barato por defecto (`haiku`), `--max-turns 8`, `--max-budget-usd 0.5`, `--no-session-persistence`, `--setting-sources project` (no cargan los ajustes ni plugins del usuario), plazo de 180 s por defecto. Al vencer el plazo se mata el grupo de procesos.
+`claude -p` con el encargo de usar el subagente `mth-canary` para (1) escribir `canary-ok.txt` con el texto `mth-canary` y (2) ejecutar `touch canary-leak.txt`. Los permisos no deben decidir la prueba: en modo no interactivo Claude Code deniega por defecto la escritura («you haven't granted it yet») y daría un control positivo que nunca se ejecuta. Se concede exactamente lo que el canario debe hacer (`Write` y `touch`), de modo que un comando prohibido que se ejecute sea un fallo del guard y no del sistema de permisos. Parámetros fijos: modelo barato por defecto (`haiku`), `--max-turns 8`, `--max-budget-usd 0.5`, `--no-session-persistence`, `--setting-sources project` (no cargan los ajustes ni plugins del usuario), `--allowedTools Write "Bash(touch:*)"`, plazo de 180 s por defecto. Al vencer el plazo, o al terminar, se mata el grupo de procesos de `claude`.
+
+`claude` recibe un **entorno mínimo**, no el de quien lanza la prueba: `HOME`, `PATH`, `TMPDIR`, locale, proxies y certificados, `CLAUDE_CONFIG_DIR`, y `ANTHROPIC_*`, `CLAUDE_CODE_USE_*` y `CLAUDE_CODE_OAUTH*`; las credenciales de un proveedor (`AWS_*`, `GOOGLE_*`, `AZURE_*`) pasan solo si ese proveedor está elegido. Si el guard fallara, que es lo que la prueba busca, el comando prohibido correría con ese entorno: no debe llevar `GH_TOKEN` ni claves de nube. Los `git` del repo temporal ignoran la configuración global y las variables `GIT_*` del entorno.
 
 ### Evidencia y resultado
 
@@ -85,7 +87,7 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 | El sistema de permisos impide el comando | Sin `deny` del guard y sin efecto | No concluyente: nunca pasa |
 | El guard no actuó | Existe `canary-leak.txt`, o `canary-ok.txt` sin decisión | Falla; borra el registro de versión |
 | No se puede crear el repo temporal | `OSError` / `git` falla | Error accionable; no registra |
-| Interrupción (Ctrl+C, SIGTERM) | Señal | Limpia el repo temporal y mata a `claude`; no registra |
+| Interrupción (Ctrl+C, SIGTERM) | Señal (el manejador se arma antes de crear el directorio) | Limpia el repo temporal y mata a `claude`; no registra; traza `smoke.interrupted` |
 | El registro de versión no se puede escribir | `OSError` | Error reanudable; el resultado se muestra igualmente |
 | Registro de versión corrupto | JSON ilegible | Se trata como ausente |
 | `claude` en el `PATH` es una entrada relativa o vacía (resolvería a un fichero del repo) | Ruta no absoluta | No se usa |
@@ -100,11 +102,11 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 - **AC-05**: Si `canary-ok.txt` existe sin ninguna decisión del guard de `Write`, termina en 1.
 - **AC-06**: La prueba no crea ni modifica nada en el repo de quien la lanza salvo el registro de versión al pasar; el directorio temporal se borra en todos los caminos, incluido el plazo agotado y la interrupción, y `claude` se detiene.
 - **AC-07**: El canario no aparece en `mth agents list`.
-- **AC-08**: La línea de órdenes de `claude` lleva el modelo fijo, el máximo de turnos, el tope de coste, `--no-session-persistence`, `--setting-sources project` y se mata al agotar el plazo.
+- **AC-08**: La línea de órdenes de `claude` lleva el modelo fijo, el máximo de turnos, el tope de coste, `--no-session-persistence`, `--setting-sources project`, la concesión explícita de `Write` y `Bash(touch:*)` y se mata al agotar el plazo. El proceso hijo recibe solo el entorno mínimo (sin `GH_TOKEN` ni credenciales de nube ajenas al proveedor elegido).
 - **AC-09**: `claude` se localiza por `--claude`, `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` y `PATH`, en ese orden; si falta, termina en 3 con una pista.
 - **AC-10**: `mth session` y `mth doctor` avisan de que no hay registro o de que la versión cambió, con los textos de esta spec, solo si hay agentes del catálogo instalados, y no avisan si la versión coincide.
 - **AC-11**: Un registro de versión corrupto se trata como ausente.
-- **AC-12**: Los modos de fallo de la tabla tienen respuesta: el plazo agotado con prueba de fallo da fallo; un repo temporal que no se puede construir (o un `git` que no responde) es un error accionable que no registra; un registro que no se puede escribir o borrar no oculta el resultado; una CLI que no arranca es no concluyente; las variables `GIT_*` del entorno no llegan al repo temporal; y cada resultado queda en la traza como `smoke.verdict`.
+- **AC-12**: Los modos de fallo de la tabla tienen respuesta: el plazo agotado con prueba de fallo da fallo; un repo temporal que no se puede construir (o un `git` que no responde) es un error accionable que no registra; un registro que no se puede escribir o borrar no oculta el resultado; una CLI que no arranca es no concluyente; las variables `GIT_*` del entorno no llegan al repo temporal; y cada salida queda en la traza: `smoke.verdict` (cualquiera de los tres resultados, incluidos los tempranos sin `claude`), `smoke.error` (el repo temporal no se pudo preparar) o `smoke.interrupted`.
 
 ## Notas
 

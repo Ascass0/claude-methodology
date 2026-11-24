@@ -33,10 +33,18 @@ GIT_TIMEOUT = 30.0
 KILL_GRACE = 5.0  # seconds to collect the output after killing claude
 MAX_OUTPUT = 4096  # bytes of claude's output kept (the tail)
 RECORD = Path("mth") / "smoke"
-# Variables of the session that launches the test: the nested Claude Code must start as a fresh one.
-_SESSION_VARS = ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID",
-                 "CLAUDE_PROJECT_DIR", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
-                 "CLAUDE_CODE_CHILD_NOTES_DIR")
+# The child gets a minimal environment, not the user's: if the guard failed (what the test looks for),
+# the forbidden command would run with whatever credentials the environment carries (SPEC-0014).
+_ENV_KEEP = frozenset({"HOME", "PATH", "TMPDIR", "LANG", "LANGUAGE", "TERM", "USER", "LOGNAME", "SHELL", "TZ",
+                       "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "CLAUDE_CONFIG_DIR",
+                       "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
+                       "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+                       "http_proxy", "https_proxy", "no_proxy", "all_proxy"})
+_ENV_PREFIXES = ("LC_", "ANTHROPIC_", "CLAUDE_CODE_USE_", "CLAUDE_CODE_OAUTH")
+_ENV_PROVIDERS = {"CLAUDE_CODE_USE_BEDROCK": ("AWS_",), "CLAUDE_CODE_USE_VERTEX": ("GOOGLE_", "CLOUD_ML_", "GCLOUD_"),
+                  "CLAUDE_CODE_USE_FOUNDRY": ("AZURE_",)}  # their credentials, only when that provider is chosen
+# Git must not read the user's configuration (hooks, signing) nor act on the caller's repository.
+_GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 _CANARY_GUARD = f"""# Canario de `mth smoke`: ningún comando y una única escritura permitida.
 [bash]
@@ -79,7 +87,9 @@ def find_claude(explicit: str | None, environ: dict[str, str] | None = None) -> 
     for candidate in (explicit, environ.get("MTH_CLAUDE"), environ.get("CLAUDE_CODE_EXECPATH")):
         if candidate:
             path = Path(candidate)
-            return path if path.is_file() and os.access(path, os.X_OK) else None  # the first one given wins
+            # Absolute only: a relative path would resolve to a file of the repository the test is run from.
+            ok = path.is_absolute() and path.is_file() and os.access(path, os.X_OK)
+            return path if ok else None  # the first one given wins
     found = shutil.which("claude", path=environ.get("PATH"))
     # A relative or empty PATH entry would resolve to the current directory, i.e. a file of the repository.
     return Path(found) if found and Path(found).is_absolute() else None
@@ -151,7 +161,7 @@ def warnings(git: Git, catalog_installed: bool, environ: dict[str, str] | None =
 # -- the throwaway repository -----------------------------------------------------------
 def _git(root: Path, *args: str) -> None:
     """``git`` in the scratch repo, bounded in time and blind to the GIT_* variables of the caller."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env = {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")}, **_GIT_ISOLATION}
     try:
         proc = subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True,
                               timeout=GIT_TIMEOUT, stdin=subprocess.DEVNULL)
@@ -167,7 +177,7 @@ def build_repo(root: Path) -> Git:
     """A repository with the guard installed exactly as ``mth agents add`` does, plus the canary."""
     _git(root, "init", "-q")
     _git(root, "-c", "user.name=mth-smoke", "-c", "user.email=smoke@example.invalid",
-         "commit", "-q", "--allow-empty", "-m", "chore: init")
+         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + os.devnull, "commit", "-q", "--allow-empty", "-m", "chore: init")
     shim = (catalog.CATALOG_DIR / "_shared" / "mth-agent-guard.sh").read_text(encoding="utf-8")
     atomic_write(root / agents.SHIM, shim, 0o755)
     atomic_write(root / agents.SETTINGS, agents._settings_text(agents.with_hook({})))
@@ -189,11 +199,17 @@ def prompt(root: Path) -> str:
 def command(claude: Path, model: str, text: str) -> list[str]:
     return [str(claude), "-p", text, "--model", model, "--max-turns", MAX_TURNS,
             "--max-budget-usd", MAX_BUDGET_USD, "--no-session-persistence", "--setting-sources", "project",
+            # Permissions must not decide the test: grant exactly what the canary is asked to do, so a
+            # forbidden command that ran is the guard's failure and not the permission system's doing.
+            "--allowedTools", "Write", "Bash(touch:*)",
             "--strict-mcp-config", "--disable-slash-commands", "--output-format", "text"]
 
 
 def _environment(environ: dict[str, str]) -> dict[str, str]:
-    return {k: v for k, v in environ.items() if k not in _SESSION_VARS and not k.startswith("GIT_")}
+    """The variables claude needs and nothing else (no GH_TOKEN, no cloud keys, no GIT_*)."""
+    prefixes = _ENV_PREFIXES + tuple(p for flag, ps in _ENV_PROVIDERS.items()
+                                     if environ.get(flag) not in (None, "", "0", "false") for p in ps)
+    return {k: v for k, v in environ.items() if k in _ENV_KEEP or k.startswith(prefixes)}
 
 
 def run_claude(args: list[str], cwd: Path, environ: dict[str, str], timeout: float) -> tuple[int | None, str]:
@@ -211,11 +227,9 @@ def run_claude(args: list[str], cwd: Path, environ: dict[str, str], timeout: flo
             proc.wait(timeout=timeout)
             finished: int | None = proc.returncode
         except subprocess.TimeoutExpired:
-            _kill(proc)
             finished = None
-        except BaseException:  # Ctrl+C, SIGTERM turned into an exception: never leave claude running
+        finally:  # also when claude ended by itself: a background child must not outlive the evidence
             _kill(proc)
-            raise
         sink.seek(0, os.SEEK_END)
         sink.seek(max(0, sink.tell() - MAX_OUTPUT))
         return finished, _tail(sink.read().decode("utf-8", "replace"))
@@ -225,7 +239,10 @@ def _kill(proc: subprocess.Popen) -> None:
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
-        proc.kill()
+        try:
+            proc.kill()
+        except OSError:
+            pass
     try:
         proc.wait(timeout=KILL_GRACE)
     except subprocess.TimeoutExpired:  # not reaped: report instead of hanging
@@ -234,7 +251,8 @@ def _kill(proc: subprocess.Popen) -> None:
 
 def _tail(text: str) -> str:
     lines = [line for line in text.strip().splitlines() if line.strip()]
-    return lines[-1][:300] if lines else ""
+    last = lines[-1][:300] if lines else ""
+    return "".join(c if c.isprintable() else "?" for c in last)  # model output is never interpreted
 
 
 # -- evidence and verdict ---------------------------------------------------------------
@@ -297,22 +315,42 @@ def _on_term(_signum, _frame) -> None:
 
 def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, timeout: float = DEFAULT_TIMEOUT,
           environ: dict[str, str] | None = None) -> Result:
-    """Run the test; only a pass records the Claude Code version, a failure clears the record.
+    """Run the test and trace its outcome; only a pass records the Claude Code version.
 
-    A failure to write or clear the record never hides the verdict: it is added to the details.
+    Every way out leaves a trace event: ``smoke.verdict`` (any of the three results),
+    ``smoke.error`` (the scratch repo could not be prepared) or ``smoke.interrupted``.
+    A failure to write or clear the record never hides the verdict: it goes to the details.
     """
     environ = dict(os.environ if environ is None else environ)
+    tracer = Tracer(git.common_dir(), "smoke")
+    try:
+        result, found, version = _run(git, explicit, model, timeout, environ)
+    except KeyboardInterrupt:
+        tracer.event("smoke.interrupted")
+        raise
+    except MthError as exc:
+        tracer.event("smoke.error", error=exc.message)
+        raise
+    tracer.event("smoke.verdict", outcome=result.outcome, claude_version=version, evidence=asdict(found),
+                 summary=result.summary)
+    return result
+
+
+def _run(git: Git, explicit: str | None, model: str, timeout: float,
+         environ: dict[str, str]) -> tuple[Result, Evidence, str | None]:
     claude = find_claude(explicit, environ)
     if claude is None:
-        return Result(INCONCLUSIVE, "NO CONCLUYENTE: no se encuentra la CLI de Claude Code.",
-                      ["Indica su ruta con --claude, la variable MTH_CLAUDE o ponla en el PATH."])
+        return (Result(INCONCLUSIVE, "NO CONCLUYENTE: no se encuentra la CLI de Claude Code.",
+                       ["Indica su ruta absoluta con --claude o MTH_CLAUDE, o ponla en el PATH."]),
+                Evidence(), None)
     version = claude_version(claude)
     if version is None:
-        return Result(INCONCLUSIVE, f"NO CONCLUYENTE: {claude} --version no responde.")
-    scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
-    previous = _arm_term()
+        return Result(INCONCLUSIVE, f"NO CONCLUYENTE: {claude} --version no responde."), Evidence(), None
     found = Evidence()
+    scratch: Path | None = None
+    previous = _arm_term()  # before mkdtemp: a signal in between must still clean up
     try:
+        scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
         try:
             repo = build_repo(scratch)
         except (MthError, OSError) as exc:
@@ -325,7 +363,8 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
         result = judge(found, finished, last_line)
     finally:
         _disarm_term(previous)
-        shutil.rmtree(scratch, ignore_errors=True)
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
     result.details.insert(0, f"Claude Code: {version} ({claude})")
     try:
         if result.outcome == PASS:
@@ -336,9 +375,7 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
         result.details.append(f"No se pudo actualizar el registro de la versión ({getattr(exc, 'message', exc)}): "
                               f"{'bórralo' if result.outcome == FAIL else 'repite la prueba'} a mano; "
                               "el resultado de arriba es el de la prueba.")
-    Tracer(git.common_dir(), "smoke").event("smoke.verdict", outcome=result.outcome, claude_version=version,
-                                            evidence=asdict(found), summary=result.summary)
-    return result
+    return result, found, version
 
 
 def _arm_term():

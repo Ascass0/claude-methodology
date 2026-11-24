@@ -21,7 +21,7 @@ if argv[:1] == ["--version"]:
 
 root = Path.cwd()
 for name, value in (("FAKE_CWDFILE", str(root)), ("FAKE_PIDFILE", str(os.getpid())),
-                    ("FAKE_ARGVFILE", json.dumps(argv))):
+                    ("FAKE_ARGVFILE", json.dumps(argv)), ("FAKE_ENVFILE", json.dumps(dict(os.environ)))):
     if os.environ.get(name):
         Path(os.environ[name]).write_text(value, encoding="utf-8")
 
@@ -48,6 +48,10 @@ def touch_leak(through_hook: bool = True) -> None:
         return
     (root / "canary-leak.txt").write_text("", encoding="utf-8")
 
+
+if os.environ.get("FAKE_BACKGROUND"):  # a detached child that outlives claude unless its group is killed
+    child = subprocess.Popen(["sleep", "300"], start_new_session=False)
+    Path(os.environ["FAKE_PIDFILE"]).with_name("bgpid").write_text(str(child.pid), encoding="utf-8")
 
 if mode == "obey":
     write_ok()

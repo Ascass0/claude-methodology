@@ -26,16 +26,24 @@ class SmokeTestCase(test_agents.AgentsTestCase):
         self.bin.mkdir()
         self.addCleanup(lambda: __import__("shutil").rmtree(self.bin, ignore_errors=True))
         self.claude = self.bin / "claude"
-        self.claude.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n', encoding="utf-8")
-        self.claude.chmod(self.claude.stat().st_mode | stat.S_IXUSR)
-        self.probes = {name: self.bin / name for name in ("cwd", "pid", "argv")}
+        self.probes = {name: self.bin / name for name in ("cwd", "pid", "argv", "env")}
+        self.install("obey")
 
-    def environ(self, mode: str, **extra: str) -> dict[str, str]:
-        return {**os.environ, "FAKE_CLAUDE_MODE": mode, "FAKE_CWDFILE": str(self.probes["cwd"]),
-                "FAKE_PIDFILE": str(self.probes["pid"]), "FAKE_ARGVFILE": str(self.probes["argv"]), **extra}
+    def install(self, mode: str, **extra: str) -> None:
+        """The fake CLI as an executable wrapper: the child's environment is minimal, so it carries its settings."""
+        settings = {"FAKE_CLAUDE_MODE": mode, "FAKE_CWDFILE": str(self.probes["cwd"]),
+                    "FAKE_PIDFILE": str(self.probes["pid"]), "FAKE_ARGVFILE": str(self.probes["argv"]),
+                    "FAKE_ENVFILE": str(self.probes["env"]), **extra}
+        exports = "".join(f"export {k}='{v}'\n" for k, v in settings.items())
+        self.claude.write_text(f'#!/bin/sh\n{exports}exec "{sys.executable}" "{FAKE}" "$@"\n', encoding="utf-8")
+        self.claude.chmod(self.claude.stat().st_mode | stat.S_IXUSR)
+
+    def environ(self, mode: str = "obey", **extra: str) -> dict[str, str]:
+        return dict(os.environ)
 
     def run_smoke(self, mode: str, timeout: float = 60.0, **extra: str) -> smoke.Result:
-        return smoke.smoke(self.git, str(self.claude), "haiku", timeout, self.environ(mode, **extra))
+        self.install(mode, **extra)
+        return smoke.smoke(self.git, str(self.claude), "haiku", timeout, dict(os.environ))
 
     def record(self) -> dict | None:
         return smoke.read_record(self.git)
@@ -201,8 +209,9 @@ class FailureModeTests(SmokeTestCase):
         import signal
         import time
         mth = Path(__file__).resolve().parent.parent / "plugins/methodology/scripts/mth.py"
+        self.install("hang")
         proc = subprocess.Popen([sys.executable, str(mth), "smoke", "--claude", str(self.claude)], cwd=self.root,
-                                env=self.environ("hang"), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                env=dict(os.environ), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not (self.probes["pid"].exists() and self.probes["pid"].read_text()):
             time.sleep(0.05)
@@ -213,6 +222,81 @@ class FailureModeTests(SmokeTestCase):
         with self.assertRaises(ProcessLookupError):
             os.kill(int(self.probes["pid"].read_text()), 0)
         self.assertIsNone(self.record())
+
+    def events(self) -> list[dict]:
+        path = self.git.common_dir() / "mth" / "trace.jsonl"
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def test_every_way_out_leaves_a_trace_event(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib.errors import MthError
+        smoke.smoke(self.git, None, "haiku", 5.0, {"PATH": str(self.bin / "empty")})  # no claude
+        broken = self.bin / "broken"
+        broken.write_text("#!/nonexistent/interpreter\n", encoding="utf-8")
+        broken.chmod(0o755)
+        smoke.smoke(self.git, str(broken), "haiku", 5.0, dict(os.environ))  # claude --version fails
+        with mock.patch.object(smoke, "build_repo", side_effect=MthError("git init falló")), \
+                self.assertRaises(MthError):
+            self.run_smoke("obey")
+        with mock.patch.object(smoke, "run_claude", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.run_smoke("obey")
+        self.assertEqual([e["event"] for e in self.events() if e["cmd"] == "smoke"],
+                         ["smoke.verdict", "smoke.verdict", "smoke.error", "smoke.interrupted"])
+
+    def test_the_signal_handler_exists_before_the_temp_dir_is_created(self):
+        # verifies: SPEC-0014/AC-06
+        order = []
+        real_arm, real_mkdtemp = smoke._arm_term, smoke.tempfile.mkdtemp
+
+        def arm():
+            order.append("arm")
+            return real_arm()
+
+        def mkdtemp(*a, **k):
+            order.append("mkdtemp")
+            return real_mkdtemp(*a, **k)
+
+        with mock.patch.object(smoke, "_arm_term", arm), mock.patch.object(smoke.tempfile, "mkdtemp", mkdtemp):
+            self.run_smoke("obey")
+        self.assertEqual(order, ["arm", "mkdtemp"])
+
+    def test_a_background_child_does_not_outlive_the_test(self):
+        # verifies: SPEC-0014/AC-06
+        self.run_smoke("obey", FAKE_BACKGROUND="1")
+        pid = int(self.probes["pid"].with_name("bgpid").read_text())
+        deadline = __import__("time").monotonic() + 5
+        while __import__("time").monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            __import__("time").sleep(0.05)
+        self.fail("the background child is still alive")
+
+    def test_relative_claude_paths_are_refused(self):
+        # verifies: SPEC-0014/AC-09
+        self.assertIsNone(smoke.find_claude("claude", {}))
+        self.assertIsNone(smoke.find_claude(None, {"MTH_CLAUDE": "./claude"}))
+
+    def test_control_characters_of_the_model_output_are_neutralised(self):
+        # verifies: SPEC-0014/AC-12
+        self.assertEqual(smoke._tail("ok\n\x1b[31mrojo\x07\n"), "?[31mrojo?")
+
+    def test_git_ignores_the_users_configuration(self):
+        # verifies: SPEC-0014/AC-12
+        home = self.bin / "home"
+        (home / "hooks").mkdir(parents=True)
+        marker = self.bin / "hook-ran"
+        (home / "hooks" / "pre-commit").write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+        (home / "hooks" / "pre-commit").chmod(0o755)
+        (home / ".gitconfig").write_text(f"[core]\n\thooksPath = {home / 'hooks'}\n[commit]\n\tgpgsign = true\n",
+                                        encoding="utf-8")
+        scratch = self.bin / "scratch"
+        scratch.mkdir()
+        with mock.patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home)}):
+            smoke.build_repo(scratch)
+        self.assertFalse(marker.exists())
 
     def test_every_verdict_is_traced(self):
         # verifies: SPEC-0014/AC-12
@@ -232,12 +316,29 @@ class LimitsTests(SmokeTestCase):
                             ("--setting-sources", "project")):
             self.assertEqual(argv[argv.index(flag) + 1], value, flag)
         self.assertIn("--no-session-persistence", argv)
+        granted = argv[argv.index("--allowedTools") + 1:argv.index("--allowedTools") + 3]
+        self.assertEqual(granted, ["Write", "Bash(touch:*)"])  # permissions never decide the test
         self.assertIn("-p", argv)
 
-    def test_the_session_variables_are_not_inherited(self):
+    def test_the_child_gets_a_minimal_environment(self):
         # verifies: SPEC-0014/AC-08
-        env = smoke._environment({"CLAUDECODE": "1", "CLAUDE_PROJECT_DIR": "/x", "ANTHROPIC_API_KEY": "k"})
-        self.assertEqual(env, {"ANTHROPIC_API_KEY": "k"})
+        secrets = {"GH_TOKEN": "t", "GITHUB_TOKEN": "t", "AWS_SECRET_ACCESS_KEY": "s", "OPENAI_API_KEY": "k",
+                   "GOOGLE_APPLICATION_CREDENTIALS": "/c", "CLAUDECODE": "1", "CLAUDE_PROJECT_DIR": "/x"}
+        needed = {"HOME": "/h", "PATH": "/bin", "ANTHROPIC_API_KEY": "k", "CLAUDE_CODE_USE_BEDROCK": "0", "LC_ALL": "C"}
+        self.assertEqual(smoke._environment({**secrets, **needed}), needed)
+        # a provider's credentials pass only when that provider is the chosen one
+        bedrock = {"CLAUDE_CODE_USE_BEDROCK": "1", "AWS_SECRET_ACCESS_KEY": "s", "GH_TOKEN": "t"}
+        self.assertEqual(smoke._environment(bedrock), {"CLAUDE_CODE_USE_BEDROCK": "1", "AWS_SECRET_ACCESS_KEY": "s"})
+
+    def test_claude_really_runs_without_the_users_credentials(self):
+        # verifies: SPEC-0014/AC-08
+        env = {**os.environ, "GH_TOKEN": "secreto", "GITHUB_TOKEN": "secreto", "ANTHROPIC_API_KEY": "k"}
+        self.install("obey")
+        smoke.smoke(self.git, str(self.claude), "haiku", 30.0, env)
+        seen = json.loads(self.probes["env"].read_text(encoding="utf-8"))
+        self.assertNotIn("GH_TOKEN", seen)
+        self.assertNotIn("GITHUB_TOKEN", seen)
+        self.assertEqual(seen.get("ANTHROPIC_API_KEY"), "k")
 
 
 class LocatingTests(SmokeTestCase):
@@ -274,6 +375,7 @@ class LocatingTests(SmokeTestCase):
         result = smoke.smoke(self.git, None, "haiku", 5.0, {"PATH": str(self.bin / "empty")})
         self.assertEqual(result.outcome, smoke.INCONCLUSIVE)
         self.assertIn("MTH_CLAUDE", " ".join(result.details))
+        self.assertIn("absoluta", " ".join(result.details))
 
 
 class WarningTests(SmokeTestCase):
