@@ -20,10 +20,10 @@ def description(path: Path) -> str:
 # Characters before SPEC-0018 (git show development:<file>); `descripciones` is the sum over skills / agents.
 BEFORE = {"core.md": 2487, "claude-block.md": 492, "PRINCIPLES.md": 22720, "skills": 3276, "agents": 4975}
 # Normative words (DEBE, NO DEBE, DEBERÍA, PUEDE) per section of PRINCIPLES.md before SPEC-0018
-# (git show development@v0.11.0:plugins/methodology/PRINCIPLES.md). Per section, so that rules added
+# (git show origin/development:plugins/methodology/PRINCIPLES.md; section 7 and the core.md rules include what SPEC-0018 adds). Per section, so that rules added
 # in one (the EARS lines of section 7) cannot hide a rule lost in another.
-NORMATIVE_BEFORE = {1: 8, 2: 20, 3: 6, 4: 1, 5: 13, 6: 3, 7: 2, 8: 1, 9: 7, 10: 2, 11: 2}
-CORE_RULES_BEFORE, CORE_STOPS_BEFORE = 8, 3
+NORMATIVE_BEFORE = {1: 8, 2: 20, 3: 6, 4: 1, 5: 13, 6: 3, 7: 9, 8: 1, 9: 7, 10: 2, 11: 2}
+CORE_RULES_BEFORE, CORE_STOPS_BEFORE = 9, 3
 
 
 class LoadedContextTests(unittest.TestCase):
