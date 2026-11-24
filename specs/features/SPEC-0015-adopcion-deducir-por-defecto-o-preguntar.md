@@ -51,7 +51,7 @@ El inventario añade dos señales: `forge` (`github` si el remoto está en `gith
 | `ramas` | `deducida` (`usar` la candidata) si hay una única rama candidata (`develop` o `dev`) y todas las ramas de trabajo del remoto, al menos una, salen de ella; `por_defecto` (`crear`) si no hay candidata; `decision` en los demás casos. Una rama sale de la candidata si el punto de bifurcación entre ambas no es ya parte de `main` |
 | `commits` | `deducida`: `encadenar`. Solo se ofrece `encadenar` |
 | `versiones` | Si `forge` es `other`: `deducida` sin efecto en la configuración (`answer` nulo): `mth release` no está disponible. Con GitHub, `decision` |
-| `tests` | `deducida` (`comando`) si el inventario detecta `make test` o `just test` (objetivo `test` de `Makefile` o `justfile`; `make test` primero); en otro caso, `decision` |
+| `tests` | `deducida` (`comando`) si el inventario detecta `make test` o `just test` (receta llamada exactamente `test` en `Makefile` o `justfile`: `test-all` no cuenta; `make test` primero); en otro caso, `decision` |
 | `idioma` | `deducida` si el idioma detectado es `es` o `en`; `por_defecto` (`es`) si es `unknown` |
 | `ci` | Si `forge` es `other`: `deducida` (`sin-ci`) y solo se ofrece `sin-ci`. Con GitHub, `decision` |
 | `modelos` | `por_defecto`: `equilibrado` |
@@ -93,7 +93,7 @@ La tabla del ADR de adopción tiene una columna **Resultado** (`deducida`, `por_
 |---|---|---|
 | Opción no ofrecida por el inventario (por ejemplo, `ci: crear` sin GitHub) | `mth init --answers` | Error con la pregunta y las opciones ofrecidas; no se modifica nada |
 | Respuesta a una pregunta que no está en el inventario | `mth init --answers` | Error; no se modifica nada |
-| `review.paths` con un agente que no es revisor, o con globs vacíos | `mth init --answers` | Error de validación de la configuración; no se modifica nada |
+| `review.paths` con un agente que no está en `agents`, que no es una lista de textos o que está vacía | `mth init --answers` | Error de validación de las respuestas o de la configuración; no se modifica nada |
 | Señal de ramas ilegible (`merge-base` falla) | `mth survey` | La rama no cuenta como salida de la candidata: la pregunta pasa a `decision` |
 | Más ramas de trabajo que el límite de inventario (50), o un error de git distinto de «no es ancestro» al comprobar una bifurcación | `mth survey` | Solo se examinan las 50 primeras y `working` es el total real; la regla no se confirma y `ramas` pasa a `decision`. Una comprobación fallida no cuenta como «sale de la candidata» |
 | `--plan` sin `--answers` | `mth init` | Error de uso |

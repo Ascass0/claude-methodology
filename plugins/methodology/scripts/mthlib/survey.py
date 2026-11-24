@@ -166,7 +166,7 @@ def _tests(reader: _Reader, files: list[str]) -> list[str]:
     if "Makefile" in names and re.search(r"^test:", reader.text("Makefile"), re.MULTILINE):
         out.append("make test")
     just = next((n for n in ("justfile", "Justfile") if n in names), None)
-    if just and re.search(r"^test\b[^:\n]*:", reader.text(just), re.MULTILINE):
+    if just and re.search(r"^test(?:[ \t]+[^:=\n]*)?:(?!=)", reader.text(just), re.MULTILINE):
         out.append("just test")
     if "go.mod" in names:
         out.append("go test ./...")

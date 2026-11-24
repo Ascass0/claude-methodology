@@ -259,6 +259,13 @@ class OfferedOptionsTests(unittest.TestCase):
         self.assertEqual(paths, {"api-reviewer": ["api/**", "!api/docs/**"]})
         self.assertEqual(review.required(agents, paths, ["api/users.py"]), ["verificador", "api-reviewer"])
         self.assertEqual(review.required(agents, paths, ["web/app.py", "api/docs/x.md"]), ["verificador"])
+        inv_paths = {"revisores": {"option": "agentes", "agents": ["api-reviewer"], "paths": {"web": ["web/**"]}}}
+        for case, expected in ((inv_paths, "'paths.web' no es un agente"),
+                               ({"revisores": {"option": "agentes", "agents": ["api-reviewer"],
+                                               "paths": {"api-reviewer": "api/**"}}}, "debe ser una lista de globs")):
+            with self.subTest(expected=expected), self.assertRaises(MthError) as ctx:
+                adoption.validate(inv, {**{q: a for q, a in answers.items() if q in inv.asked()}, **case})
+            self.assertIn(expected, ctx.exception.message)
         bad = {**answers, "revisores": {"option": "agentes", "agents": [], "paths": {"api-reviewer": ["api/**"]}}}
         bad_plan = adoption.build((lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8"), inv,
                                   {q: a for q, a in bad.items() if q in inv.asked()}, "main", "a" * 40)
@@ -280,6 +287,11 @@ class SignalTests(RepoCase):
         self.write("justfile", "set shell := ['sh', '-c']\n\ntest *args:\n\tpytest\n")
         self.commit()
         self.assertEqual(self.inventory().signals["tests"], ["just test"])
+        for recipes in ("test-all:\n\tpytest\n", "tests:\n\tpytest\n", "test := 'x'\n", "# test:\n"):
+            with self.subTest(recipes=recipes):
+                self.write("justfile", recipes)
+                self.assertEqual(self.inventory().signals["tests"], [])
+        self.write("justfile", "set shell := ['sh', '-c']\n\ntest *args:\n\tpytest\n")
         remote = self.root.parent / (self.root.name + "-remote.git")
         self.git("init", "-q", "--bare", "-b", "main", str(remote))
         self.addCleanup(lambda: __import__("shutil").rmtree(remote, ignore_errors=True))

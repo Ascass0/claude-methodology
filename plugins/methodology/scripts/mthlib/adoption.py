@@ -133,12 +133,24 @@ def validate(survey: Survey, answers: dict[str, dict[str, Any]]) -> None:
             elif not isinstance(answer[name], kind):
                 problems.append(f"{qid}: '{name}' debe ser de tipo {kind.__name__}")
         if qid == "revisores":
-            problems += _catalog_problems(survey, answer)
+            problems += _catalog_problems(survey, answer) + _paths_problems(answer)
         if qid in ("specs", "decisiones") and option == "mapear" and not _KIND.match(str(answer.get("kind", ""))):
             problems.append(f"{qid}: 'kind' debe ser un prefijo en mayúsculas (por ejemplo, RFC)")
     if problems:
         raise MthError("Respuestas inválidas:\n" + "\n".join(f"  - {p}" for p in problems),
                        hint="Corrige el JSON de respuestas; las opciones están en la skill mth-init.")
+
+
+def _paths_problems(answer: dict[str, Any]) -> list[str]:
+    """Problems of the ``paths`` part of the ``revisores`` answer: reviewers of the repo and lists of globs."""
+    scoped = answer.get("paths")
+    if not isinstance(scoped, dict):
+        return []
+    agents = answer.get("agents", [])
+    problems = [f"revisores: 'paths.{name}' no es un agente de 'agents'" for name in scoped if name not in agents]
+    problems += [f"revisores: 'paths.{name}' debe ser una lista de globs (texto)" for name, globs in scoped.items()
+                 if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs)]
+    return problems
 
 
 def _catalog_problems(survey: Survey, answer: dict[str, Any]) -> list[str]:
