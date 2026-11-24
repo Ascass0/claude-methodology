@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import branches, work
+from . import agents, branches, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
@@ -67,6 +67,11 @@ def _state(cwd: Path) -> list[str]:
         work.ensure(git, cfg["work"]["dirs"])  # SPEC-0010
     except MthError as exc:
         lines.append(f"⚠ Directorio {work.WORK_DIR}/: {exc.message} → {exc.hint or ''}".strip())
+    try:
+        from . import smoke  # lazy: smoke builds on setup (SPEC-0014)
+        lines += [f"⚠ {notice}" for notice in smoke.warnings(git, bool(agents.catalog_names(git.root)))]
+    except (MthError, OSError) as exc:  # a notice must never break the session start
+        lines.append(f"⚠ No se pudo comprobar la prueba de humo: {exc}")
     if hook == "foreign":
         lines.append("⚠ Hay un hook commit-msg ajeno: la validación de mensajes no está activa (mth doctor).")
     try:
