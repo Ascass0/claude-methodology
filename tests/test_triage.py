@@ -214,7 +214,8 @@ class OfferedOptionsTests(unittest.TestCase):
                 inv = inventory("methodology", integration={"candidates": ["dev"], "working": 0, "from_candidate": 0},
                                 agents=["api-reviewer", "verificador"], agent_collisions=["verificador"],
                                 tags={"prefix": "v", "count": 1})
-                inv.questions.append({"id": qid, "evidence": "x", "outcome": survey.DECISION}) if inv.question(qid) is None else None
+                if inv.question(qid) is None:
+                    inv.questions.append({"id": qid, "evidence": "x", "outcome": survey.DECISION})
                 answers = {**{q: self.decision(q) for q in inv.asked() if q != qid}, qid: {"option": option, **params}}
                 adoption.validate(inv, answers)
                 plan = adoption.build(template, inv, answers, "main", "a" * 40)
@@ -264,6 +265,12 @@ class OfferedOptionsTests(unittest.TestCase):
         with self.assertRaises(MthError) as ctx:
             parse(Path("."), adoption.dump_toml(bad_plan.data))
         self.assertIn("review.paths.api-reviewer", ctx.exception.message)
+        empty = {**answers, "revisores": {**answers["revisores"], "paths": {"api-reviewer": []}}}
+        empty_plan = adoption.build((lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8"), inv,
+                                    {q: a for q, a in empty.items() if q in inv.asked()}, "main", "a" * 40)
+        with self.assertRaises(MthError) as ctx:
+            parse(Path("."), adoption.dump_toml(empty_plan.data))
+        self.assertIn("review.paths.api-reviewer", ctx.exception.message)
 
 
 class SignalTests(RepoCase):
@@ -303,6 +310,29 @@ class SignalTests(RepoCase):
         self.git("push", "-q", "origin", "main")
         self.git("fetch", "-q", "origin")
         self.assertEqual(self.inventory().signals["integration"]["from_candidate"], 0)
+        self.assertEqual(self.inventory().question("ramas")["outcome"], survey.DECISION)
+
+
+class UnreadableForkPointTests(RepoCase):
+    def test_a_branch_without_common_history_does_not_count(self):
+        # verifies: SPEC-0015/AC-02
+        self.write("README.md", SPANISH)
+        self.commit()
+        remote = self.root.parent / (self.root.name + "-remote.git")
+        self.addCleanup(lambda: __import__("shutil").rmtree(remote, ignore_errors=True))
+        self.git("init", "-q", "--bare", "-b", "main", str(remote))
+        self.git("remote", "add", "origin", str(remote))
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "-b", "dev")
+        self.write("src/a.py", "a = 1\n")
+        self.commit()
+        self.git("push", "-q", "origin", "dev")
+        self.git("checkout", "-q", "--orphan", "feat/orphan")  # merge-base with dev fails
+        self.commit()
+        self.git("push", "-q", "origin", "feat/orphan")
+        self.git("fetch", "-q", "origin")
+        self.assertEqual(self.inventory().signals["integration"],
+                         {"candidates": ["dev"], "working": 1, "from_candidate": 0})
         self.assertEqual(self.inventory().question("ramas")["outcome"], survey.DECISION)
 
 
@@ -388,6 +418,11 @@ class RealCaseTests(test_mth.EndToEndTests):
         self.assertIn("✓ validación de mensajes de commit — hooks.commit_msg = chain", out)
         self.assertIn("✗ CI exigida para integrar — ci.required = false", out)
         self.assertIn("--plan necesita --answers", self.mth("init", "--plan", ok=False))
+        # A rejected answer (a GitHub workflow without GitHub) changes nothing.
+        rejected = self.mth("init", "--answers", self.answers({"ci": {"option": "crear"}}), ok=False)
+        self.assertIn("ci: la opción 'crear' no funciona con este repo", rejected)
+        self.assertEqual((self.git("status", "--porcelain"), self.git("branch", "--list")), before)
+        self.assertFalse((self.work / ".claude/methodology.toml").exists())
         # The adoption prints the same plan first, then writes.
         adoption_out = self.mth("init", "--answers", self.answers())
         self.assertLess(adoption_out.index("Plan de adopción"), adoption_out.index("Rama chore/adopt-methodology")
