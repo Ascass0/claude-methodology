@@ -6,6 +6,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.10.0] - 2026-11-24
+
+### Añadido
+- La adopción resuelve en código cada pregunta como `deducida`, `por_defecto` o `decision`, y solo pregunta las decisiones, en una sola ronda y empezando por la precedencia entre el repo y la metodología. Se deducen la rama de integración, el hook `commit-msg` ajeno, el comando de tests de `Makefile` o `justfile`, el idioma, el modo legado y, sin GitHub, la CI y la publicación (`mth survey --json` da `outcome`, `answer`, `basis` y `options` de cada pregunta). (SPEC-0015, ADR-0011)
+- `mth init --answers FICHERO --plan` muestra, sin escribir nada, lo deducido, lo que va por defecto, lo decidido y las capacidades activas y desactivadas con su motivo; la adopción imprime el mismo plan antes de escribir. (SPEC-0015, ADR-0011)
+- El ADR de adopción registra el resultado de cada pregunta en una columna nueva. (SPEC-0015, ADR-0011)
+- La respuesta `revisores` admite `paths` para limitar un revisor del repo a unas rutas (`[review.paths]`). (SPEC-0015, ADR-0011)
+
+### Cambiado
+- Una opción que no funciona con el repo (por ejemplo, `ci: crear` o `versiones: continuar` sin GitHub) ya no se ofrece, y `mth init --answers` la rechaza. (SPEC-0015, ADR-0011)
+- Las preguntas se ordenan por dependencia: `instrucciones` y `autonomia` van primero (también en `mth reconfigure`). (SPEC-0015, ADR-0011)
+
+### Eliminado
+- La opción `commits: sustituir`: un hook `commit-msg` ajeno solo se encadena, porque sustituirlo quitaba controles. (SPEC-0015, ADR-0011)
+
 ## [0.9.0] - 2026-11-24
 
 ### Añadido
