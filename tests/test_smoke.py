@@ -18,6 +18,15 @@ from mthlib.git import Git
 FAKE = Path(__file__).resolve().parent / "fake_claude.py"
 
 
+_real_read_text = Path.read_text
+
+
+def _log_unreadable(self, *args, **kwargs):
+    if self.name == "agent-guard.jsonl":
+        raise PermissionError("sin permiso")
+    return _real_read_text(self, *args, **kwargs)
+
+
 class SmokeTestCase(test_agents.AgentsTestCase):
     def setUp(self):
         super().setUp()
@@ -298,6 +307,54 @@ class FailureModeTests(SmokeTestCase):
             smoke.build_repo(scratch)
         self.assertFalse(marker.exists())
 
+    def test_a_temp_dir_that_cannot_be_created_is_an_actionable_error(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib.errors import MthError
+        with mock.patch.object(smoke.tempfile, "mkdtemp", side_effect=OSError("disco lleno")), \
+                self.assertRaises(MthError) as caught:
+            self.run_smoke("obey")
+        self.assertIn("repositorio temporal", caught.exception.message)
+        self.assertEqual([e["event"] for e in self.events() if e["cmd"] == "smoke"], ["smoke.error"])
+
+    def test_a_claude_that_vanishes_after_the_version_check_is_inconclusive(self):
+        # verifies: SPEC-0014/AC-12
+        self.seed_record()
+        with mock.patch.object(smoke, "run_claude", side_effect=FileNotFoundError("desapareció")):
+            result = self.run_smoke("obey")
+        self.assertEqual(result.outcome, smoke.INCONCLUSIVE)
+        self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
+
+    def test_an_unreadable_guard_log_is_inconclusive_not_a_failure(self):
+        # verifies: SPEC-0014/AC-12
+        self.seed_record()
+        with mock.patch.object(smoke.Path, "read_text", _log_unreadable):
+            result = self.run_smoke("obey")
+        self.assertEqual(result.outcome, smoke.INCONCLUSIVE, result)
+        self.assertIn("registro de decisiones", result.summary)
+        self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
+
+    def test_inherited_git_variables_cannot_redirect_the_scratch_repo(self):
+        # verifies: SPEC-0014/AC-12
+        env = {"GIT_DIR": str(self.root / ".git"), "GIT_COMMON_DIR": str(self.root / ".git")}
+        with mock.patch.dict(os.environ, env):
+            result = self.run_smoke("obey")
+        self.assertEqual(result.outcome, smoke.PASS, result)
+        self.assertFalse((self.root / ".git" / "mth" / "agent-guard.jsonl").exists())  # the real repo saw nothing
+        self.assertEqual(os.environ["GIT_DIR"], str(self.root / ".git")) if "GIT_DIR" in os.environ else None
+
+    def test_credentials_in_the_last_output_line_are_redacted(self):
+        # verifies: SPEC-0014/AC-12
+        shown = smoke._tail("fallo: https://usuario:clave-secreta@proxy.example/ Bearer abc123def456ghi789")
+        self.assertNotIn("clave-secreta", shown)
+        self.assertNotIn("abc123def456ghi789", shown)
+
+    def test_the_recorded_flag_follows_the_record(self):
+        # verifies: SPEC-0014/AC-01
+        self.assertTrue(self.run_smoke("obey").recorded)
+        self.assertFalse(self.run_smoke("no-tools").recorded)
+        with mock.patch.object(smoke, "write_record", side_effect=OSError("ro")):
+            self.assertFalse(self.run_smoke("obey").recorded)
+
     def test_every_verdict_is_traced(self):
         # verifies: SPEC-0014/AC-12
         self.run_smoke("ignore-hooks")
@@ -317,7 +374,8 @@ class LimitsTests(SmokeTestCase):
             self.assertEqual(argv[argv.index(flag) + 1], value, flag)
         self.assertIn("--no-session-persistence", argv)
         granted = argv[argv.index("--allowedTools") + 1:argv.index("--allowedTools") + 3]
-        self.assertEqual(granted, ["Write", "Bash(touch:*)"])  # permissions never decide the test
+        scratch = Path(self.probes["cwd"].read_text(encoding="utf-8"))  # permissions never decide the test
+        self.assertEqual(granted, [f"Edit(/{scratch}/canary-ok.txt)", f"Bash(touch {scratch}/canary-leak.txt)"])
         self.assertIn("-p", argv)
 
     def test_the_child_gets_a_minimal_environment(self):

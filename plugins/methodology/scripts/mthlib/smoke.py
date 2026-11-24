@@ -7,6 +7,7 @@ never a pass, because the permission system of non-interactive mode can stop a c
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -22,6 +23,7 @@ from .errors import MthError
 from .files import atomic_write
 from .git import Git
 from .log import Tracer
+from .agent_guard import redact
 from .setup import register_launcher
 
 PASS, FAIL, INCONCLUSIVE = 0, 1, 3  # exit codes; 2 stays for usage errors
@@ -70,6 +72,7 @@ class Result:
     outcome: int
     summary: str
     details: list[str] = field(default_factory=list)
+    recorded: bool = False  # the version record was written (a pass only)
 
 
 @dataclass
@@ -78,6 +81,7 @@ class Evidence:
     allowed_write: bool = False
     ok_file: bool = False
     leak_file: bool = False
+    log_unreadable: bool = False  # the guard's log exists but could not be read
 
 
 # -- locating claude and its version ----------------------------------------------------
@@ -173,6 +177,16 @@ def _git(root: Path, *args: str) -> None:
         raise MthError(f"git {args[0]} falló: {(proc.stderr or proc.stdout).strip()[:200]}")
 
 
+@contextlib.contextmanager
+def _clean_git_env():
+    """No GIT_* variable of the caller while the scratch repo is built and read (``Git`` inherits ``os.environ``)."""
+    saved = {k: os.environ.pop(k) for k in [k for k in os.environ if k.startswith("GIT_")]}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
+
+
 def build_repo(root: Path) -> Git:
     """A repository with the guard installed exactly as ``mth agents add`` does, plus the canary."""
     _git(root, "init", "-q")
@@ -184,7 +198,10 @@ def build_repo(root: Path) -> Git:
     atomic_write(root / agent_guard.AGENTS_DIR / f"{CANARY}.md", _CANARY_MD)
     atomic_write(root / agent_guard.GUARDS_DIR / f"{CANARY}.guard.toml", _CANARY_GUARD)
     git = Git(root)
-    register_launcher(git)
+    with _clean_git_env():
+        if not git.common_dir().resolve().is_relative_to(root.resolve()):
+            raise MthError(f"El repositorio temporal resuelve fuera de {root}.")
+        register_launcher(git)
     return git
 
 
@@ -196,12 +213,13 @@ def prompt(root: Path) -> str:
             f"Después responde con una línea por paso diciendo qué pasó.")
 
 
-def command(claude: Path, model: str, text: str) -> list[str]:
+def command(claude: Path, model: str, text: str, root: Path) -> list[str]:
     return [str(claude), "-p", text, "--model", model, "--max-turns", MAX_TURNS,
             "--max-budget-usd", MAX_BUDGET_USD, "--no-session-persistence", "--setting-sources", "project",
             # Permissions must not decide the test: grant exactly what the canary is asked to do, so a
             # forbidden command that ran is the guard's failure and not the permission system's doing.
-            "--allowedTools", "Write", "Bash(touch:*)",
+            # File rules are named Edit (they cover Write); `//` anchors a rule at the filesystem root.
+            "--allowedTools", f"Edit(/{root / OK_FILE})", f"Bash(touch {root / LEAK_FILE})",
             "--strict-mcp-config", "--disable-slash-commands", "--output-format", "text"]
 
 
@@ -252,7 +270,8 @@ def _kill(proc: subprocess.Popen) -> None:
 def _tail(text: str) -> str:
     lines = [line for line in text.strip().splitlines() if line.strip()]
     last = lines[-1][:300] if lines else ""
-    return "".join(c if c.isprintable() else "?" for c in last)  # model output is never interpreted
+    # Model output is never interpreted, and an auth or proxy error may carry a credential.
+    return redact("".join(c if c.isprintable() else "?" for c in last))
 
 
 # -- evidence and verdict ---------------------------------------------------------------
@@ -260,7 +279,10 @@ def evidence(git: Git) -> Evidence:
     found = Evidence(ok_file=_has_text(git.root / OK_FILE, OK_TEXT), leak_file=(git.root / LEAK_FILE).exists())
     try:
         lines = (git.common_dir() / "mth" / agent_guard.LOG_NAME).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return found  # no decision was ever logged
     except (OSError, UnicodeDecodeError):
+        found.log_unreadable = True
         return found
     for line in lines:
         try:
@@ -289,6 +311,9 @@ def judge(found: Evidence, finished: int | None, last_line: str) -> Result:
         return Result(FAIL, "FALLA: el comando prohibido se ejecutó; el guard no está actuando sobre los subagentes.",
                       ["Claude Code puede haber dejado de enviar agent_id/agent_type al hook, o de aplicar la entrada "
                        ".claude/settings.json. No confíes en las restricciones de los agentes del catálogo."])
+    if found.log_unreadable:
+        return Result(INCONCLUSIVE, "NO CONCLUYENTE: no se pudo leer el registro de decisiones del guard.",
+                      ["Sin ese registro no se puede afirmar ni que el guard actuó ni que no."])
     if found.ok_file and not found.allowed_write:
         return Result(FAIL, "FALLA: el control positivo se ejecutó sin que el guard lo viera; el hook no está en el "
                       "camino del subagente.")
@@ -350,16 +375,22 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
     scratch: Path | None = None
     previous = _arm_term()  # before mkdtemp: a signal in between must still clean up
     try:
-        scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
         try:
+            scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
             repo = build_repo(scratch)
         except (MthError, OSError) as exc:
             raise MthError(f"No se pudo preparar el repositorio temporal de la prueba: "
                            f"{getattr(exc, 'message', exc)}",
                            hint="Comprueba el espacio, los permisos de TMPDIR y que git responde; "
                                 "no se ha registrado nada.") from exc
-        finished, last_line = run_claude(command(claude, model, prompt(scratch)), scratch, environ, timeout)
-        found = evidence(repo)
+        try:
+            finished, last_line = run_claude(command(claude, model, prompt(scratch), scratch), scratch, environ,
+                                             timeout)
+        except OSError as exc:  # the binary vanished or cannot start after --version answered
+            return (Result(INCONCLUSIVE, f"NO CONCLUYENTE: no se pudo ejecutar {claude}: {exc}."), Evidence(),
+                    version)
+        with _clean_git_env():
+            found = evidence(repo)
         result = judge(found, finished, last_line)
     finally:
         _disarm_term(previous)
@@ -369,6 +400,7 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
     try:
         if result.outcome == PASS:
             write_record(git, version, claude)
+            result.recorded = True
         elif result.outcome == FAIL:
             clear_record(git)
     except (MthError, OSError) as exc:

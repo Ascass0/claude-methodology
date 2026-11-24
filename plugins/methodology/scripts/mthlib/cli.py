@@ -316,7 +316,7 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
     say(result.summary)
     for line in result.details:
         say(f"  {line}")
-    if result.outcome == smoke.PASS:
+    if result.recorded:
         say(f"  Registrado en {smoke.RECORD}: mth session y mth doctor avisarán si Claude Code cambia.")
     return result.outcome
 
