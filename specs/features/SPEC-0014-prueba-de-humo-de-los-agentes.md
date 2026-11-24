@@ -76,6 +76,12 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 - con otra versión: «Claude Code ha cambiado desde la última prueba de humo (<registrada> → <actual>); las restricciones de los agentes no están verificadas (mth smoke).»
 - si no se puede determinar la versión, `mth session` calla y `mth doctor` lo dice.
 
+### Límites conocidos
+
+- Las dos concesiones de permisos valen para toda la sesión de `claude`, no solo para el canario: si el modelo principal ejecutara él mismo el `touch` (el encargo le dice que no), aparecería `canary-leak.txt` sin que el hook de subagentes haya fallado, y la prueba daría un fallo espurio. Es lo bastante improbable con el encargo explícito, y un fallo se repite antes de actuar.
+- La salida de `claude` va a un fichero temporal sin tope de tamaño; el plazo, el máximo de turnos y el tope de coste lo acotan en la práctica.
+- `--timeout` debe ser finito y no superar 1800 s.
+
 ## Modos de fallo
 
 | Fallo | Detección | Respuesta (estado seguro) |
@@ -89,6 +95,8 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 | No se puede crear el directorio o el repo temporal (disco, `TMPDIR`) | `OSError` / `git` falla | Error accionable; traza `smoke.error`; no registra |
 | `claude` desaparece o no puede arrancar después de responder a `--version` | `OSError` al lanzarlo | No concluyente |
 | El registro de decisiones del guard no se puede leer | `OSError` distinto de «no existe» | No concluyente (sin fuga): ni se afirma ni se descarta que el guard actuara |
+| El repo temporal no se puede borrar | `rmtree` falla | Se avisa con la ruta residual y se traza; el veredicto no cambia |
+| El log del guard trae líneas que no son objetos, o ocurre un error inesperado | Validación; `except` en el límite | Las líneas se ignoran; el error inesperado deja `smoke.error` y sale |
 | El entorno del llamador trae `GIT_DIR` o `GIT_COMMON_DIR` | Variables `GIT_*` | Se ignoran en todas las operaciones sobre el repo temporal, que debe resolver bajo su directorio |
 | Interrupción (Ctrl+C, SIGTERM) | Señal (el manejador se arma antes de crear el directorio) | Limpia el repo temporal y mata a `claude`; no registra; traza `smoke.interrupted` |
 | El registro de versión no se puede escribir | `OSError` | Error reanudable; el resultado se muestra igualmente |
@@ -109,7 +117,7 @@ Se lee el registro del guard del repo temporal (`<git-common-dir>/mth/agent-guar
 - **AC-09**: `claude` se localiza por `--claude`, `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` y `PATH`, en ese orden; si falta, termina en 3 con una pista.
 - **AC-10**: `mth session` y `mth doctor` avisan de que no hay registro o de que la versión cambió, con los textos de esta spec, solo si hay agentes del catálogo instalados, y no avisan si la versión coincide.
 - **AC-11**: Un registro de versión corrupto se trata como ausente.
-- **AC-12**: Los modos de fallo de la tabla tienen respuesta (incluidos el directorio temporal que no se puede crear, un `claude` que desaparece, un registro del guard ilegible y `GIT_*` heredadas): el plazo agotado con prueba de fallo da fallo; un repo temporal que no se puede construir (o un `git` que no responde) es un error accionable que no registra; un registro que no se puede escribir o borrar no oculta el resultado; una CLI que no arranca es no concluyente; las variables `GIT_*` del entorno no llegan al repo temporal; y cada salida queda en la traza: `smoke.verdict` (cualquiera de los tres resultados, incluidos los tempranos sin `claude`), `smoke.error` (el repo temporal no se pudo preparar) o `smoke.interrupted`.
+- **AC-12**: Los modos de fallo de la tabla tienen respuesta (incluidos el directorio temporal que no se puede crear o borrar, un `claude` que desaparece, un registro del guard ilegible y `GIT_*` heredadas): el plazo agotado con prueba de fallo da fallo; un repo temporal que no se puede construir (o un `git` que no responde) es un error accionable que no registra; un registro que no se puede escribir o borrar no oculta el resultado; una CLI que no arranca es no concluyente; las variables `GIT_*` del entorno no llegan al repo temporal; y cada salida queda en la traza: `smoke.verdict` (cualquiera de los tres resultados, incluidos los tempranos sin `claude`), `smoke.error` (el repo temporal no se pudo preparar) o `smoke.interrupted`.
 
 ## Notas
 

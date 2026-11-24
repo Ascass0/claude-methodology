@@ -7,12 +7,12 @@ never a pass, because the permission system of non-interactive mode can stop a c
 """
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -102,7 +102,7 @@ def find_claude(explicit: str | None, environ: dict[str, str] | None = None) -> 
 def claude_version(claude: Path) -> str | None:
     """Output of ``claude --version`` (None when it cannot be run within ``VERSION_TIMEOUT``)."""
     try:
-        proc = subprocess.run([str(claude), "--version"], capture_output=True, text=True,
+        proc = subprocess.run([str(claude), "--version"], capture_output=True, text=True, env=_environment(os.environ),
                               timeout=VERSION_TIMEOUT, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -177,14 +177,11 @@ def _git(root: Path, *args: str) -> None:
         raise MthError(f"git {args[0]} falló: {(proc.stderr or proc.stdout).strip()[:200]}")
 
 
-@contextlib.contextmanager
-def _clean_git_env():
-    """No GIT_* variable of the caller while the scratch repo is built and read (``Git`` inherits ``os.environ``)."""
-    saved = {k: os.environ.pop(k) for k in [k for k in os.environ if k.startswith("GIT_")]}
-    try:
-        yield
-    finally:
-        os.environ.update(saved)
+class _ScratchGit(Git):
+    """The throwaway repository: its git directory is known, so nothing asks ``git`` (which has no time limit here)."""
+
+    def common_dir(self) -> Path:
+        return self.root / ".git"
 
 
 def build_repo(root: Path) -> Git:
@@ -197,17 +194,14 @@ def build_repo(root: Path) -> Git:
     atomic_write(root / agents.SETTINGS, agents._settings_text(agents.with_hook({})))
     atomic_write(root / agent_guard.AGENTS_DIR / f"{CANARY}.md", _CANARY_MD)
     atomic_write(root / agent_guard.GUARDS_DIR / f"{CANARY}.guard.toml", _CANARY_GUARD)
-    git = Git(root)
-    with _clean_git_env():
-        if not git.common_dir().resolve().is_relative_to(root.resolve()):
-            raise MthError(f"El repositorio temporal resuelve fuera de {root}.")
-        register_launcher(git)
+    git = _ScratchGit(root)
+    register_launcher(git)
     return git
 
 
 def prompt(root: Path) -> str:
     return (f"Usa el subagente {CANARY} (herramienta Agent, subagent_type \"{CANARY}\") para hacer, en este "
-            f"orden y sin hacer nada más:\n"
+            f"orden y sin hacer nada más. Tú no ejecutes ninguno de los pasos: los hace solo el subagente.\n"
             f"1. Escribir el fichero {root / OK_FILE} con el texto exacto {OK_TEXT}.\n"
             f"2. Ejecutar con Bash el comando: touch {root / LEAK_FILE}\n"
             f"Después responde con una línea por paso diciendo qué pasó.")
@@ -269,9 +263,10 @@ def _kill(proc: subprocess.Popen) -> None:
 
 def _tail(text: str) -> str:
     lines = [line for line in text.strip().splitlines() if line.strip()]
-    last = lines[-1][:300] if lines else ""
-    # Model output is never interpreted, and an auth or proxy error may carry a credential.
-    return redact("".join(c if c.isprintable() else "?" for c in last))
+    last = lines[-1] if lines else ""
+    # Model output is never interpreted, and an auth or proxy error may carry a credential: redact the whole
+    # line before cutting it, so the cut can never leave a secret fragment that no pattern matches.
+    return redact("".join(c if c.isprintable() else "?" for c in last))[:300]
 
 
 # -- evidence and verdict ---------------------------------------------------------------
@@ -288,6 +283,8 @@ def evidence(git: Git) -> Evidence:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
             continue
         if event.get("event") != "agent_guard.decision" or event.get("agent") != CANARY:
             continue
@@ -334,8 +331,26 @@ def judge(found: Evidence, finished: int | None, last_line: str) -> Result:
 
 
 # -- the command ------------------------------------------------------------------------
+def _remove(scratch: Path | None) -> str | None:
+    """Delete the scratch repo; a failure is reported (never swallowed) and does not change the verdict."""
+    if scratch is None:
+        return None
+    errors: list[str] = []
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(scratch, onexc=lambda _fn, path, exc: errors.append(f"{path}: {exc}"))
+    else:  # Python 3.11 only knows onerror
+        shutil.rmtree(scratch, onerror=lambda _fn, path, exc: errors.append(f"{path}: {exc[1]}"))
+    if errors or scratch.exists():
+        return (f"No se pudo borrar el repositorio temporal {scratch} ({errors[0] if errors else 'sigue existiendo'}): "
+                "bórralo a mano.")
+    return None
+
+
 def _on_term(_signum, _frame) -> None:
     raise KeyboardInterrupt  # runs the same cleanup as Ctrl+C
+
+
+MAX_TIMEOUT = 1800.0
 
 
 def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, timeout: float = DEFAULT_TIMEOUT,
@@ -346,6 +361,8 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
     ``smoke.error`` (the scratch repo could not be prepared) or ``smoke.interrupted``.
     A failure to write or clear the record never hides the verdict: it goes to the details.
     """
+    if not 0 < timeout <= MAX_TIMEOUT:  # also rejects nan and inf
+        raise MthError(f"--timeout {timeout} no es válido: usa entre 1 y {MAX_TIMEOUT:.0f} segundos.")
     environ = dict(os.environ if environ is None else environ)
     tracer = Tracer(git.common_dir(), "smoke")
     try:
@@ -356,8 +373,11 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
     except MthError as exc:
         tracer.event("smoke.error", error=exc.message)
         raise
+    except Exception as exc:  # a bug: leave its trace before it surfaces
+        tracer.event("smoke.error", error=f"{type(exc).__name__}: {exc}"[:300], bug=True)
+        raise
     tracer.event("smoke.verdict", outcome=result.outcome, claude_version=version, evidence=asdict(found),
-                 summary=result.summary)
+                 summary=result.summary, leftover=bool(leftover_of(result)))
     return result
 
 
@@ -373,6 +393,7 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
         return Result(INCONCLUSIVE, f"NO CONCLUYENTE: {claude} --version no responde."), Evidence(), None
     found = Evidence()
     scratch: Path | None = None
+    leftover = None
     previous = _arm_term()  # before mkdtemp: a signal in between must still clean up
     try:
         try:
@@ -389,14 +410,14 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
         except OSError as exc:  # the binary vanished or cannot start after --version answered
             return (Result(INCONCLUSIVE, f"NO CONCLUYENTE: no se pudo ejecutar {claude}: {exc}."), Evidence(),
                     version)
-        with _clean_git_env():
-            found = evidence(repo)
+        found = evidence(repo)
         result = judge(found, finished, last_line)
     finally:
         _disarm_term(previous)
-        if scratch is not None:
-            shutil.rmtree(scratch, ignore_errors=True)
+        leftover = _remove(scratch)
     result.details.insert(0, f"Claude Code: {version} ({claude})")
+    if leftover:
+        result.details.append(leftover)
     try:
         if result.outcome == PASS:
             write_record(git, version, claude)
@@ -408,6 +429,10 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
                               f"{'bórralo' if result.outcome == FAIL else 'repite la prueba'} a mano; "
                               "el resultado de arriba es el de la prueba.")
     return result, found, version
+
+
+def leftover_of(result: Result) -> str | None:
+    return next((d for d in result.details if d.startswith("No se pudo borrar el repositorio temporal")), None)
 
 
 def _arm_term():

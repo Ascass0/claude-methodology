@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -340,7 +341,6 @@ class FailureModeTests(SmokeTestCase):
             result = self.run_smoke("obey")
         self.assertEqual(result.outcome, smoke.PASS, result)
         self.assertFalse((self.root / ".git" / "mth" / "agent-guard.jsonl").exists())  # the real repo saw nothing
-        self.assertEqual(os.environ["GIT_DIR"], str(self.root / ".git")) if "GIT_DIR" in os.environ else None
 
     def test_credentials_in_the_last_output_line_are_redacted(self):
         # verifies: SPEC-0014/AC-12
@@ -354,6 +354,78 @@ class FailureModeTests(SmokeTestCase):
         self.assertFalse(self.run_smoke("no-tools").recorded)
         with mock.patch.object(smoke, "write_record", side_effect=OSError("ro")):
             self.assertFalse(self.run_smoke("obey").recorded)
+
+    def test_the_scratch_repo_never_asks_git_without_a_time_limit(self):
+        # verifies: SPEC-0014/AC-12
+        with mock.patch("mthlib.git.run", side_effect=AssertionError("Git() sin plazo")):
+            repo = smoke.build_repo(self.bin / "scratch2") if (self.bin / "scratch2").mkdir() is None else None
+            self.assertEqual(repo.common_dir(), self.bin / "scratch2" / ".git")
+            self.assertEqual(smoke.evidence(repo), smoke.Evidence())
+
+    def test_a_secret_cut_by_the_length_limit_is_still_redacted(self):
+        # verifies: SPEC-0014/AC-12
+        line = "x" * 280 + " Bearer abcdefghijklmnopqrstuvwxyz0123456789"
+        shown = smoke._tail(line)
+        self.assertNotIn("abcdefghij", shown)
+        self.assertLessEqual(len(shown), 300)
+
+    def test_the_version_check_gets_the_minimal_environment(self):
+        # verifies: SPEC-0014/AC-08
+        script = self.bin / "versioned"
+        script.write_text('#!/bin/sh\n[ -z "$GH_TOKEN" ] && echo "1.2.3 (sin token)" || echo "1.2.3 (CON TOKEN)"\n',
+                          encoding="utf-8")
+        script.chmod(0o755)
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "secreto"}):
+            self.assertEqual(smoke.claude_version(script), "1.2.3 (sin token)")
+
+    def test_a_scratch_dir_that_cannot_be_removed_is_reported(self):
+        # verifies: SPEC-0014/AC-06
+        real_remove = smoke._remove
+
+        def remove_then_complain(scratch):
+            real_remove(scratch)  # the test itself must leave nothing behind
+            return "No se pudo borrar el repositorio temporal /x (permiso): bórralo a mano."
+
+        with mock.patch.object(smoke, "_remove", remove_then_complain):
+            result = self.run_smoke("obey")
+        self.assertEqual(result.outcome, smoke.PASS)  # the verdict is unchanged
+        self.assertIn("bórralo a mano", " ".join(result.details))
+        self.assertTrue(self.events()[-1]["leftover"])
+        scratch = self.bin / "undeletable"
+        locked = scratch / "locked"
+        locked.mkdir(parents=True)
+        (locked / "f").write_text("x", encoding="utf-8")
+        locked.chmod(0o500)  # its content cannot be unlinked
+        self.addCleanup(lambda: (locked.chmod(0o700), shutil.rmtree(scratch, ignore_errors=True)))
+        if os.geteuid() == 0:
+            self.skipTest("root ignores directory permissions")
+        self.assertIn("bórralo a mano", smoke._remove(scratch))
+
+    def test_a_guard_log_line_that_is_not_an_object_is_ignored(self):
+        # verifies: SPEC-0014/AC-12
+        scratch = self.bin / "scratch3"
+        scratch.mkdir()
+        repo = smoke.build_repo(scratch)
+        log = repo.common_dir() / "mth" / "agent-guard.jsonl"
+        log.parent.mkdir(exist_ok=True)
+        log.write_text('[1, 2]\n"texto"\n{"event": "agent_guard.decision", "agent": "mth-canary", "tool": "Bash", '
+                       '"result": "deny", "category": "rule"}\n', encoding="utf-8")
+        self.assertTrue(smoke.evidence(repo).denied_bash)
+
+    def test_an_unexpected_error_leaves_a_trace_before_it_surfaces(self):
+        # verifies: SPEC-0014/AC-12
+        with mock.patch.object(smoke, "evidence", side_effect=AttributeError("bug")), self.assertRaises(AttributeError):
+            self.run_smoke("obey")
+        last = self.events()[-1]
+        self.assertEqual((last["event"], last["bug"]), ("smoke.error", True))
+        self.assertIn("AttributeError", last["error"])
+
+    def test_a_timeout_that_is_not_finite_or_is_huge_is_refused(self):
+        # verifies: SPEC-0014/AC-08
+        from mthlib.errors import MthError
+        for bad in (float("inf"), float("nan"), 0, -5, 99999):
+            with self.subTest(timeout=bad), self.assertRaises(MthError):
+                smoke.smoke(self.git, str(self.claude), "haiku", bad, dict(os.environ))
 
     def test_every_verdict_is_traced(self):
         # verifies: SPEC-0014/AC-12
