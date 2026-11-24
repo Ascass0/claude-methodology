@@ -18,6 +18,10 @@ Cuándo: hay fragmentos en `changes/`, las features integradas funcionan en conj
    - PR a `main` → CI → merge commit → etiqueta anotada `vX.Y.Z` → release de GitHub.
    - PR de vuelta a `development` → merge → borra la rama de release.
 
+## Con `forge` = `gitlab` o `none`
+
+`mth release` hace los gates, calcula la versión, genera el `CHANGELOG.md`, prepara y sube `release/vX.Y.Z` y escribe las notas en `.work/merge-request/`, pero no llama a `gh` ni fusiona. Termina con los pasos manuales (MR a `main` y merge, etiqueta, release en la forja y MR de vuelta a `development`), marcados como hechos o pendientes según git. Muéstraselos a la persona tal cual; cuando los haya hecho, vuelve a ejecutar `mth release`: retoma, marca lo hecho y limpia la rama. `mth hotfix finish` no está soportado con esta forja: falla antes de tocar nada.
+
 ## Hotfix
 
 1. `mth branch hotfix <slug> [--spec …]` (desde `main`).

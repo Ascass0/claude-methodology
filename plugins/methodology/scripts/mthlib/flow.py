@@ -5,6 +5,7 @@ idempotent, so a failed run can simply be repeated (design for failure).
 """
 from __future__ import annotations
 
+import shlex
 import tempfile
 import unicodedata
 import re
@@ -12,9 +13,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import branches, changelog, commits, review, versions
+from . import branches, changelog, commits, forge, review, versions
 from .config import Config
 from .errors import MthError
+from .files import atomic_write
 from .gh import GitHub
 from .git import Git
 from .ids import IdRegistry
@@ -22,6 +24,7 @@ from .log import Tracer, say, warn
 from .proc import run_shell
 from .trace import Finding, partition
 from .trace import check as trace_check
+from .work import WORK_DIR
 
 _MAX_LISTED = 50
 
@@ -335,8 +338,12 @@ def integrate(ctx: Ctx, title: str, summary: str) -> None:
     tests = _gate_tests(ctx)
 
     g.push(branch)
-    hub = ctx.gh()
     refs = list(dict.fromkeys((frag.refs if frag else []) + [r for _, m in found for r in commits.refs_of(m)]))
+    if cfg.forge != forge.GITHUB:  # SPEC-0016: the forge part is manual; never merge without checking the CI
+        _integrate_manual(ctx, branch, target, title, _pr_body(summary, refs, frag, tests, reviews),
+                          _merge_message(title, 0, branch, target, found, frag.refs if frag else [])[1])
+        return
+    hub = ctx.gh()
     number = hub.ensure_pr(branch, target, title, _pr_body(summary, refs, frag, tests, reviews))
     hub.wait_checks(number, cfg["ci"]["required"])
     subject, body = _merge_message(title, number, branch, target, found, frag.refs if frag else [])
@@ -344,6 +351,26 @@ def integrate(ctx: Ctx, title: str, summary: str) -> None:
     ctx.tracer.event("integrate", branch=branch, target=target, pr=number)
     _finish_integration(ctx, branch, target)
     say(f"✓ {branch} integrada en {target} (PR #{number}); rama borrada, historia conservada")
+
+
+def _write_request(ctx: Ctx, name: str, text: str) -> Path:
+    """Write ``text`` where the person finds it to paste into the forge (``.work/merge-request/``)."""
+    path = ctx.root / WORK_DIR / "merge-request" / f"{name.replace('/', '-')}.md"
+    atomic_write(path, text)
+    return path.relative_to(ctx.root)
+
+
+def _integrate_manual(ctx: Ctx, branch: str, target: str, title: str, body: str, merge_body: str) -> None:
+    """Local part of an integration when the forge is not GitHub: prepare the merge request, never merge."""
+    cfg = ctx.cfg
+    path = _write_request(ctx, branch, f"# {title}\n\n{body}\n## Mensaje del merge commit\n\n```\n{title}\n\n{merge_body}\n```\n")
+    ctx.tracer.event("integrate.manual", branch=branch, target=target, forge=cfg.forge)
+    say(f"✓ Gates locales superados y {branch} subida; no se fusiona (forge = {cfg.forge}, mth no puede comprobar la CI).")
+    say("Pasos manuales:")
+    say(f"  1. Abre un MR {branch} → {target} con el título y la descripción de {path}.")
+    say("  2. Espera a que la CI esté en verde.")
+    say("  3. Fusiona con merge commit (sin squash ni rebase), usando el mensaje del final de ese fichero.")
+    say(f"  4. Vuelve a ejecutar `mth integrate` con los mismos argumentos: detecta el merge y limpia {branch}.")
 
 
 def _finish_integration(ctx: Ctx, branch: str, target: str) -> None:
@@ -424,6 +451,68 @@ def _publish(ctx: Ctx, head: str, version: str, found: list[tuple[str, str]]) ->
     say(f"✓ Versión {tag} publicada en {cfg.main} e integrada en {cfg.development}")
 
 
+def _tag_on_main(g: Git, tag: str, main: str) -> bool:
+    """The tag is on the remote and points into ``main`` (a local-only or misplaced tag is not a published one)."""
+    return (bool(g.out("ls-remote", "--tags", g.remote, f"refs/tags/{tag}")) and g.tag_exists(tag)
+            and g.is_ancestor(f"refs/tags/{tag}^{{commit}}", g.remote_ref(main)))
+
+
+def _unfinished_manual_release(ctx: Ctx) -> str | None:
+    """Version of a release merged into ``main`` by hand whose branch the forge already deleted, if it is unfinished.
+
+    It is unfinished while its tag is not published or ``main`` has not come back into ``development``.
+    A version older than the latest tag is history, not a pending release: it never holds back a new one.
+    """
+    g, cfg = ctx.git, ctx.cfg
+    if not g.remote_has(cfg.main):
+        return None
+    log = g.try_run("show", f"{g.remote_ref(cfg.main)}:{cfg['paths']['changelog']}")
+    m = re.search(r"^## \[(\d+\.\d+\.\d+)\]", log.stdout, re.MULTILINE) if log.returncode == 0 else None
+    if not m:
+        return None
+    version = m.group(1)
+    if tuple(map(int, version.split("."))) < g.latest_version(cfg.tag_prefix):
+        return None
+    done = _tag_on_main(g, f"{cfg.tag_prefix}{version}", cfg.main) and g.is_ancestor(g.remote_ref(cfg.main),
+                                                                                    g.remote_ref(cfg.development))
+    return None if done else version
+
+
+def _release_manual(ctx: Ctx, head: str, version: str) -> None:
+    """Local part of a release when the forge is not GitHub: list the manual steps and which ones git confirms.
+
+    The release branch may be gone (the forge deletes it on merge): then the release is already in ``main``.
+    """
+    g, cfg = ctx.git, ctx.cfg
+    tag, remote, main = f"{cfg.tag_prefix}{version}", g.remote, cfg.main
+    g.fetch()
+    on_remote = g.remote_has(head)
+    log = g.out("show", f"{g.remote_ref(head if on_remote else main)}:{cfg['paths']['changelog']}")
+    notes = changelog.section_of(log, version)
+    path = _write_request(ctx, f"release-v{version}", f"# chore(release): {tag}\n\n## Versión {tag}\n\n{notes}\n")
+    merged = not on_remote or g.is_ancestor(g.remote_ref(head), g.remote_ref(main))
+    tagged = _tag_on_main(g, tag, main)
+    back = merged and g.is_ancestor(g.remote_ref(main), g.remote_ref(cfg.development))
+    ctx.tracer.event("release.manual", version=version, head=head, forge=cfg.forge, merged=merged, tagged=tagged, back=back)
+    if merged and tagged and back:
+        g.checkout_synced(cfg.development)
+        g.delete_branch(head)
+        ctx.tracer.event("release.manual.cleaned", version=version, head=head)
+        say(f"✓ Versión {tag} publicada a mano; {head} borrada y {cfg.development} sincronizada.")
+        return
+    mark = lambda done: "✓" if done else "·"  # noqa: E731
+    q = shlex.quote
+    command = f"git fetch {q(remote)} && git tag -a {q(tag)} -m {q(tag)} {q(remote + '/' + main)} && git push {q(remote)} {q(tag)}"
+    say(f"✓ {head} preparada con el CHANGELOG de {tag}; no se fusiona (forge = {cfg.forge}, mth no puede comprobar la CI).")
+    say("Pasos manuales:")
+    say(f"  {mark(merged)} 1. Abre un MR {head} → {main} (título y notas en {path}), espera a la CI y fusiona con merge commit.")
+    say(f"  {mark(tagged)} 2. Etiqueta {main}: `{command}`.")
+    say(f"  · 3. Publica la release {tag} en la forja con las notas de {path} (mth no puede comprobarlo).")
+    say(f"  {mark(back)} 4. Abre un MR {main} → {cfg.development} y fusiona con merge commit.")
+    say("Si tu forja borra la rama de origen al fusionar, no importa: `mth release` retoma desde "
+        f"{main}. Cuando acabes, vuelve a ejecutarlo: marca lo que git confirma y limpia.")
+
+
 def release(ctx: Ctx) -> None:
     """Publish development as a new version (resumable after any failure)."""
     g, cfg = ctx.git, ctx.cfg
@@ -432,6 +521,10 @@ def release(ctx: Ctx) -> None:
     pending = [b for b in g.remote_branches() if branches.is_release(b)]
     if len(pending) > 1:
         raise MthError(f"Hay varias ramas de release abiertas: {', '.join(pending)}.")
+    if not pending and cfg.forge != forge.GITHUB and (unfinished := _unfinished_manual_release(ctx)):
+        say(f"· Reanudando la publicación manual de v{unfinished} (la rama de release ya no existe)")
+        _release_manual(ctx, f"release/v{unfinished}", unfinished)
+        return
     if pending:
         head = pending[0]
         version = head.split("/v", 1)[1]
@@ -454,6 +547,9 @@ def release(ctx: Ctx) -> None:
         g.out("checkout", "-b", head)
         _apply_release(ctx, version, fragments)
         g.push(head)
+    if cfg.forge != forge.GITHUB:  # SPEC-0016: the forge part is manual
+        _release_manual(ctx, head, version)
+        return
     found = ctx.own_commits(f"{g.remote_ref(cfg.main)}..{g.remote_ref(head)}")
     _publish(ctx, head, version, found)
 
@@ -465,6 +561,9 @@ def hotfix_finish(ctx: Ctx) -> None:
     info = branches.parse(branch, cfg)
     if info is None or info.flow != "hotfix" or info.is_child:
         raise MthError("`mth hotfix finish` se ejecuta desde una rama hotfix de primer nivel.")
+    if cfg.forge != forge.GITHUB:
+        raise MthError(f"`mth hotfix finish` aún no está soportado con forge = {cfg.forge}.",
+                       hint="Cierra el hotfix a mano (MR a main, etiqueta y MR de vuelta a development) o usa forge = github.")
     g.require_clean()
     g.fetch()
     frag_path = ctx.path("changes") / branches.fragment_name(info)

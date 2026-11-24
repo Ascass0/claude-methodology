@@ -15,10 +15,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import catalog, lang
+from . import catalog, forge, lang
 from .config import AUTONOMY_LEVELS, DEFAULTS, _merge
 from .errors import MthError
-from .survey import DECISION, DEDUCED, DEFAULT, FORGE_GITHUB, RECONFIGURE, Survey
+from .survey import DECISION, DEDUCED, DEFAULT, RECONFIGURE, Survey
 
 MAX_ANSWERS_BYTES = 256 * 1024
 OTHER = "otro"
@@ -41,6 +41,7 @@ OPTIONS: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
     "autonomia": {level: {} for level in AUTONOMY_LEVELS},
     "idioma": {code: {} for code in lang.LANGUAGES},
     "ci": {"sin-ci": {}, "crear": {}},
+    "forja": {name: {} for name in forge.FORGES},  # ADR-0012
     "modelos": {"equilibrado": {}, "calidad": {}, "ahorro": {}},
 }
 MODEL_PRESETS = {
@@ -353,6 +354,9 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
     if qid == "idioma":
         data.setdefault("language", {})["docs"] = option
         return f"language.docs = {option}"
+    if qid == "forja":
+        data["forge"] = option
+        return f"forge = {option}"
     if qid == "ci":
         data["ci"]["required"] = option == "crear"
         return "ci.required = true; Opus crea el workflow en la rama de adopción" if option == "crear" else "ci.required = false"
@@ -427,13 +431,12 @@ class Capability:
 def capabilities(survey: Survey, plan: Plan) -> list[Capability]:
     """What the methodology can do in the repository once adopted with ``plan`` (ADR-0011, point 5)."""
     data, found = plan.data, survey.signals
-    github = found["forge"] == FORGE_GITHUB
-    no_github = "el remoto no es GitHub"
+    github = data["forge"] == forge.GITHUB
+    local = f"forge = {data['forge']}: solo la parte local, el merge y la publicación son manuales"
     foreign_hook = found["commit_hook"] and data["hooks"]["commit_msg"] == "own"
     return [
-        Capability("mth integrate (PR con merge commit)", github, "el remoto está en GitHub" if github else no_github),
-        Capability("mth release (versión, etiqueta y CHANGELOG)", github,
-                   "el remoto está en GitHub" if github else f"{no_github}: la publicación es manual"),
+        Capability("mth integrate (PR con merge commit)", True, "forge = github" if github else local),
+        Capability("mth release (versión, etiqueta y CHANGELOG)", True, "forge = github" if github else local),
         Capability("CI exigida para integrar", data["ci"]["required"],
                    "ci.required = true" if data["ci"]["required"] else "ci.required = false"),
         Capability("tests antes de integrar", bool(data["commands"]["test"]),
@@ -489,7 +492,7 @@ _ADR_TEXT = {
 def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, today: date | None = None) -> str:
     """Adoption ADR of the target repository, in its documentation language."""
     t = _ADR_TEXT[vocab.code]
-    present = [k for k, v in survey.signals.items() if v and k not in ("files", "language", "branches", "forge", "integration")]
+    present = [k for k, v in survey.signals.items() if v and k not in ("files", "language", "branches", "forge", "forge_host", "integration")]
     legacy = plan.data["trace"].get("legacy_base", "")
     rows = [f"| `{d.question}` | `{d.outcome}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |"
             for d in plan.decisions]

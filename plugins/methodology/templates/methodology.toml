@@ -2,6 +2,10 @@
 # Referencia completa: README de claude-methodology.
 version = 1
 remote = "origin"
+# Forja del remoto: "github", "gitlab" o "none". Con "github", mth integrate y mth release usan gh.
+# Con "gitlab" o "none" hacen solo la parte local y terminan con la lista de pasos manuales
+# (el merge y la publicación los haces tú: mth no puede comprobar la CI). Se deduce del remoto.
+forge = "github"
 
 [commands]
 # Comando de tests. Obligatorio: usa "" solo mientras el repo no tenga tests.

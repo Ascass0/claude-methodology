@@ -31,6 +31,21 @@ Antes de preguntar, lee {CLAUDE.md / AGENTS.md}. Si nada contradice las reglas b
 - **Hasta el PR**: integrar y publicar te piden confirmación. Vista previa: `… → revisión → ⏸ ¿integrar? → ⏸ ¿publicar?`. Respuesta: `{"option": "until-pr"}`
 - **Supervisada**: además, cada rama nueva, commit y push. Más lento, pero ves cada paso. Vista previa: `⏸ ¿rama? ⏸ ¿commit? … ⏸ ¿integrar?`. Respuesta: `{"option": "supervised"}`
 
+## `forja`
+
+**Cabecera:** Forja
+
+Siempre es `deducida` (del host del remoto): no se pregunta. Esta sección sirve para corregirla (por ejemplo, un GitHub Enterprise con otro dominio, que se detecta como `none`) y para `mth-reconfigure`.
+
+**Pregunta:** La metodología integra y publica con PR en GitHub. En otras forjas, `mth integrate` y `mth release` hacen solo la parte local (gates, changelog, rama de release) y terminan con la lista de pasos manuales, porque `mth` no puede comprobar la CI y nunca fusiona sin hacerlo. Tu remoto está en {host}. ¿Qué forja es?
+
+- **{La detectada} (Recomendado)**: la que deduce el inventario. Respuesta: `{"option": "github"}`, `{"option": "gitlab"}` o `{"option": "none"}`
+- **GitHub**: `mth` usa `gh` para PR, merges y releases. Respuesta: `{"option": "github"}`
+- **GitLab**: la parte de la forja la haces tú; `mth hotfix finish` no está soportado. Respuesta: `{"option": "gitlab"}`
+- **Ninguna**: igual que GitLab, para remotos sin forja conocida. Respuesta: `{"option": "none"}`
+
+Si se cambia la forja, responde también `ci`: no se recalcula solo.
+
 ## `alcance`
 
 **Cabecera:** Adopción
@@ -146,7 +161,7 @@ Si algún revisor del repo solo aplica a un área (por ejemplo, `api-reviewer` a
 
 **Cabecera:** CI
 
-**Pregunta:** La metodología puede exigir la CI en verde para integrar (fail-safe: sin CI no se integra). Tu repo no tiene workflows. ¿Qué hacemos?
+**Pregunta:** La metodología puede exigir la CI en verde para integrar (fail-safe: sin CI no se integra). Tu repo no tiene workflows. ¿Qué hacemos? (Con una forja distinta de GitHub se deduce `sin-ci` y solo se ofrece esa opción.)
 
 - **Sin CI por ahora (Recomendado)**: `mth doctor` avisará hasta que exista. Respuesta: `{"option": "sin-ci"}`
 - **Crear un workflow básico**: escribes en la rama de adopción un workflow que ejecute `commands.test`. Respuesta: `{"option": "crear"}`

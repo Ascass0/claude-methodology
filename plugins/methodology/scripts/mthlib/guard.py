@@ -130,7 +130,7 @@ def violation(command: str, protected: set[str], current: str | None) -> str | N
         if not rest:
             continue
         sub, args = rest[0], rest[1:]
-        if prog == "gh" and sub == "pr" and args[:1] == ["merge"]:
+        if (prog, sub) in (("gh", "pr"), ("glab", "mr")) and args[:1] in (["merge"], ["accept"]):  # glab mr accept: alias
             return "los merges se hacen con `mth integrate`, `mth release` o `mth hotfix finish`"
         if prog != "git":
             continue
