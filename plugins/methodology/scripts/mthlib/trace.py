@@ -11,7 +11,7 @@ import unicodedata
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from . import globs, plan
+from . import compact, globs, plan
 from .config import Config
 from .ids import IdRegistry, read_text
 
@@ -105,7 +105,45 @@ class Tracer:
         if self.cfg["trace"]["acceptance"]:
             findings += self._acceptance(texts)
         findings += self._plans(texts)
+        findings += self._compact(texts)
         return findings
+
+    def _compact(self, texts: dict[str, str]) -> list[Finding]:
+        """Compact-format checks (ADR-0014): only documents that declare the format, plus ``SPEC-NNNN/FM-NN`` refs."""
+        vocab = self.cfg.vocab
+        specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
+        adr_dir = self.cfg["paths"]["adr"].rstrip("/") + "/"
+        spec_kind, adr_kind = self.cfg["trace"]["spec_kind"], self.cfg["trace"]["adr_kind"]
+        owners: dict[str, str] = {}
+        for ident, places in self.registry.definitions.items():
+            for path, _ in places:
+                owners.setdefault(path, ident)
+
+        def at(path: str, problems: list[compact.Problem]) -> list[Finding]:
+            return [Finding(path, p.line, p.message) for p in problems]
+
+        modes: dict[str, set[str]] = {}
+        out: list[Finding] = []
+        for path, text in texts.items():
+            owner = owners.get(path)
+            if not (path.endswith(".md") and owner):
+                continue
+            kind = self.registry.kind_of(owner)
+            if kind == spec_kind and path.startswith(specs_dir):
+                defs, untagged = compact.failure_modes(text, vocab)
+                modes[owner] = {i for i, _ in defs}
+                if compact.is_compact(text, vocab):
+                    out += at(path, untagged + compact.duplicate_failure_modes(defs) + compact.criteria_problems(text, vocab)
+                              + compact.local_failure_refs(text, defs, self.registry.kinds[spec_kind]))
+            elif kind == adr_kind and path.startswith(adr_dir) and compact.is_compact(text, vocab):
+                out += at(path, compact.adr_problems(text, vocab))
+        qualified = re.compile(rf"({self.registry.kinds[spec_kind]})/(FM-\d{{2,3}})(?![\w-])")
+        for path, text in texts.items():
+            for lineno, line in enumerate(text.splitlines(), 1):
+                for m in qualified.finditer(line):
+                    if self.registry.is_defined(m.group(1)) and m.group(2) not in modes.get(m.group(1), set()):
+                        out.append(Finding(path, lineno, f"referencia a {m.group(1)}/{m.group(2)}, que la spec no define"))
+        return out
 
     def _plans(self, texts: dict[str, str]) -> list[Finding]:
         """Work-plan errors of every spec that has a plan section (SPEC-0001)."""

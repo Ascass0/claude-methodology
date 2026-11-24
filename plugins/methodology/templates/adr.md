@@ -3,21 +3,28 @@
 - Estado: propuesto
 - Fecha: {{DATE}}
 - Categoría: {{CATEGORY}}
+- Formato: compacto
 
-<!-- Estados: propuesto → aceptado → sustituido por ADR-NNNN | obsoleto. Formato basado en MADR. -->
+<!-- Estados: propuesto → aceptado → sustituido por ADR-NNNN | obsoleto. Campos fijos al estilo Y-statement (PRINCIPLES §7). -->
 
 ## Contexto
 
-Fuerzas en juego y restricciones.
+- Fuerzas y restricciones, pocas líneas.
 
 ## Decisión
 
-Lo que se decide, en una o dos frases, y su alcance.
+1. Lo que se decide, con DEBE / NO DEBE.
 
-## Alternativas consideradas
+## Rechazado
 
-- **Alternativa:** por qué se descarta.
+- Alternativa: motivo.
 
 ## Consecuencias
 
-Positivas, negativas y riesgos que se aceptan.
+- **+** Beneficio.
+- **−** Coste.
+- **riesgo** Riesgo aceptado → cómo se mitiga.
+
+## Impone
+
+- [script] ubicación · [hook] ubicación · [criterio] quién lo comprueba.
