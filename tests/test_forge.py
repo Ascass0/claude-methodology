@@ -197,6 +197,21 @@ class ManualForgeTests(unittest.TestCase):
         self.assertIn("forge = gitlab", out)
 
 
+class GithubDoctorTests(unittest.TestCase):
+    setUp = test_mth.EndToEndTests.setUp
+    tearDown = test_mth.EndToEndTests.tearDown
+    git = test_mth.EndToEndTests.git
+    mth = test_mth.EndToEndTests.mth
+
+    def test_doctor_keeps_asking_for_gh_and_ci_with_github(self):
+        # verifies: SPEC-0016/AC-10
+        self.mth("init")  # the remote is named as GitHub: forge = github, and there are no workflows
+        out = self.mth("doctor")
+        self.assertIn("gh instalado y autenticado", out)
+        self.assertIn("ci.required = true", out)
+        self.assertNotIn("forge =", out)
+
+
 class InitDetectsTheForgeTests(unittest.TestCase):
     setUp = test_mth.EndToEndTests.setUp
     tearDown = test_mth.EndToEndTests.tearDown

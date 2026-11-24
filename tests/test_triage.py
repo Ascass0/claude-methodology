@@ -147,6 +147,7 @@ class ClassificationTests(unittest.TestCase):
 class AnswersTests(unittest.TestCase):
     def test_only_decisions_are_required_and_anything_can_be_overridden(self):
         # verifies: SPEC-0015/AC-07
+        # verifies: SPEC-0016/AC-03
         inv = inventory(language="en", forge="gitlab", tags={"prefix": "v", "count": 1}, tests=["make test"])
         self.assertEqual(inv.asked(), ["autonomia", "revisores"])
         answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []}}
@@ -163,6 +164,12 @@ class AnswersTests(unittest.TestCase):
         self.assertEqual((plan.data["forge"], by_question["forja"].outcome), ("gitlab", survey.DEDUCED))
         self.assertEqual(by_question["modelos"].outcome, survey.DEFAULT)
         # An explicit answer replaces the deduced value and is recorded as a decision.
+        answers["forja"] = {"option": "none"}
+        adoption.validate(inv, answers)
+        forced = adoption.build(template, inv, answers, "main", "a" * 40)
+        self.assertEqual(forced.data["forge"], "none")
+        self.assertEqual({d.question: d.outcome for d in forced.decisions}["forja"], survey.DECISION)
+        del answers["forja"]
         answers["idioma"] = {"option": "es"}
         adoption.validate(inv, answers)
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
