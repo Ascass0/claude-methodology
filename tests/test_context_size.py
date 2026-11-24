@@ -8,9 +8,8 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parent.parent / "plugins" / "methodology"
 
 
-def normative(text: str) -> dict[str, int]:
-    patterns = {"NO DEBE": r"NO DEBEN?\b", "DEBERÍA": r"DEBERÍAN?\b", "PUEDE": r"PUEDEN?\b", "DEBE": r"(?<!NO )DEBEN?\b"}
-    return {k: len(re.findall(p, text)) for k, p in patterns.items()}
+def normative(text: str) -> int:
+    return len(re.findall(r"\b(?:NO DEBEN?|DEBERÍAN?|PUEDEN?|DEBEN?)\b", text))
 
 
 def description(path: Path) -> str:
@@ -20,8 +19,10 @@ def description(path: Path) -> str:
 
 # Characters before SPEC-0018 (git show development:<file>); `descripciones` is the sum over skills / agents.
 BEFORE = {"core.md": 2487, "claude-block.md": 492, "PRINCIPLES.md": 22720, "skills": 3276, "agents": 4975}
-# Normative words of PRINCIPLES.md and rules of core.md before SPEC-0018.
-NORMATIVE_BEFORE = {"NO DEBE": 22, "DEBERÍA": 7, "PUEDE": 3, "DEBE": 37}
+# Normative words (DEBE, NO DEBE, DEBERÍA, PUEDE) per section of PRINCIPLES.md before SPEC-0018
+# (git show development@v0.11.0:plugins/methodology/PRINCIPLES.md). Per section, so that rules added
+# in one (the EARS lines of section 7) cannot hide a rule lost in another.
+NORMATIVE_BEFORE = {1: 8, 2: 20, 3: 6, 4: 1, 5: 13, 6: 3, 7: 2, 8: 1, 9: 7, 10: 2, 11: 2}
 CORE_RULES_BEFORE, CORE_STOPS_BEFORE = 8, 3
 
 
@@ -41,10 +42,11 @@ class LoadedContextTests(unittest.TestCase):
 
     def test_no_normative_word_is_lost(self):
         # verifies: SPEC-0018/AC-09
-        counts = normative((PLUGIN / "PRINCIPLES.md").read_text(encoding="utf-8"))
-        for word, before in NORMATIVE_BEFORE.items():
-            with self.subTest(word=word):
-                self.assertGreaterEqual(counts[word], before)
+        sections = re.split(r"^## (\d+)\. ", (PLUGIN / "PRINCIPLES.md").read_text(encoding="utf-8"), flags=re.M)
+        counts = {int(sections[i]): normative(sections[i + 1]) for i in range(1, len(sections), 2)}
+        for number, before in NORMATIVE_BEFORE.items():
+            with self.subTest(section=number):
+                self.assertGreaterEqual(counts[number], before)
         core = (PLUGIN / "context/core.md").read_text(encoding="utf-8")
         rules = core.split("**Reglas que no se negocian:**")[1].split("**Te detienes")[0]
         stops = core.split("**Te detienes y avisas solo si:**")[1].split("Principios completos")[0]

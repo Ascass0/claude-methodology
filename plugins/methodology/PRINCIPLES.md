@@ -38,7 +38,7 @@ Ante un choque gana el primero: 1. **Seguridad** · 2. **Fail-safe / fail-fast**
   | ADR | Por qué se decidió | `specs/adr/<categoría>/` | propuesto → aceptado → sustituido / obsoleto |
   | Docs | Cómo funciona y se usa | `docs/` | se actualizan con el código |
 
-- Toda spec DEBE tener criterios de aceptación con ID (`AC-01`) y tabla de modos de fallo con ID (`FM-01`). [criterio; `mth trace` valida el formato compacto, §7]
+- Toda spec DEBE tener criterios de aceptación verificables con ID (`AC-01`) y tabla de modos de fallo con ID (`FM-01`). [criterio; `mth trace` valida el formato compacto, §7]
 - Spec `implementada` ⇒ cada criterio DEBE tener un test con `verifies: SPEC-NNNN/AC-NN`. [script: `mth trace`]
 - Una decisión estructural (arquitectura, dependencia nueva, formato de datos, protocolo, cambio de un principio) DEBE tener ADR antes de implementarse. [criterio]
 - Specs y ADR NO DEBEN reescribirse para justificar el código: si la spec estaba mal, se corrige con su motivo y después el código. [criterio]
@@ -62,13 +62,13 @@ Ante un choque gana el primero: 1. **Seguridad** · 2. **Fail-safe / fail-fast**
 
 ### SOLID
 
-DEBE seguirse en clases, módulos y componentes, con proporcionalidad: una función o script pequeño no necesita interfaces.
+DEBE seguirse en clases, módulos y componentes, con proporcionalidad: la parsimonia sigue prohibiendo la extensibilidad especulativa y una función o script pequeño no necesita interfaces.
 
-- **S · Responsabilidad única.** Una sola razón para cambiar: un actor o aspecto (dominio, persistencia, presentación, transporte). Si dos cambios independientes tocan el mismo módulo, se separa. [criterio]
+- **S · Responsabilidad única.** Cada clase o módulo DEBE tener una sola razón para cambiar: un actor o aspecto (dominio, persistencia, presentación, transporte). Si dos cambios independientes tocan el mismo módulo, se separa. [criterio]
 - **O · Abierto/cerrado.** Con al menos dos variantes reales (o si la spec las exige), una variante nueva DEBE entrar añadiendo una implementación sin modificar a quien la usa. Antes, NO DEBE crearse el punto de extensión: se modifica el código. [criterio]
 - **L · Sustitución de Liskov.** Toda implementación de un contrato (subclase, interfaz, doble) DEBE poder sustituir a otra sin que quien la usa lo note: sin precondiciones más fuertes, sin garantías más débiles, sin errores ajenos al contrato, sin métodos sin implementar. Con varias implementaciones, DEBERÍA existir un test de contrato que todas pasen. [criterio]
-- **I · Segregación de interfaces.** Interfaces pequeñas, definidas por lo que necesita quien las usa; nadie depende de métodos que no usa. Concreta el bajo acoplamiento. [criterio]
-- **D · Inversión de dependencias.** El dominio DEBE definir las abstracciones que necesita (repositorios, relojes, clientes, notificadores) y la infraestructura las implementa: las dependencias apuntan al dominio, nunca al revés. La implementación concreta se elige en la raíz de composición. [criterio]
+- **I · Segregación de interfaces.** Las interfaces DEBEN ser pequeñas y definirse por lo que necesita quien las usa; nadie depende de métodos que no usa. Concreta el bajo acoplamiento. [criterio]
+- **D · Inversión de dependencias.** El dominio DEBE definir las abstracciones que necesita (repositorios, relojes, clientes, notificadores) y la infraestructura las implementa: las dependencias apuntan al dominio, nunca al revés. La implementación concreta se elige en la raíz de composición, como exige la regla de dependencias explícitas. [criterio]
 
 ## 3. Errores y excepciones
 
