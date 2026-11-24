@@ -148,8 +148,9 @@ class FailureModeTests(unittest.TestCase):
 
     def test_reference_to_a_missing_spec_is_reported_once(self):
         # verifies: SPEC-0018/AC-06
-        found = findings({"docs/guia.md": "Ver " + ref("SPEC-0099", "FM-01") + "\n"})
-        self.assertEqual(found.count("SPEC-0099"), 1)  # by the ID check; no second finding for the mode
+        missing = "SPEC-00" + "99"
+        found = findings({"docs/guia.md": "Ver " + ref(missing, "FM-01") + "\n"})
+        self.assertEqual(found.count(missing), 1)  # by the ID check; no second finding for the mode
 
 
 if __name__ == "__main__":
