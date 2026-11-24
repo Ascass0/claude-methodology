@@ -1,10 +1,11 @@
-"""Deterministic inventory of a repository before adoption (SPEC-0004, ADR-0003).
+"""Deterministic inventory of a repository before adoption (SPEC-0004, ADR-0003, SPEC-0015, ADR-0011).
 
 It only reads. It classifies the repository in a profile and decides which
 interview questions are needed: the base questions of the profile plus the
-ones each detected signal triggers. An adopted repository gets the
-reconfiguration inventory instead: every applicable question with its current
-value (SPEC-0011, ADR-0007).
+ones each detected signal triggers. Each of them is then resolved in code as
+deduced, default or decision, and only the decisions are asked. An adopted
+repository gets the reconfiguration inventory instead: every applicable
+question with its current value (SPEC-0011, ADR-0007).
 """
 from __future__ import annotations
 
@@ -13,15 +14,21 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import CONFIG_PATH, Config
 from .errors import MthError
 from .git import Git
 
 PLUGIN_AGENTS = Path(__file__).resolve().parents[2] / "agents"
-QUESTIONS = ("alcance", "ramas", "commits", "versiones", "specs", "decisiones", "tests", "revisores",
-             "colision", "instrucciones", "autonomia", "idioma", "ci", "modelos")
+# Ordered by dependency (SPEC-0015): the precedence between the repo and the methodology conditions autonomy and the rest.
+QUESTIONS = ("instrucciones", "autonomia", "alcance", "ramas", "commits", "versiones", "specs", "decisiones",
+             "tests", "revisores", "colision", "idioma", "ci", "modelos")
+DEDUCED, DEFAULT, DECISION = "deducida", "por_defecto", "decision"
+OUTCOMES = (DEDUCED, DEFAULT, DECISION)
+FORGE_GITHUB, FORGE_OTHER = "github", "other"
+_INTEGRATION_NAMES = ("develop", "dev", "development")
+_MAX_WORKING_BRANCHES = 50
 PROFILES = ("new", "existing", "methodology", "fork")
 RECONFIGURE = "reconfigure"
 # Thematic blocks of the reconfiguration form (SPEC-0011): every question in exactly one.
@@ -75,7 +82,11 @@ class Survey:
     warnings: list[str] = field(default_factory=list)
 
     def asked(self) -> list[str]:
-        return [q["id"] for q in self.questions]
+        """Questions the person must answer: the decisions (every question in a reconfiguration)."""
+        return [q["id"] for q in self.questions if q.get("outcome", DECISION) == DECISION]
+
+    def question(self, qid: str) -> dict[str, Any] | None:
+        return next((q for q in self.questions if q["id"] == qid), None)
 
     def to_json(self) -> str:
         return json.dumps({"profile": self.profile, "signals": self.signals, "questions": self.questions,
@@ -154,6 +165,9 @@ def _tests(reader: _Reader, files: list[str]) -> list[str]:
         out.append("pytest")
     if "Makefile" in names and re.search(r"^test:", reader.text("Makefile"), re.MULTILINE):
         out.append("make test")
+    just = next((n for n in ("justfile", "Justfile") if n in names), None)
+    if just and re.search(r"^test(?:[ \t]+[^:=\n]*)?:(?!=)", reader.text(just), re.MULTILINE):
+        out.append("just test")
     if "go.mod" in names:
         out.append("go test ./...")
     if "Cargo.toml" in names:
@@ -173,6 +187,28 @@ def _tags(git: Git) -> dict[str, Any] | None:
     return {"prefix": prefix, "count": count}
 
 
+def _integration(git: Git, branches: list[str]) -> dict[str, Any]:
+    """Candidate integration branches and how many working branches come out of the only candidate (ADR-0011).
+
+    A branch comes out of the candidate when their fork point is not already part of the main branch.
+    Only the first ``_MAX_WORKING_BRANCHES`` are examined, but ``working`` is the real total, so with
+    more branches than that the rule is never confirmed and the question is asked.
+    """
+    candidates = [b for b in _INTEGRATION_NAMES if b in branches]
+    found: dict[str, Any] = {"candidates": candidates, "working": 0, "from_candidate": 0}
+    main = next((b for b in ("main", "master") if b in branches), None)
+    if len(candidates) != 1 or main is None:
+        return found
+    working = sorted(set(git.remote_branches()) - set(_BRANCHES))
+    found["working"] = len(working)  # the real total: a truncated sample never confirms the rule
+    for name in working[:_MAX_WORKING_BRANCHES]:
+        proc = git.try_run("merge-base", git.remote_ref(name), git.remote_ref(candidates[0]))
+        fork = proc.stdout.strip() if proc.returncode == 0 else ""
+        if fork and git.try_run("merge-base", "--is-ancestor", fork, git.remote_ref(main)).returncode == 1:
+            found["from_candidate"] += 1  # rc 1: not an ancestor; any other failure does not count
+    return found
+
+
 def signals(git: Git) -> tuple[dict[str, Any], list[str]]:
     """Every signal of the repository (see the table of SPEC-0004) and the read warnings."""
     root = git.root
@@ -190,6 +226,8 @@ def signals(git: Git) -> tuple[dict[str, Any], list[str]]:
         "files": sum(1 for f in files if not _TRIVIAL.match(f)),
         "branches": sorted(b for b in _BRANCHES if b in remote_branches),
         "upstream": git.ok("remote", "get-url", "upstream"),
+        "forge": FORGE_GITHUB if git.github_repo() else FORGE_OTHER,
+        "integration": _integration(git, sorted(b for b in _BRANCHES if b in remote_branches)),
         "tags": _tags(git),
         "specs": _doc_dirs(reader, files, _SPEC_DIRS, skip=_ADR_DIRS),
         "adrs": _doc_dirs(reader, files, _ADR_DIRS),
@@ -220,8 +258,13 @@ def profile_of(found: dict[str, Any]) -> str:
     return "new" if found["files"] == 0 else "existing"
 
 
-def questions(profile: str, found: dict[str, Any]) -> list[dict[str, str]]:
-    """Base questions of the profile plus those triggered by a signal, in catalogue order."""
+def questions(profile: str, found: dict[str, Any]) -> list[dict[str, Any]]:
+    """Questions of the inventory in dependency order, each resolved as deduced, default or decision.
+
+    Base questions of the profile plus those triggered by a signal (SPEC-0004); then the
+    resolution rules of SPEC-0015 decide which of them the person has to answer.
+    """
+    github = found["forge"] == FORGE_GITHUB
     triggers = {
         "ramas": (None if "development" in found["branches"] or profile == "new"  # a new repo just creates it
                   else "no existe development en el remoto"),
@@ -235,16 +278,112 @@ def questions(profile: str, found: dict[str, Any]) -> list[dict[str, str]]:
         "colision": _evidence(found, "agent_collisions"),
         "instrucciones": _evidence(found, "instructions"),
         "idioma": None if found["language"] == "es" else f"idioma detectado: {found['language']}",
-        "ci": None if found["ci"] else "no hay workflows en .github/workflows",
+        "ci": ("no hay workflows en .github/workflows" if not found["ci"]
+               else None if github else "el remoto no es GitHub"),
     }
     out = []
     for qid in QUESTIONS:
         reason = triggers.get(qid)
         if qid in BASE[profile]:
-            out.append({"id": qid, "evidence": reason or f"base del perfil {profile}"})
+            evidence = reason or f"base del perfil {profile}"
         elif reason:
-            out.append({"id": qid, "evidence": reason})
+            evidence = reason
+        else:
+            continue
+        question: dict[str, Any] = {"id": qid, "evidence": evidence}
+        resolution = _RESOLVERS.get(qid, lambda *_: None)(profile, found)
+        question["outcome"] = resolution.outcome if resolution else DECISION
+        if resolution:
+            question["answer"], question["basis"] = resolution.answer, resolution.basis
+        options = offered(qid, found)
+        if options is not None:
+            question["options"] = options
+        out.append(question)
     return out
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """How a question is settled without asking (SPEC-0015)."""
+    outcome: str
+    answer: dict[str, Any] | None  # None: the result has no effect on the configuration
+    basis: str
+
+
+def _resolve_scope(profile: str, found: dict[str, Any]) -> Resolution | None:
+    if profile not in ("existing", "methodology", "fork"):
+        return None
+    return Resolution(DEDUCED, {"option": "gradual"},
+                      f"{found['files']} ficheros en un repo {profile}: exigir trazarlo todo antes de integrar no es viable")
+
+
+def _resolve_branches(profile: str, found: dict[str, Any]) -> Resolution | None:
+    integration = found["integration"]
+    candidates = integration["candidates"]
+    if not candidates:
+        return Resolution(DEFAULT, {"option": "crear"},
+                          "ninguna rama del remoto puede hacer de integración: se crea development")
+    if len(candidates) == 1 and integration["working"] and integration["working"] == integration["from_candidate"]:
+        return Resolution(DEDUCED, {"option": "usar", "branch": candidates[0]},
+                          f"única candidata ({candidates[0]}) y las {integration['working']} ramas de trabajo del remoto salen de ella")
+    return None
+
+
+def _resolve_commits(profile: str, found: dict[str, Any]) -> Resolution:
+    return Resolution(DEDUCED, {"option": "encadenar"},
+                      "un hook commit-msg ajeno se encadena siempre: sustituirlo quitaría controles")
+
+
+def _resolve_releases(profile: str, found: dict[str, Any]) -> Resolution | None:
+    if found["forge"] == FORGE_GITHUB:
+        return None
+    return Resolution(DEDUCED, None, "el remoto no es GitHub: mth release no está disponible y se publica a mano")
+
+
+def _resolve_tests(profile: str, found: dict[str, Any]) -> Resolution | None:
+    for entry, file in (("make test", "Makefile"), ("just test", "justfile")):
+        if entry in found["tests"]:
+            return Resolution(DEDUCED, {"option": "comando", "command": entry},
+                              f"objetivo test de {file}: es el punto de entrada del proyecto")
+    return None
+
+
+def _resolve_language(profile: str, found: dict[str, Any]) -> Resolution:
+    detected = found["language"]
+    if detected in ("es", "en"):
+        return Resolution(DEDUCED, {"option": detected}, f"idioma de la documentación detectado: {detected}")
+    return Resolution(DEFAULT, {"option": "es"}, "no hay texto suficiente para detectar el idioma")
+
+
+def _resolve_ci(profile: str, found: dict[str, Any]) -> Resolution | None:
+    if found["forge"] == FORGE_GITHUB:
+        return None
+    return Resolution(DEDUCED, {"option": "sin-ci"}, "el remoto no es GitHub: la CI de la metodología (GitHub Actions) no aplica")
+
+
+def _resolve_models(profile: str, found: dict[str, Any]) -> Resolution:
+    return Resolution(DEFAULT, {"option": "equilibrado"}, "nada del repo condiciona la escalera de modelos")
+
+
+_RESOLVERS: dict[str, Callable[[str, dict[str, Any]], Resolution | None]] = {
+    "alcance": _resolve_scope, "ramas": _resolve_branches, "commits": _resolve_commits,
+    "versiones": _resolve_releases, "tests": _resolve_tests, "idioma": _resolve_language,
+    "ci": _resolve_ci, "modelos": _resolve_models,
+}
+
+
+def offered(qid: str, found: dict[str, Any]) -> list[str] | None:
+    """Options of ``qid`` that work with this inventory; None when every option does (ADR-0011, point 3)."""
+    github = found["forge"] == FORGE_GITHUB
+    if qid == "commits":
+        return ["encadenar"]
+    if qid == "ramas":
+        return (["usar"] if found["integration"]["candidates"] else []) + ["crear"]
+    if qid == "versiones" and not github:
+        return []
+    if qid == "ci" and not github:
+        return ["sin-ci"]
+    return None
 
 
 def _evidence(found: dict[str, Any], *keys: str) -> str | None:

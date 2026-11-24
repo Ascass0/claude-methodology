@@ -196,7 +196,7 @@ def decline(start: Path) -> None:
 
 
 def init(start: Path, marketplace_repo: str | None, github: bool, config_file: str | None = None,
-         answers_file: str | None = None) -> None:
+         answers_file: str | None = None, plan_only: bool = False) -> None:
     """Adopt the methodology on a dedicated branch and commit the scaffolding.
 
     Creates ``development`` from ``main`` when missing, then ``chore/adopt-methodology``
@@ -208,6 +208,7 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
         github: Apply merge settings and ruleset on GitHub.
         config_file: Prepared configuration (outside the repo) used instead of the template.
         answers_file: Interview answers (SPEC-0004): the configuration and an adoption ADR are generated from them.
+        plan_only: Validate the answers and show the plan (SPEC-0015) without writing anything.
 
     Raises:
         MthError: Dirty tree, missing remote/main, already adopted or invalid configuration.
@@ -222,6 +223,8 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     if (root / CONFIG_PATH).exists():
         raise MthError("El repo ya tiene configuración de la metodología.", hint="Usa `mth doctor`.")
     plan = inventory = None
+    if plan_only and not answers_file:
+        raise MthError("--plan necesita --answers.", hint="mth init --answers FICHERO --plan")
     if answers_file:
         inventory = survey.run(git)
         answers = adoption.load_answers(Path(answers_file).expanduser())
@@ -252,6 +255,10 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     for ref in cfg["commits"]["external_refs"]:
         if not git.ok("rev-parse", "--verify", "--quiet", ref):
             raise MthError(f"No existe la referencia externa {ref}.", hint="Trae el remoto externo (git fetch upstream).")
+    if plan is not None:
+        print(adoption.summary_text(inventory, plan))
+    if plan_only:
+        return
 
     if not git.remote_has(cfg.development):
         git.out("branch", cfg.development, git.remote_ref(cfg.main))
@@ -349,7 +356,7 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     check_hook_mode(git, new_cfg["hooks"]["commit_msg"])
     if new_cfg["hooks"]["commit_msg"] == "chain" and not _chainable(git):
         raise MthError("hooks.commit_msg = chain necesita un hook commit-msg ajeno que encadenar, y no hay ninguno.",
-                       hint="Responde 'sustituir' o conserva el modo actual: encadenar sin hook rechazaría todos los commits.")
+                       hint="Conserva el modo actual: encadenar sin hook rechazaría todos los commits.")
     pending = [d for d in plan.decisions if d.migration]
     if not changes and not pending:
         raise MthError("Las respuestas no cambian nada: nada que cambiar.", hint="La configuración ya es esa.")

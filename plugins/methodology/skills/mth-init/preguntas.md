@@ -1,8 +1,35 @@
 # Catálogo de preguntas de la adopción
 
-Cada sección es una pregunta de `mth survey`, con su ID. Los textos son fijos para que la metodología se presente siempre igual: sustituye solo los `{…}` por lo que diga el inventario. Cada pregunta se hace con `AskUserQuestion`, en rondas de hasta cuatro: `question` es el texto de **Pregunta** (contexto, evidencia y pregunta en el mismo texto, porque el diálogo puede tapar lo demás), `header` es la **Cabecera**, y cada opción lleva su etiqueta, su descripción y, si la tiene, su vista previa. La primera opción es la recomendada. La persona siempre puede elegir "Otro".
+Cada sección es una pregunta de `mth survey`, con su ID. Los textos son fijos para que la metodología se presente siempre igual: sustituye solo los `{…}` por lo que diga el inventario.
+
+**Solo se preguntan las de `outcome: decision`** (ADR-0011 de claude-methodology). Las `deducida` y `por_defecto` no se preguntan: `mth init --answers` les aplica su `answer` y las muestra en el resumen, donde la persona puede corregirlas; para cambiar una, escribe su respuesta en el JSON como si la hubieras preguntado. Las secciones de esas preguntas sirven de referencia para esa corrección y para `mth-reconfigure`, que sí las pregunta todas.
+
+**Ofrece solo las opciones de `options`** cuando el inventario las da: una opción que no está ahí falla con este repo y `mth init --answers` la rechaza. No añadas opciones ni describas comportamientos que no estén en este catálogo.
+
+Todas las preguntas `decision` van en **una sola ronda** de `AskUserQuestion`, en el orden del inventario (primero la precedencia entre el repo y la metodología, que condiciona la autonomía y el resto). `question` es el texto de **Pregunta** (contexto, evidencia y pregunta en el mismo texto, porque el diálogo puede tapar lo demás), `header` es la **Cabecera**, y cada opción lleva su etiqueta, su descripción y, si la tiene, su vista previa. La primera opción es la recomendada. La persona siempre puede elegir "Otro".
 
 La **Respuesta** es lo que escribes en `answers.<id>` del JSON para `mth init --answers`. Para "Otro", traduce lo que diga la persona a claves de `methodology.toml` (`{"option": "otro", "config": {…}, "note": "<sus palabras>"}`). Si no se puede expresar como configuración, explícale qué opción se acerca más y vuelve a preguntar.
+
+## `instrucciones`
+
+**Cabecera:** Instrucciones
+
+Antes de preguntar, lee {CLAUDE.md / AGENTS.md}. Si nada contradice las reglas base, no hagas la pregunta y responde `{"option": "metodologia"}`.
+
+**Pregunta:** El plugin añade sus reglas a CLAUDE.md. Tu {CLAUDE.md} dice «{cita}» y «{cita}», que chocan con la metodología. Si conviven, Claude recibe órdenes contradictorias. ¿Qué prevalece?
+
+- **La metodología (Recomendado)**: retiras esas líneas en la rama de adopción. Respuesta: `{"option": "metodologia"}`
+- **Lo del repo**: solo en lo que no es innegociable (historia compartida, specs, trazabilidad); queda en el ADR de adopción. Respuesta: `{"option": "repo", "exceptions": ["{cita}"]}`
+
+## `autonomia`
+
+**Cabecera:** Autonomía
+
+**Pregunta:** Por defecto, Claude crea ramas, hace commits, integra y publica versiones sin preguntar. Todo pasa por gates deterministas (tests, revisión, CI) y nada reescribe historia, y Claude solo se detiene ante contradicciones, fallos repetidos o acciones irreversibles. ¿Cuánta autonomía le das en este repo?
+
+- **Completa (Recomendado)**: el ciclo entero sin interrupciones; revisas los PR y las versiones cuando quieras. Vista previa: `spec → rama → código → revisión → PR → v1.4.0`. Respuesta: `{"option": "full"}`
+- **Hasta el PR**: integrar y publicar te piden confirmación. Vista previa: `… → revisión → ⏸ ¿integrar? → ⏸ ¿publicar?`. Respuesta: `{"option": "until-pr"}`
+- **Supervisada**: además, cada rama nueva, commit y push. Más lento, pero ves cada paso. Vista previa: `⏸ ¿rama? ⏸ ¿commit? … ⏸ ¿integrar?`. Respuesta: `{"option": "supervised"}`
 
 ## `alcance`
 
@@ -28,12 +55,13 @@ Si la persona no quiere adoptar, no es una respuesta: ejecuta `mth init --declin
 
 **Cabecera:** Commits
 
-**Pregunta:** La metodología valida cada mensaje de commit con Conventional Commits y un trailer `Refs:` que enlaza la spec o el ADR; así el changelog y la trazabilidad salen solos. Tu repo tiene {un hook commit-msg propio / husky / commitlint}. ¿Qué hacemos con él?
+**Pregunta:** La metodología valida cada mensaje de commit con Conventional Commits y un trailer `Refs:` que enlaza la spec o el ADR; así el changelog y la trazabilidad salen solos. Tu repo tiene {un hook commit-msg propio / husky / commitlint}.
 
-- **Sustituirlo (Recomendado si solo valida el formato)**: se guarda como `commit-msg.pre-mth` y se instala el de la metodología. Vista previa: `feat(auth): add token refresh ↵ Refs: SPEC-NNNN`. Respuesta: `{"option": "sustituir"}`
-- **Encadenarlo**: se guarda como `commit-msg.local` y se ejecuta antes del de la metodología; el commit debe pasar los dos. Vista previa: `commit-msg → commit-msg.local → mth check-msg`. Respuesta: `{"option": "encadenar"}`
+- **Encadenarlo (siempre)**: se guarda como `commit-msg.local` y se ejecuta antes del de la metodología; el commit debe pasar los dos. Vista previa: `commit-msg → commit-msg.local → mth check-msg`. Respuesta: `{"option": "encadenar"}`
 
-Con un gestor de hooks (husky, lefthook, pre-commit) ninguna de las dos se aplica sola: tras adoptar, añade `mth check-msg "$1"` a su hook commit-msg en la rama de adopción y díselo a la persona. La historia previa nunca se reescribe ni se valida.
+Con un gestor de hooks (husky, lefthook, pre-commit) no se aplica sola: tras adoptar, añade `mth check-msg "$1"` a su hook commit-msg en la rama de adopción y díselo a la persona. La historia previa nunca se reescribe ni se valida.
+
+Solo hay esta opción: sustituir un hook ajeno quitaría sus controles, y la metodología nunca degrada una comprobación (PRINCIPLES §2). Por eso `commits` es siempre `deducida` y no se pregunta.
 
 ## `versiones`
 
@@ -92,7 +120,9 @@ Se hace siempre: también ofrece los agentes del catálogo del plugin (SPEC-0012
 - Una opción por agente del perfil `base`, **todas marcadas**: `revisor-seguridad`, `revisor-fallos`, `revisor-adr`, `revisor-diseno`, `revisor-parsimonia` (revisores) y `diagnosticador`, `explorador-specs` (trabajadores). Desmarca de antemano `diagnosticador` si no habrá `commands.test`, y cualquiera cuyo nombre ya use un agente del repo (sería una colisión: se resuelve después con `mth agents add --replace`).
 - Menciona los opcionales (`ingeniero-rendimiento`, `analista-evals`, `lector-estado`, `respondedor-incidencias`) solo si el inventario muestra benchmarks, evals, bases SQLite de estado o un fork; si elige alguno, pide sus variables obligatorias (`bench`, `results`, `databases`).
 
-Respuesta: `{"option": "agentes", "agents": ["security-reviewer"], "catalog": ["revisor-seguridad", "revisor-fallos"], "vars": {"lector-estado": {"databases": {"estado": "data/state.db"}}}}`. `agents` es la lista de agentes del repo (vacía si no elige ninguno); `catalog` y `vars` son opcionales. Después propón `[review.paths]` para los del repo que solo aplican a un área.
+Respuesta: `{"option": "agentes", "agents": ["security-reviewer"], "catalog": ["revisor-seguridad", "revisor-fallos"], "vars": {"lector-estado": {"databases": {"estado": "data/state.db"}}}}`. `agents` es la lista de agentes del repo (vacía si no elige ninguno); `paths`, `catalog` y `vars` son opcionales. 
+
+Si algún revisor del repo solo aplica a un área (por ejemplo, `api-reviewer` a `api/**`), pregúntalo en la misma pregunta 1 y añade `"paths": {"api-reviewer": ["api/**"]}` a la respuesta: va a `[review.paths]` y ese revisor solo se exige cuando el diff toca esas rutas (`mth review status` lo muestra). Los globs admiten `!` para excluir. No prometas nada más sobre el alcance de un revisor.
 
 ## `colision`
 
@@ -102,27 +132,6 @@ Respuesta: `{"option": "agentes", "agents": ["security-reviewer"], "catalog": ["
 
 - **Renombrar el tuyo (Recomendado)**: pasa a llamarse `{verificador-repo}` y se usan los dos. Respuesta: `{"option": "renombrar", "renames": {"{verificador}": "{verificador-repo}"}}`
 - **Usar el tuyo en ese rol**: pierdes la comprobación del plugin. Respuesta: `{"option": "mantener"}`
-
-## `instrucciones`
-
-**Cabecera:** Instrucciones
-
-Antes de preguntar, lee {CLAUDE.md / AGENTS.md}. Si nada contradice las reglas base, no hagas la pregunta y responde `{"option": "metodologia"}`.
-
-**Pregunta:** El plugin añade sus reglas a CLAUDE.md. Tu {CLAUDE.md} dice «{cita}» y «{cita}», que chocan con la metodología. Si conviven, Claude recibe órdenes contradictorias. ¿Qué prevalece?
-
-- **La metodología (Recomendado)**: retiras esas líneas en la rama de adopción. Respuesta: `{"option": "metodologia"}`
-- **Lo del repo**: solo en lo que no es innegociable (historia compartida, specs, trazabilidad); queda en el ADR de adopción. Respuesta: `{"option": "repo", "exceptions": ["{cita}"]}`
-
-## `autonomia`
-
-**Cabecera:** Autonomía
-
-**Pregunta:** Por defecto, Claude crea ramas, hace commits, integra y publica versiones sin preguntar. Todo pasa por gates deterministas (tests, revisión, CI) y nada reescribe historia, y Claude solo se detiene ante contradicciones, fallos repetidos o acciones irreversibles. ¿Cuánta autonomía le das en este repo?
-
-- **Completa (Recomendado)**: el ciclo entero sin interrupciones; revisas los PR y las versiones cuando quieras. Vista previa: `spec → rama → código → revisión → PR → v1.4.0`. Respuesta: `{"option": "full"}`
-- **Hasta el PR**: integrar y publicar te piden confirmación. Vista previa: `… → revisión → ⏸ ¿integrar? → ⏸ ¿publicar?`. Respuesta: `{"option": "until-pr"}`
-- **Supervisada**: además, cada rama nueva, commit y push. Más lento, pero ves cada paso. Vista previa: `⏸ ¿rama? ⏸ ¿commit? … ⏸ ¿integrar?`. Respuesta: `{"option": "supervised"}`
 
 ## `idioma`
 
