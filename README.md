@@ -58,9 +58,9 @@ Mientras un repositorio no tiene `.claude/methodology.toml`, el plugin está ina
 
 La adopción es una entrevista guiada, con la skill `mth-init`:
 
-1. `mth survey` inventaria el repo sin modificarlo (ramas, specs y ADR existentes, agentes, hooks, herramientas de release, CI).
-2. Opus presenta la metodología y pregunta solo lo que el inventario no resuelve.
-3. `mth init --answers <json>` convierte las respuestas en `.claude/methodology.toml` y en el ADR de adopción.
+1. `mth survey` inventaria el repo sin modificarlo (ramas, specs y ADR existentes, agentes, hooks, herramientas de release, CI, forja del remoto) y resuelve cada pregunta como `deducida` (la resuelve una señal, con su evidencia), `por_defecto` o `decision` ([SPEC-0015](specs/features/SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md), [ADR-0011](specs/adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md)).
+2. Opus presenta la metodología y pregunta, en una sola ronda y empezando por la precedencia entre el repo y la metodología, solo las `decision`. Solo ofrece las opciones que funcionan con el repo: por ejemplo, un hook `commit-msg` ajeno solo se encadena, y sin GitHub no se ofrece `mth release`.
+3. `mth init --answers <json> --plan` muestra, sin escribir nada, lo deducido, lo que va por defecto, lo decidido y las capacidades activas y desactivadas con su motivo. Con la confirmación de la persona, `mth init --answers <json>` convierte las respuestas en `.claude/methodology.toml` y en el ADR de adopción, que registra el resultado de cada pregunta.
 4. Si no se quiere adoptar, `mth init --decline` desactiva el plugin en ese repo (`.claude/settings.local.json`, no versionado).
 
 `mth init` sin `--answers` sigue existiendo y adopta con la plantilla por defecto:

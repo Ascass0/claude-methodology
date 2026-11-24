@@ -1,4 +1,4 @@
-"""Interview answers → configuration and adoption ADR (SPEC-0004, ADR-0003).
+"""Interview answers → configuration and adoption ADR (SPEC-0004, ADR-0003, SPEC-0015, ADR-0011).
 
 Opus conducts the interview and writes the answers as JSON; this module turns
 them into configuration deterministically and validates them against the
@@ -18,7 +18,7 @@ from typing import Any
 from . import catalog, lang
 from .config import AUTONOMY_LEVELS, DEFAULTS, _merge
 from .errors import MthError
-from .survey import RECONFIGURE, Survey
+from .survey import DECISION, DEDUCED, DEFAULT, FORGE_GITHUB, RECONFIGURE, Survey
 
 MAX_ANSWERS_BYTES = 256 * 1024
 OTHER = "otro"
@@ -26,7 +26,7 @@ OTHER = "otro"
 OPTIONS: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
     "alcance": {"gradual": {}, "completa": {}},
     "ramas": {"usar": {"branch": (str, True)}, "crear": {}},
-    "commits": {"sustituir": {}, "encadenar": {}},
+    "commits": {"encadenar": {}},  # replacing a foreign hook would drop its controls (ADR-0011)
     "versiones": {"continuar": {"version_files": (list, False)},
                   "prefijo": {"tag_prefix": (str, True), "version_files": (list, False)}},
     "specs": {"mapear": {"path": (str, True), "kind": (str, True), "pattern": (str, True)},
@@ -34,7 +34,8 @@ OPTIONS: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
     "decisiones": {"mapear": {"path": (str, True), "kind": (str, True), "pattern": (str, True)},
                    "convertir": {}, "archivar": {}},
     "tests": {"comando": {"command": (str, True)}, "ninguno": {}},
-    "revisores": {"agentes": {"agents": (list, True), "catalog": (list, False), "vars": (dict, False)}},
+    "revisores": {"agentes": {"agents": (list, True), "paths": (dict, False), "catalog": (list, False),
+                              "vars": (dict, False)}},
     "colision": {"renombrar": {"renames": (dict, True)}, "mantener": {}},
     "instrucciones": {"metodologia": {}, "repo": {"exceptions": (list, True)}},
     "autonomia": {level: {} for level in AUTONOMY_LEVELS},
@@ -60,6 +61,7 @@ class Decision:
     option: str
     effect: str
     note: str = ""
+    outcome: str = DECISION
 
     @property
     def migration(self) -> bool:
@@ -94,15 +96,15 @@ def load_answers(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def validate(survey: Survey, answers: dict[str, dict[str, Any]]) -> None:
-    """Every asked question has a valid answer and nothing else is answered.
+    """Every decision has a valid answer, and nothing outside the inventory or the offered options is answered.
 
     Raises:
         MthError: Listing every problem found.
     """
-    asked = survey.asked()
-    problems = [f"{q}: la pregunta no está en el inventario" for q in answers if q not in asked]
-    problems += [f"{q}: falta la respuesta" for q in asked if q not in answers]
-    for qid in [q for q in asked if q in answers]:
+    inventory = [q["id"] for q in survey.questions]
+    problems = [f"{q}: la pregunta no está en el inventario" for q in answers if q not in inventory]
+    problems += [f"{q}: falta la respuesta" for q in survey.asked() if q not in answers]
+    for qid in [q for q in inventory if q in answers]:
         answer = answers[qid]
         option = answer.get("option")
         if option == OTHER:
@@ -116,6 +118,11 @@ def validate(survey: Survey, answers: dict[str, dict[str, Any]]) -> None:
         if params is None:
             problems.append(f"{qid}: opción desconocida '{option}' (admitidas: {', '.join([*OPTIONS[qid], OTHER])})")
             continue
+        shown = survey.question(qid).get("options")
+        if shown is not None and option not in shown:
+            problems.append(f"{qid}: la opción '{option}' no funciona con este repo "
+                            f"(se ofrecen: {', '.join([*shown, OTHER])})")
+            continue
         given = set(answer) - {"option"}
         if given - set(params):
             problems.append(f"{qid}: parámetros desconocidos: {', '.join(sorted(given - set(params)))}")
@@ -126,12 +133,24 @@ def validate(survey: Survey, answers: dict[str, dict[str, Any]]) -> None:
             elif not isinstance(answer[name], kind):
                 problems.append(f"{qid}: '{name}' debe ser de tipo {kind.__name__}")
         if qid == "revisores":
-            problems += _catalog_problems(survey, answer)
+            problems += _catalog_problems(survey, answer) + _paths_problems(answer)
         if qid in ("specs", "decisiones") and option == "mapear" and not _KIND.match(str(answer.get("kind", ""))):
             problems.append(f"{qid}: 'kind' debe ser un prefijo en mayúsculas (por ejemplo, RFC)")
     if problems:
         raise MthError("Respuestas inválidas:\n" + "\n".join(f"  - {p}" for p in problems),
                        hint="Corrige el JSON de respuestas; las opciones están en la skill mth-init.")
+
+
+def _paths_problems(answer: dict[str, Any]) -> list[str]:
+    """Problems of the ``paths`` part of the ``revisores`` answer: reviewers of the repo and lists of globs."""
+    scoped = answer.get("paths")
+    if not isinstance(scoped, dict):
+        return []
+    agents = answer.get("agents", [])
+    problems = [f"revisores: 'paths.{name}' no es un agente de 'agents'" for name in scoped if name not in agents]
+    problems += [f"revisores: 'paths.{name}' debe ser una lista de globs (texto)" for name, globs in scoped.items()
+                 if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs)]
+    return problems
 
 
 def _catalog_problems(survey: Survey, answer: dict[str, Any]) -> list[str]:
@@ -208,13 +227,20 @@ def rebuild(current: dict[str, Any], raw: dict[str, Any], survey: Survey, answer
 
 
 def _decide(plan: Plan, survey: Survey, answers: dict[str, dict[str, Any]], base: str, reconfigure: bool) -> None:
-    for qid in survey.asked():
-        answer = answers[qid]
+    for question in survey.questions:
+        qid = question["id"]
+        given = answers.get(qid)
+        outcome = DECISION if given is not None else question["outcome"]
+        answer = given if given is not None else question.get("answer")
+        if answer is None:  # settled without any effect on the configuration (SPEC-0015)
+            plan.decisions.append(Decision(qid, "ninguna", "sin efecto en la configuración", question["basis"], outcome))
+            continue
+        note_basis = "" if outcome == DECISION else question["basis"]
         option = answer["option"]
         if option == OTHER:
             plan.data = _merge(plan.data, copy.deepcopy(answer.get("config", {})))
             effect = ", ".join(sorted(_flatten(answer.get("config", {})))) or "sin cambios de configuración"
-            plan.decisions.append(Decision(qid, OTHER, effect, answer.get("note", "")))
+            plan.decisions.append(Decision(qid, OTHER, effect, answer.get("note", ""), outcome))
             continue
         effect = _apply(plan.data, qid, option, answer, survey.signals, base, reconfigure)
         if qid == "revisores" and answer.get("catalog"):
@@ -222,8 +248,8 @@ def _decide(plan: Plan, survey: Survey, answers: dict[str, dict[str, Any]], base
             if answer.get("vars"):
                 plan.data["agents"] = copy.deepcopy(answer["vars"])
             effect += f"; agentes del catálogo: {', '.join(plan.catalog)} (mth agents add)"
-        note = "; ".join(answer.get("exceptions", [])) if qid == "instrucciones" else ""
-        plan.decisions.append(Decision(qid, option, effect, note))
+        note = "; ".join(answer.get("exceptions", [])) if qid == "instrucciones" else note_basis
+        plan.decisions.append(Decision(qid, option, effect, note, outcome))
 
 
 def _prune(data: dict[str, Any], raw: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
@@ -268,7 +294,7 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
         data["branches"]["development"] = answer.get("branch", "development")
         return f"branches.development = {data['branches']['development']}"
     if qid == "commits":
-        data.setdefault("hooks", {})["commit_msg"] = "replace" if option == "sustituir" else "chain"
+        data.setdefault("hooks", {})["commit_msg"] = "chain"
         return f"hooks.commit_msg = {data['hooks']['commit_msg']}"
     if qid == "versiones":
         if reconfigure and option == "continuar":  # keep the numbering; version_files only when answered
@@ -307,7 +333,10 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
             data["review"]["agents"] = []
         agents = data["review"]["agents"]
         agents += [a for a in answer["agents"] if isinstance(a, str) and a not in agents]
-        return f"review.agents = {', '.join(agents)}"
+        scoped = {str(k): v for k, v in answer.get("paths", {}).items()}
+        data["review"]["paths"].update(copy.deepcopy(scoped))
+        return f"review.agents = {', '.join(agents)}" + (
+            f"; review.paths: {', '.join(scoped)}" if scoped else "")
     if qid == "colision":
         if option == "mantener":
             return "los agentes del repo sustituyen a los del plugin con el mismo nombre"
@@ -387,6 +416,49 @@ def _value(value: Any) -> str:
     raise MthError(f"Valor de configuración no admitido: {value!r}.")
 
 
+# -- plan before writing ------------------------------------------------------
+@dataclass(frozen=True)
+class Capability:
+    name: str
+    active: bool
+    reason: str  # why it is on or off
+
+
+def capabilities(survey: Survey, plan: Plan) -> list[Capability]:
+    """What the methodology can do in the repository once adopted with ``plan`` (ADR-0011, point 5)."""
+    data, found = plan.data, survey.signals
+    github = found["forge"] == FORGE_GITHUB
+    no_github = "el remoto no es GitHub"
+    foreign_hook = found["commit_hook"] and data["hooks"]["commit_msg"] == "own"
+    return [
+        Capability("mth integrate (PR con merge commit)", github, "el remoto está en GitHub" if github else no_github),
+        Capability("mth release (versión, etiqueta y CHANGELOG)", github,
+                   "el remoto está en GitHub" if github else f"{no_github}: la publicación es manual"),
+        Capability("CI exigida para integrar", data["ci"]["required"],
+                   "ci.required = true" if data["ci"]["required"] else "ci.required = false"),
+        Capability("tests antes de integrar", bool(data["commands"]["test"]),
+                   f"commands.test = {data['commands']['test']}" if data["commands"]["test"] else "commands.test vacío"),
+        Capability("validación de mensajes de commit", not foreign_hook,
+                   f"hooks.commit_msg = {data['hooks']['commit_msg']}" if not foreign_hook
+                   else "hay un hook ajeno y hooks.commit_msg = own"),
+        Capability("agentes del catálogo", bool(plan.catalog),
+                   ", ".join(plan.catalog) if plan.catalog else "no se ha elegido ninguno"),
+    ]
+
+
+def summary_text(survey: Survey, plan: Plan) -> str:
+    """The plan shown before anything is written: deduced, default, decided and capabilities (SPEC-0015)."""
+    titles = {DEDUCED: "Deducido del repo", DEFAULT: "Por defecto (se cambia con `mth reconfigure`)", DECISION: "Decidido"}
+    lines = [f"Plan de adopción · perfil {survey.profile} · nada se ha escrito todavía"]
+    for outcome, title in titles.items():
+        rows = [d for d in plan.decisions if d.outcome == outcome]
+        lines += ["", f"{title} ({len(rows)})"]
+        lines += [f"  · {d.question}: {d.option} → {d.effect}" + (f" ({d.note})" if d.note else "") for d in rows] or ["  (nada)"]
+    lines += ["", "Capacidades"]
+    lines += [f"  {'✓' if c.active else '✗'} {c.name} — {c.reason}" for c in capabilities(survey, plan)]
+    return "\n".join(lines)
+
+
 # -- adoption ADR -------------------------------------------------------------
 _ADR_TEXT = {
     "es": {"title": "Adopción de claude-methodology", "status": "Estado", "accepted": "aceptado", "date": "Fecha",
@@ -395,7 +467,7 @@ _ADR_TEXT = {
            "intro": "Este repositorio adopta claude-methodology. `mth survey` lo clasificó con el perfil **{profile}**.",
            "signals": "Señales detectadas: {signals}.",
            "body": "Se adopta la metodología con estas decisiones, tomadas en la entrevista de adopción:",
-           "table": "| Pregunta | Opción | Efecto | Nota |",
+           "table": "| Pregunta | Resultado | Opción | Efecto | Nota |",
            "others": "Las demás opciones de cada pregunta, descritas en la skill `mth-init` de claude-methodology.",
            "legacy": "- El contenido anterior a `{base}` queda como legado: sus hallazgos de trazabilidad son avisos hasta que se modifica.",
            "strict": "- Todo el contenido del repo cumple las reglas de la metodología desde la adopción.",
@@ -406,7 +478,7 @@ _ADR_TEXT = {
            "intro": "This repository adopts claude-methodology. `mth survey` classified it with the **{profile}** profile.",
            "signals": "Detected signals: {signals}.",
            "body": "The methodology is adopted with these decisions, taken in the adoption interview:",
-           "table": "| Question | Option | Effect | Note |",
+           "table": "| Question | Result | Option | Effect | Note |",
            "others": "The other options of each question, described in the `mth-init` skill of claude-methodology.",
            "legacy": "- Content older than `{base}` is legacy: its traceability findings are warnings until it is modified.",
            "strict": "- All the repository content follows the methodology rules from adoption on.",
@@ -417,16 +489,17 @@ _ADR_TEXT = {
 def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, today: date | None = None) -> str:
     """Adoption ADR of the target repository, in its documentation language."""
     t = _ADR_TEXT[vocab.code]
-    present = [k for k, v in survey.signals.items() if v and k not in ("files", "language", "branches")]
+    present = [k for k, v in survey.signals.items() if v and k not in ("files", "language", "branches", "forge", "integration")]
     legacy = plan.data["trace"].get("legacy_base", "")
-    rows = [f"| `{d.question}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |" for d in plan.decisions]
+    rows = [f"| `{d.question}` | `{d.outcome}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |"
+            for d in plan.decisions]
     return "\n".join([
         f"# {ident} · {t['title']}", "",
         f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
         f"- {t['category']}: methodology", "",
         f"## {t['context']}", "", t["intro"].format(profile=survey.profile), "",
         t["signals"].format(signals=", ".join(f"`{s}`" for s in present) or "—"), "",
-        f"## {t['decision']}", "", t["body"], "", t["table"], "|---|---|---|---|", *rows, "",
+        f"## {t['decision']}", "", t["body"], "", t["table"], "|---|---|---|---|---|", *rows, "",
         f"## {t['alternatives']}", "", t["others"], "",
         f"## {t['consequences']}", "",
         t["legacy"].format(base=legacy[:7]) if legacy else t["strict"], t["change"], "",

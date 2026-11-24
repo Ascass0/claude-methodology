@@ -161,4 +161,6 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 
 ## Notas
 
+[SPEC-0015](SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md) modifica la entrevista: solo se preguntan las preguntas `decision` (el resto se deduce o va por defecto), en una sola ronda y por orden de dependencia, y la opción `commits: sustituir` ya no existe.
+
 Las capacidades que ofrecen algunas opciones tienen su propia spec: modo legado ([SPEC-0005](SPEC-0005-modo-legado-en-la-trazabilidad.md)), hooks encadenados ([SPEC-0006](SPEC-0006-hooks-commit-msg-encadenados.md)), autonomía configurable ([SPEC-0007](SPEC-0007-autonomia-configurable.md)) e idioma configurable ([SPEC-0008](SPEC-0008-idioma-de-la-documentacion-configurable.md)). Se implementan en ramas hijas de esta feature.
