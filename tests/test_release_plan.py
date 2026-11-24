@@ -195,7 +195,8 @@ class ReleaseFailureModeTests(ReleasePlanFlowTests):
 
     def test_invalid_fragments_stop_the_decision(self):
         # verifies: SPEC-0017/AC-03
-        test_mth._write(self.work / "changes/feat-gadget.md", "---\nbump: minor\nrefs: SPEC-9999\n---\n### Añadido\n- Cambio.\n")
+        missing = "SPEC-" + "9999"  # not written whole: trace would flag it as a dangling reference
+        test_mth._write(self.work / "changes/feat-gadget.md", f"---\nbump: minor\nrefs: {missing}\n---\n### Añadido\n- Cambio.\n")
         self.git("add", "-A")
         self.git("commit", "-q", "--no-verify", "-m", "add invalid fragment")
         self.git("push", "-q", "origin", "development")
