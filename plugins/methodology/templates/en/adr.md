@@ -3,21 +3,28 @@
 - Status: proposed
 - Date: {{DATE}}
 - Category: {{CATEGORY}}
+- Format: compact
 
-<!-- Statuses: proposed → accepted → superseded by ADR-NNNN | deprecated. Format based on MADR. -->
+<!-- Statuses: proposed → accepted → superseded by ADR-NNNN | deprecated. Fixed fields, Y-statement style (PRINCIPLES §7). -->
 
 ## Context
 
-Forces at play and constraints.
+- Forces and constraints, a few lines.
 
 ## Decision
 
-What is decided, in one or two sentences, and its scope.
+1. What is decided, with MUST / MUST NOT.
 
-## Alternatives considered
+## Rejected
 
-- **Alternative:** why it is discarded.
+- Alternative: reason.
 
 ## Consequences
 
-Positive, negative and accepted risks.
+- **+** Benefit.
+- **−** Cost.
+- **risk** Accepted risk → how it is mitigated.
+
+## Imposes
+
+- [script] location · [hook] location · [criterio] who checks it.

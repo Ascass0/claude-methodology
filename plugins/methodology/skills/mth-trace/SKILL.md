@@ -1,6 +1,6 @@
 ---
 name: mth-trace
-description: Comprueba la trazabilidad del repo (IDs de specs/ADR definidos y únicos, referencias válidas en código y docs, enlaces markdown relativos dentro del repo, criterios de aceptación cubiertos por tests) y guía la corrección. Úsala después de crear o renombrar specs, ADRs o docs, tras mth sync, antes de integrar y siempre que un gate reporte trazabilidad rota.
+description: Comprueba la trazabilidad (IDs de specs y ADR definidos y únicos, referencias válidas, enlaces relativos dentro del repo, criterios cubiertos por tests, formato compacto) y guía la corrección. Úsala tras crear o renombrar specs, ADR o docs, tras mth sync, antes de integrar y cuando un gate reporte trazabilidad rota.
 ---
 
 # Trazabilidad
@@ -15,6 +15,10 @@ description: Comprueba la trazabilidad del repo (IDs de specs/ADR definidos y ú
 | `enlace fuera del repositorio` | Lo que vive en otro repo se enlaza con URL absoluta |
 | `SPEC/AC-NN no tiene ningún test` | Añade el test con el comentario `verifies: SPEC-NNNN/AC-NN`, o devuelve la spec a `aprobada` si no está terminada |
 | `un test verifica SPEC/AC-NN, que no existe` | El AC se renombró o eliminó: corrige el test o la spec |
+| `AC-NN no sigue ningún patrón EARS` | Reescribe el criterio en una línea: `CUANDO …, … DEBE …`, `SI …, ENTONCES … DEBE …`, `MIENTRAS …, … DEBE …` o `… DEBE …` (en `language.docs = en`: `WHEN`, `IF … THEN`, `WHILE`, `SHALL`/`MUST`) |
+| `FM-NN definido dos veces` / `fila de modos de fallo sin ID` | Cada fila de la tabla de modos de fallo lleva un `FM-NN` único |
+| `referencia a FM-NN, que la spec no define` | Corrige el ID o añade el modo de fallo a su spec |
+| `falta el campo «X» del ADR` | Añade el campo: `Contexto`, `Decisión`, `Rechazado`, `Consecuencias`, `Impone` |
 
 ## Convenciones que comprueba
 
@@ -23,6 +27,10 @@ description: Comprueba la trazabilidad del repo (IDs de specs/ADR definidos y ú
 - En los tests, la cobertura de AC: `# verifies: SPEC-NNNN/AC-02` (un test puede verificar varios).
 
 Si el repo tiene un esquema de IDs propio, se declara en `[ids]`; contenido que no debe comprobarse se excluye en `trace.exclude`, justificándolo en el commit.
+
+## Formato compacto
+
+Los documentos con la línea `- Formato: compacto` (`- Format: compact`) se validan con EARS, `FM-NN` y los campos del ADR; los demás, no. Las referencias `SPEC-NNNN/FM-NN` se comprueban siempre. Detalle en [SPEC-0018](../../../../specs/features/SPEC-0018-formato-compacto-de-specs-y-adr.md).
 
 ## Contenido legado
 

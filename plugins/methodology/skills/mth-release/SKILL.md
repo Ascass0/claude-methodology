@@ -1,6 +1,6 @@
 ---
 name: mth-release
-description: Publica una versión (development → main con merge commit, tag SemVer, release de GitHub y CHANGELOG generado desde los fragmentos) o cierra un hotfix como versión patch. Úsala cuando development reúna features completas y estables entre sí, cuando haya que corregir un bug en producción, o para reanudar una publicación interrumpida.
+description: Publica una versión (development → main con merge commit, tag SemVer, release de GitHub, CHANGELOG desde los fragmentos) o cierra un hotfix como patch. Úsala cuando development reúna features completas y estables, ante un bug en producción, o para reanudar una publicación interrumpida.
 ---
 
 # Versiones

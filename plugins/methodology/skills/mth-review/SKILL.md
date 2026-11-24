@@ -1,6 +1,6 @@
 ---
 name: mth-review
-description: Ejecuta la revisión de la rama con los agentes revisores declarados en el repo, con contexto limpio, severidades y precedencia, y registra el resultado sobre el HEAD exacto. Úsala antes de integrar cualquier rama feat, fix o hotfix, y cada vez que haya commits nuevos después de una revisión.
+description: Ejecuta la revisión de la rama con los agentes revisores del repo (contexto limpio, severidades, precedencia) y la registra sobre el HEAD exacto. Úsala antes de integrar una rama feat, fix o hotfix y tras cada commit nuevo posterior a una revisión.
 ---
 
 # Revisión
