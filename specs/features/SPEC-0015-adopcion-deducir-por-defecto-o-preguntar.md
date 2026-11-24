@@ -95,6 +95,7 @@ La tabla del ADR de adopción tiene una columna **Resultado** (`deducida`, `por_
 | Respuesta a una pregunta que no está en el inventario | `mth init --answers` | Error; no se modifica nada |
 | `review.paths` con un agente que no es revisor, o con globs vacíos | `mth init --answers` | Error de validación de la configuración; no se modifica nada |
 | Señal de ramas ilegible (`merge-base` falla) | `mth survey` | La rama no cuenta como salida de la candidata: la pregunta pasa a `decision` |
+| Más ramas de trabajo que el límite de inventario (50), o un error de git distinto de «no es ancestro» al comprobar una bifurcación | `mth survey` | Solo se examinan las 50 primeras y `working` es el total real; la regla no se confirma y `ramas` pasa a `decision`. Una comprobación fallida no cuenta como «sale de la candidata» |
 | `--plan` sin `--answers` | `mth init` | Error de uso |
 
 ## Criterios de aceptación

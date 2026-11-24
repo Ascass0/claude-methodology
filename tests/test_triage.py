@@ -336,6 +336,29 @@ class UnreadableForkPointTests(RepoCase):
         self.assertEqual(self.inventory().question("ramas")["outcome"], survey.DECISION)
 
 
+class BoundedSignalTests(RepoCase):
+    def test_more_branches_than_the_limit_never_confirm_the_rule(self):
+        # verifies: SPEC-0015/AC-02
+        self.write("README.md", SPANISH)
+        self.commit()
+        remote = self.root.parent / (self.root.name + "-remote.git")
+        self.addCleanup(lambda: __import__("shutil").rmtree(remote, ignore_errors=True))
+        self.git("init", "-q", "--bare", "-b", "main", str(remote))
+        self.git("remote", "add", "origin", str(remote))
+        self.git("push", "-q", "origin", "main")
+        self.git("checkout", "-q", "-b", "dev")
+        self.write("src/a.py", "a = 1\n")
+        self.commit()
+        total = survey._MAX_WORKING_BRANCHES + 2
+        for n in range(total):
+            self.git("branch", f"feat/b{n:03d}", "dev")
+        self.git("push", "-q", "origin", "dev", *[f"feat/b{n:03d}" for n in range(total)])
+        self.git("fetch", "-q", "origin")
+        signal = self.inventory().signals["integration"]
+        self.assertEqual((signal["working"], signal["from_candidate"]), (total, survey._MAX_WORKING_BRANCHES))
+        self.assertEqual(self.inventory().question("ramas")["outcome"], survey.DECISION)
+
+
 class RealCaseTests(test_mth.EndToEndTests):
     """The adoption that motivated ADR-0011: GitLab, `dev`, a foreign hook, Makefile, 42 ADR, own CLAUDE.md."""
 

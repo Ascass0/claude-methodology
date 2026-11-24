@@ -191,19 +191,21 @@ def _integration(git: Git, branches: list[str]) -> dict[str, Any]:
     """Candidate integration branches and how many working branches come out of the only candidate (ADR-0011).
 
     A branch comes out of the candidate when their fork point is not already part of the main branch.
+    Only the first ``_MAX_WORKING_BRANCHES`` are examined, but ``working`` is the real total, so with
+    more branches than that the rule is never confirmed and the question is asked.
     """
     candidates = [b for b in _INTEGRATION_NAMES if b in branches]
     found: dict[str, Any] = {"candidates": candidates, "working": 0, "from_candidate": 0}
     main = next((b for b in ("main", "master") if b in branches), None)
     if len(candidates) != 1 or main is None:
         return found
-    working = sorted(set(git.remote_branches()) - set(_BRANCHES))[:_MAX_WORKING_BRANCHES]
-    found["working"] = len(working)
-    for name in working:
+    working = sorted(set(git.remote_branches()) - set(_BRANCHES))
+    found["working"] = len(working)  # the real total: a truncated sample never confirms the rule
+    for name in working[:_MAX_WORKING_BRANCHES]:
         proc = git.try_run("merge-base", git.remote_ref(name), git.remote_ref(candidates[0]))
         fork = proc.stdout.strip() if proc.returncode == 0 else ""
-        if fork and not git.is_ancestor(fork, git.remote_ref(main)):
-            found["from_candidate"] += 1
+        if fork and git.try_run("merge-base", "--is-ancestor", fork, git.remote_ref(main)).returncode == 1:
+            found["from_candidate"] += 1  # rc 1: not an ancestor; any other failure does not count
     return found
 
 
