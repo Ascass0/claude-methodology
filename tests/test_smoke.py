@@ -89,11 +89,12 @@ class VerdictTests(SmokeTestCase):
 
     def test_a_missing_denial_or_control_never_passes(self):
         # verifies: SPEC-0014/AC-04
+        self.seed_record()
         for mode in ("permission-block", "no-control"):
             with self.subTest(mode=mode):
                 result = self.run_smoke(mode)
                 self.assertEqual(result.outcome, smoke.INCONCLUSIVE, result)
-                self.assertIsNone(self.record())
+                self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
 
     def test_a_write_the_guard_never_saw_fails(self):
         # verifies: SPEC-0014/AC-05
@@ -426,6 +427,60 @@ class FailureModeTests(SmokeTestCase):
         for bad in (float("inf"), float("nan"), 0, -5, 99999):
             with self.subTest(timeout=bad), self.assertRaises(MthError):
                 smoke.smoke(self.git, str(self.claude), "haiku", bad, dict(os.environ))
+
+    def test_a_pass_needs_claude_to_have_ended_cleanly(self):
+        # verifies: SPEC-0014/AC-04
+        full = smoke.Evidence(denied_bash=True, allowed_write=True, ok_file=True)
+        for finished in (None, 1, 137):
+            with self.subTest(finished=finished):
+                result = smoke.judge(full, finished, "")
+                self.assertEqual(result.outcome, smoke.INCONCLUSIVE)
+        self.assertEqual(smoke.judge(full, 0, "").outcome, smoke.PASS)
+        leak = smoke.Evidence(leak_file=True)
+        self.assertEqual(smoke.judge(leak, None, "").outcome, smoke.FAIL)  # a failure is still a failure
+
+    def test_a_leftover_is_reported_when_claude_vanished_too(self):
+        # verifies: SPEC-0014/AC-06
+        real_remove = smoke._remove
+
+        def remove_then_complain(scratch):
+            real_remove(scratch)  # the test itself leaves nothing behind
+            return "No se pudo borrar el repositorio temporal /x: bórralo a mano."
+
+        with mock.patch.object(smoke, "run_claude", side_effect=FileNotFoundError("desapareció")), \
+                mock.patch.object(smoke, "_remove", remove_then_complain):
+            result = self.run_smoke("obey")
+        self.assertEqual(result.outcome, smoke.INCONCLUSIVE)
+        self.assertIn("bórralo a mano", " ".join(result.details))
+        self.assertTrue(self.events()[-1]["leftover"])
+
+    def test_the_exit_code_tells_a_failure_from_a_test_that_could_not_run(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib import cli
+        from mthlib.errors import MthError
+        self.assertEqual(len({smoke.PASS, smoke.FAIL, smoke.NOT_RUN, smoke.INCONCLUSIVE}), 4)
+        cwd = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(smoke, "build_repo", side_effect=MthError("git init falló")):
+                code = self.quiet(cli.main, ["smoke", "--claude", str(self.claude)])
+            self.assertEqual(code, smoke.NOT_RUN)
+            self.assertIn("repositorio temporal", self.output)
+            self.install("ignore-hooks")
+            self.assertEqual(self.quiet(cli.main, ["smoke", "--claude", str(self.claude)]), smoke.FAIL)
+        finally:
+            os.chdir(cwd)
+
+    def test_the_trace_of_an_error_is_redacted_and_categorised(self):
+        # verifies: SPEC-0014/AC-12
+        from mthlib.errors import MthError
+        with mock.patch.object(smoke, "build_repo",
+                               side_effect=MthError("git falló: https://u:clave-secreta@host/repo")), \
+                self.assertRaises(MthError):
+            self.run_smoke("obey")
+        event = self.events()[-1]
+        self.assertEqual(event["category"], "setup")
+        self.assertNotIn("clave-secreta", event["error"])
 
     def test_every_verdict_is_traced(self):
         # verifies: SPEC-0014/AC-12

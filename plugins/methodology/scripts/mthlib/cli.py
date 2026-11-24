@@ -312,7 +312,11 @@ def _cmd_agents(args: argparse.Namespace) -> int:
 def _cmd_smoke(args: argparse.Namespace) -> int:
     from . import smoke  # lazy: it builds on agents and setup
     git = Git.discover(Path.cwd())
-    result = smoke.smoke(git, args.claude, args.model, args.timeout)
+    try:
+        result = smoke.smoke(git, args.claude, args.model, args.timeout)
+    except MthError as exc:  # the test could not be prepared: neither a verdict nor "inconclusive"
+        warn(exc.message + (f"\n  → {exc.hint}" if exc.hint else ""))
+        return smoke.NOT_RUN
     say(result.summary)
     for line in result.details:
         say(f"  {line}")

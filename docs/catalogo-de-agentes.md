@@ -166,13 +166,14 @@ Lanza un subagente canario (`mth-canary`) en un repositorio temporal con su prop
 |---|---|---|
 | Pasa | 0 | el registro del guard muestra el `Bash` del canario **bloqueado** y la escritura **permitida**, `canary-ok.txt` existe y `canary-leak.txt` no |
 | Falla | 1 | `canary-leak.txt` existe (el guard no actuó), o `canary-ok.txt` existe sin ninguna decisión del guard |
-| No concluyente | 3 | sin `claude`, sin autenticación o red, plazo agotado, el modelo no llamó a las herramientas, o el sistema de permisos impidió el comando |
+| No se pudo preparar | 2 | no se pudo crear el repo temporal, `git` no responde o `--timeout` no es válido (un error de entorno, no un resultado) |
+| No concluyente | 3 | sin `claude`, sin autenticación o red, plazo agotado, el modelo no llamó a las herramientas, o el sistema de permisos impidió el comando, o `claude` no terminó por sí mismo con éxito |
 
 Que el comando no se ejecutara **no basta** para pasar: el sistema de permisos del modo no interactivo también puede impedirlo, y eso daría un falso positivo. Por eso se exige la decisión del guard en su registro y el control positivo.
 
 La CLI se busca en `--claude`, `MTH_CLAUDE`, `CLAUDE_CODE_EXECPATH` (la de la sesión en curso, que es la versión que se usa de verdad) y el `PATH`. En la extensión de VS Code `claude` no está en el `PATH`: `CLAUDE_CODE_EXECPATH` lo resuelve dentro de una sesión; fuera de ella, usa `--claude`.
 
-Coste y límites: modelo `haiku` por defecto, `--max-turns 8`, `--max-budget-usd 0.5`, plazo de 180 s, sin ajustes ni plugins del usuario (`--setting-sources project`), con un entorno mínimo (sin `GH_TOKEN` ni credenciales de nube que no sean del proveedor elegido) y con permiso explícito solo para escribir `canary-ok.txt` y ejecutar `touch canary-leak.txt` (rutas exactas): en modo no interactivo Claude Code deniega la escritura por defecto, y eso no debe decidir el resultado. Las rutas de `--claude` y `MTH_CLAUDE` han de ser absolutas. Una ejecución normal dura unos segundos.
+Coste y límites: modelo `haiku` por defecto, `--max-turns 8`, `--max-budget-usd 0.5`, plazo de 180 s, sin ajustes ni plugins del usuario (`--setting-sources project`), con un entorno mínimo (sin `GH_TOKEN` ni credenciales de nube que no sean del proveedor elegido) y con permiso explícito solo para escribir `canary-ok.txt` y ejecutar `touch canary-leak.txt` (rutas exactas): en modo no interactivo Claude Code deniega la escritura por defecto, y eso no debe decidir el resultado. Las rutas de `--claude` y `MTH_CLAUDE` han de ser absolutas.
 
 Cuando pasa, registra en `<git-common-dir>/mth/smoke` la salida literal de `claude --version`; un fallo borra el registro y un resultado no concluyente lo deja como estaba. Con agentes del catálogo instalados, `mth session` y `mth doctor` avisan si no hay registro o si Claude Code ha cambiado desde la última prueba. Ejecútalo al actualizar Claude Code y antes de cada versión del plugin.
 

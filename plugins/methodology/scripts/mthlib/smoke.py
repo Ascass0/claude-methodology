@@ -26,7 +26,7 @@ from .log import Tracer
 from .agent_guard import redact
 from .setup import register_launcher
 
-PASS, FAIL, INCONCLUSIVE = 0, 1, 3  # exit codes; 2 stays for usage errors
+PASS, FAIL, NOT_RUN, INCONCLUSIVE = 0, 1, 2, 3  # exit codes; NOT_RUN: the test could not be prepared (or bad usage)
 CANARY = "mth-canary"
 OK_FILE, LEAK_FILE, OK_TEXT = "canary-ok.txt", "canary-leak.txt", "mth-canary"
 DEFAULT_MODEL, MAX_TURNS, MAX_BUDGET_USD, DEFAULT_TIMEOUT = "haiku", "8", "0.5", 180.0
@@ -99,10 +99,10 @@ def find_claude(explicit: str | None, environ: dict[str, str] | None = None) -> 
     return Path(found) if found and Path(found).is_absolute() else None
 
 
-def claude_version(claude: Path) -> str | None:
+def claude_version(claude: Path, environ: dict[str, str] | None = None) -> str | None:
     """Output of ``claude --version`` (None when it cannot be run within ``VERSION_TIMEOUT``)."""
     try:
-        proc = subprocess.run([str(claude), "--version"], capture_output=True, text=True, env=_environment(os.environ),
+        proc = subprocess.run([str(claude), "--version"], capture_output=True, text=True, env=_environment(os.environ if environ is None else environ),
                               timeout=VERSION_TIMEOUT, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -148,7 +148,7 @@ def warnings(git: Git, catalog_installed: bool, environ: dict[str, str] | None =
     if not catalog_installed:
         return []
     claude = find_claude(None, environ)
-    current = claude_version(claude) if claude else None
+    current = claude_version(claude, environ) if claude else None
     if current is None:
         return (["No se pudo determinar la versión de Claude Code: no se puede comprobar si sus restricciones "
                  "están verificadas (indica la ruta con MTH_CLAUDE)."] if explain_unknown else [])
@@ -314,9 +314,12 @@ def judge(found: Evidence, finished: int | None, last_line: str) -> Result:
     if found.ok_file and not found.allowed_write:
         return Result(FAIL, "FALLA: el control positivo se ejecutó sin que el guard lo viera; el hook no está en el "
                       "camino del subagente.")
-    if found.denied_bash and found.allowed_write and found.ok_file:
+    if found.denied_bash and found.allowed_write and found.ok_file and finished == 0:
         return Result(PASS, "PASA: el guard bloqueó el comando del subagente y permitió su escritura.")
     why = ["El subagente no llegó a usar las herramientas (el modelo no las llamó)."]
+    if found.denied_bash and found.allowed_write and found.ok_file:  # all the evidence, but claude did not end cleanly
+        why = ["Hay toda la evidencia, pero claude no terminó por sí mismo con éxito: un cierre a medias puede dejar "
+               "efectos sin observar."]
     if found.denied_bash and not (found.allowed_write and found.ok_file):
         why = ["El guard bloqueó el comando pero falta el control positivo (la escritura permitida): "
                "no se puede afirmar que el hook esté en el camino."]
@@ -371,10 +374,10 @@ def smoke(git: Git, explicit: str | None = None, model: str = DEFAULT_MODEL, tim
         tracer.event("smoke.interrupted")
         raise
     except MthError as exc:
-        tracer.event("smoke.error", error=exc.message)
+        tracer.event("smoke.error", category="setup", error=redact(exc.message)[:300])
         raise
     except Exception as exc:  # a bug: leave its trace before it surfaces
-        tracer.event("smoke.error", error=f"{type(exc).__name__}: {exc}"[:300], bug=True)
+        tracer.event("smoke.error", category="bug", bug=True, error=redact(f"{type(exc).__name__}: {exc}")[:300])
         raise
     tracer.event("smoke.verdict", outcome=result.outcome, claude_version=version, evidence=asdict(found),
                  summary=result.summary, leftover=bool(leftover_of(result)))
@@ -388,33 +391,34 @@ def _run(git: Git, explicit: str | None, model: str, timeout: float,
         return (Result(INCONCLUSIVE, "NO CONCLUYENTE: no se encuentra la CLI de Claude Code.",
                        ["Indica su ruta absoluta con --claude o MTH_CLAUDE, o ponla en el PATH."]),
                 Evidence(), None)
-    version = claude_version(claude)
+    version = claude_version(claude, environ)
     if version is None:
         return Result(INCONCLUSIVE, f"NO CONCLUYENTE: {claude} --version no responde."), Evidence(), None
     found = Evidence()
     scratch: Path | None = None
-    leftover = None
     previous = _arm_term()  # before mkdtemp: a signal in between must still clean up
     try:
         try:
-            scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
-            repo = build_repo(scratch)
-        except (MthError, OSError) as exc:
-            raise MthError(f"No se pudo preparar el repositorio temporal de la prueba: "
-                           f"{getattr(exc, 'message', exc)}",
-                           hint="Comprueba el espacio, los permisos de TMPDIR y que git responde; "
-                                "no se ha registrado nada.") from exc
-        try:
-            finished, last_line = run_claude(command(claude, model, prompt(scratch), scratch), scratch, environ,
-                                             timeout)
-        except OSError as exc:  # the binary vanished or cannot start after --version answered
-            return (Result(INCONCLUSIVE, f"NO CONCLUYENTE: no se pudo ejecutar {claude}: {exc}."), Evidence(),
-                    version)
-        found = evidence(repo)
-        result = judge(found, finished, last_line)
+            try:
+                scratch = Path(tempfile.mkdtemp(prefix="mth-smoke-")).resolve()
+                repo = build_repo(scratch)
+            except (MthError, OSError) as exc:
+                raise MthError(f"No se pudo preparar el repositorio temporal de la prueba: "
+                               f"{getattr(exc, 'message', exc)}",
+                               hint="Comprueba el espacio, los permisos de TMPDIR y que git responde; "
+                                    "no se ha registrado nada.") from exc
+            try:
+                finished, last_line = run_claude(command(claude, model, prompt(scratch), scratch), scratch,
+                                                 environ, timeout)
+            except OSError as exc:  # the binary vanished or cannot start after --version answered
+                result = Result(INCONCLUSIVE, f"NO CONCLUYENTE: no se pudo ejecutar {claude}: {exc}.")
+            else:
+                found = evidence(repo)
+                result = judge(found, finished, last_line)
+        finally:
+            leftover = _remove(scratch)  # while the handler still exists: a signal here is still an interruption
     finally:
         _disarm_term(previous)
-        leftover = _remove(scratch)
     result.details.insert(0, f"Claude Code: {version} ({claude})")
     if leftover:
         result.details.append(leftover)
