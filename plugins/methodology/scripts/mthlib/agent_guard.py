@@ -63,7 +63,8 @@ _JQ_DENIED_TEXT = re.compile(r"\benv\b|\$ENV|input_filename|\$__loc__|\b(?:impor
 _SECRET = re.compile(
     r"(?i)(\b[A-Z][A-Z0-9_]*=|\bauthorization[\"']?\s*[:=]\s*[\"']?(?:bearer\s+|token\s+|basic\s+)?"
     r"|\b(?:token|password|passwd|secret)[\"']?\s*[:=\s]\s*[\"']?)[^\s\"']+"
-    r"|\bgh[pousr]_[A-Za-z0-9]+|\bsk-[A-Za-z0-9_-]+")
+    r"|\bgh[pousr]_[A-Za-z0-9]+|\bsk-[A-Za-z0-9_-]+"
+    r"|(?<=://)[^\s/@:]+:[^\s/@]+(?=@)|\bbearer\s+[A-Za-z0-9._~+/=-]{8,}")  # URL userinfo, bare bearer tokens
 
 
 class Denied(Exception):

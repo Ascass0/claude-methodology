@@ -507,6 +507,9 @@ def doctor(start: Path) -> int:
             report(False, finding, blocking=False)
         if not findings:
             report(True, f"Agentes del catálogo: {', '.join(installed)}")
+        from . import smoke  # lazy: smoke builds on setup (SPEC-0014)
+        for notice in smoke.warnings(git, True, explain_unknown=True):
+            report(False, notice, blocking=False)
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)

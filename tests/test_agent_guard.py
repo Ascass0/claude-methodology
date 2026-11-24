@@ -527,5 +527,24 @@ class LauncherRecordTests(unittest.TestCase):
             self.assertEqual(path, (root / ".git/mth/launcher").resolve())
 
 
+class RedactionTests(unittest.TestCase):
+    def test_url_credentials_and_bearer_tokens_are_redacted(self):
+        # verifies: SPEC-0014/AC-12
+        text = agent_guard.redact("git fetch https://usuario:clave-secreta@host/repo ; Authorization: Bearer abcdef0123456789")
+        self.assertNotIn("clave-secreta", text)
+        self.assertNotIn("abcdef0123456789", text)
+        self.assertIn("host/repo", text)  # what is not a secret stays readable
+
+    def test_the_decision_log_never_holds_them(self):
+        # verifies: SPEC-0014/AC-12
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+            agent_guard._record(tmp, {"agent_type": "x", "tool_name": "Bash", "tool_input": {"command": "curl"}},
+                                "deny", "rule", "falló https://u:clave-secreta@h/ Bearer abcdef0123456789", "x")
+            log = (Path(tmp) / ".git" / "mth" / "agent-guard.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn("clave-secreta", log)
+        self.assertNotIn("abcdef0123456789", log)
+
+
 if __name__ == "__main__":
     unittest.main()
