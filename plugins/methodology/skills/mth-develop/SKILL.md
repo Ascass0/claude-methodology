@@ -78,6 +78,8 @@ Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, par
 
 ## 6. Versión → skill `mth-release`
 
+Tras integrar en `development`, decide si publicar y con qué nivel con `mth release --plan` (solo lee; lo calcula `mth`, no tú): `publicar` → `mth release`; `esperar` → sigues con el trabajo abierto y vuelves a decidir al integrarlo; `no publicar` → el mantenimiento sin fragmento no versiona; `bloqueado` → corriges el nivel del fragmento, o avisas a la persona si es `1.0.0`. El detalle está en la skill `mth-release`.
+
 Cuando `development` reúne features completas y estables entre sí, publica. Los hotfix se cierran con `mth hotfix finish`.
 
 ## Cuándo parar (PRINCIPLES §11)

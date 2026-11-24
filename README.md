@@ -72,6 +72,10 @@ La adopción es una entrevista guiada, con la skill `mth-init`:
 
 Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs, revisores, roles, prefijos de rama propios), se comprueba con `mth doctor` y se integra con `mth integrate`. En una adopción gradual, `trace.legacy_base` evita que el contenido anterior bloquee la trazabilidad; `mth trace --legacy` lo lista.
 
+### Decisión de versión
+
+Si un cambio merece versión, y de qué nivel, lo decide `mth` en código ([SPEC-0017](specs/features/SPEC-0017-decision-autonoma-de-version.md), [ADR-0013](specs/adr/process/ADR-0013-decision-autonoma-de-version.md)). Tras integrar en `development`, `mth release --plan` (solo lee) imprime los fragmentos con su nivel, la versión propuesta y una decisión con sus motivos: `publicar`, `esperar` (hay ramas abiertas con fragmento), `no publicar` (sin fragmentos: el mantenimiento no versiona) o `bloqueado`. El nivel sigue SemVer: el mayor entre los fragmentos, con un mínimo por fragmento que se comprueba al integrar y al publicar (`feat` → `minor`; `fix`, `hotfix` y `security` → `patch`; eliminar funcionalidad → `minor` en `0.y.z` y `major` desde `1.0.0`). `1.0.0` declara la API estable: solo se publica con `mth release --allow-major`, decisión de la persona. Con `autonomy.level = full`, el agente publica cuando la decisión es `publicar`.
+
 ### Forja
 
 `forge` (`github`, `gitlab` o `none`) se deduce de la URL del remoto: `github.com` es `github`; `gitlab.com` o un host cuya primera etiqueta es `gitlab`, `gitlab`; el resto, `none`. Con `github` todo funciona como se describe aquí. Con `gitlab` o `none`, `mth` nunca fusiona, porque no puede comprobar la CI:

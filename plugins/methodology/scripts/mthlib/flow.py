@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import branches, changelog, commits, forge, review, versions
+from . import branches, changelog, commits, forge, releaseplan, review, versions
 from .config import Config
 from .errors import MthError
 from .files import atomic_write
@@ -128,6 +128,7 @@ def _fragment(ctx: Ctx, info: branches.BranchInfo) -> changelog.Fragment | None:
     refs_required = info.kind in ctx.cfg["commits"]["require_refs"] or info.kind == "hotfix"
     registry = ctx.registry()
     errors = changelog.validate(frag, registry, refs_required, ctx.cfg.vocab)
+    errors += changelog.bump_errors(frag, ctx.git.latest_version(ctx.cfg.tag_prefix), ctx.cfg.vocab)  # SPEC-0017
     spec_kind = ctx.cfg["trace"]["spec_kind"]
     if info.kind == "feat" and not any(registry.kind_of(r) == spec_kind for r in frag.refs):
         errors.append(f"{frag.path.name}: una feature debe referenciar su spec ({spec_kind}) en refs")
@@ -513,7 +514,54 @@ def _release_manual(ctx: Ctx, head: str, version: str) -> None:
         f"{main}. Cuando acabes, vuelve a ejecutarlo: marca lo que git confirma y limpia.")
 
 
-def release(ctx: Ctx) -> None:
+def _open_work(ctx: Ctx) -> list[str]:
+    """Remote work branches that will bring a changelog fragment (their content may belong in the next version)."""
+    cfg, found = ctx.cfg, []
+    try:
+        remote = ctx.git.remote_branches()
+    except MthError as exc:  # SPEC-0017: decide without them rather than refuse; never recommend waiting for unknown work
+        warn(f"No se pudieron leer las ramas del remoto ({exc.message}); se decide sin ellas.")
+        return []
+    for name in remote:
+        if name in (cfg.main, cfg.development) or branches.is_release(name):
+            continue
+        try:
+            info = branches.parse(name, cfg)
+        except MthError:
+            continue
+        if info is not None and not info.is_child and info.kind in cfg["changes"]["required_for"]:
+            found.append(name)
+    return sorted(found)
+
+
+def _decide_release(ctx: Ctx, allow_major: bool) -> releaseplan.Plan:
+    """Validate the fragments of ``development`` and decide whether and how to publish (SPEC-0017)."""
+    cfg = ctx.cfg
+    fragments = changelog.load_all(ctx.path("changes"))
+    registry = ctx.registry()
+    errors = [e for f in fragments for e in changelog.validate(f, registry, False, cfg.vocab)]
+    if errors:
+        raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
+    plan = releaseplan.decide(fragments, ctx.git.latest_version(cfg.tag_prefix), _open_work(ctx), allow_major, cfg.vocab)
+    ctx.tracer.event("release.plan", decision=plan.decision, level=plan.level, version=plan.version,
+                     reasons=plan.reasons)
+    return plan
+
+
+def release_plan(ctx: Ctx, allow_major: bool = False) -> None:
+    """Say whether development should be published and at which level, writing nothing (SPEC-0017)."""
+    g, cfg = ctx.git, ctx.cfg
+    if g.current_branch() != cfg.development:
+        raise MthError(f"`mth release --plan` se ejecuta desde {cfg.development}.",
+                       hint=f"Cambia a {cfg.development} (por ejemplo, tras `mth integrate`).")
+    g.require_clean()
+    g.fetch()
+    g.checkout_synced(cfg.development)
+    for line in _decide_release(ctx, allow_major).lines():
+        say(line)
+
+
+def release(ctx: Ctx, allow_major: bool = False) -> None:
     """Publish development as a new version (resumable after any failure)."""
     g, cfg = ctx.git, ctx.cfg
     g.require_clean()
@@ -532,17 +580,16 @@ def release(ctx: Ctx) -> None:
         g.checkout_synced(head)
     else:
         g.checkout_synced(cfg.development)
-        fragments = changelog.load_all(ctx.path("changes"))
-        if not fragments:
+        plan = _decide_release(ctx, allow_major)
+        if plan.decision == releaseplan.SKIP:
             raise MthError("No hay fragmentos en changes/: nada que publicar.")
-        registry = ctx.registry()
-        errors = [e for f in fragments for e in changelog.validate(f, registry, False, cfg.vocab)]
-        if errors:
-            raise MthError("Fragmentos inválidos:\n" + "\n".join(f"  - {e}" for e in errors))
+        if plan.decision == releaseplan.BLOCKED:
+            raise MthError("Publicación bloqueada:\n" + "\n".join(f"  - {r}" for r in plan.reasons))
+        fragments = changelog.load_all(ctx.path("changes"))
         _gate_trace(ctx)
         _gate_tests(ctx)
         _check_version_files(ctx)
-        version = changelog.next_version(g.latest_version(cfg.tag_prefix), changelog.highest_bump(fragments))
+        version = plan.version
         head = f"release/v{version}"
         g.out("checkout", "-b", head)
         _apply_release(ctx, version, fragments)

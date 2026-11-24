@@ -11,7 +11,8 @@ from . import (__version__, agent_guard, agents, branches, catalog, changelog, c
                review, session, setup, survey)
 from .config import load
 from .errors import MthError
-from .flow import Ctx, commit, hotfix_finish, integrate, new_doc, release, required_reviewers, start, sync
+from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
+                   start, sync)
 from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
@@ -415,7 +416,9 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--title", required=True, help="cabecera Conventional Commits en inglés")
     s.add_argument("--summary")
     s.add_argument("--summary-file")
-    sub.add_parser("release", help="publica development como nueva versión")
+    s = sub.add_parser("release", help="publica development como nueva versión")
+    s.add_argument("--plan", action="store_true", help="solo decide si publicar y con qué nivel (no escribe nada)")
+    s.add_argument("--allow-major", action="store_true", help="permite publicar 1.0.0 (decisión de la persona)")
     s = sub.add_parser("hotfix", help="cierra una rama hotfix")
     s.add_argument("action", choices=["finish"])
     sub.add_parser("status", help="posición de la rama actual en el flujo")
@@ -505,7 +508,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     elif c == "integrate":
         integrate(ctx, args.title, _text(args.summary, args.summary_file, "summary"))
     elif c == "release":
-        release(ctx)
+        release_plan(ctx, args.allow_major) if args.plan else release(ctx, args.allow_major)
     elif c == "hotfix":
         hotfix_finish(ctx)
     return 0
