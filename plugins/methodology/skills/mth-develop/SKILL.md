@@ -1,6 +1,6 @@
 ---
 name: mth-develop
-description: Ciclo completo de desarrollo autónomo dirigido por specs de claude-methodology, de la spec a la versión publicada. Úsala siempre al empezar cualquier trabajo de desarrollo en un repo que tenga .claude/methodology.toml (implementar una feature, corregir un bug, mantenimiento, continuar una tarea a medias) y cuando dudes de qué paso toca a continuación.
+description: Ciclo autónomo de desarrollo dirigido por specs, de la spec a la versión publicada. Úsala siempre al empezar trabajo de desarrollo en un repo con .claude/methodology.toml (feature, bug, mantenimiento, tarea a medias) y cuando dudes del siguiente paso.
 ---
 
 # Ciclo de desarrollo

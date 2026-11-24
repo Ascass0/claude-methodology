@@ -1,6 +1,6 @@
 ---
 name: mth-reconfigure
-description: Vuelve a pasar la entrevista de adopción de claude-methodology en un repo ya adoptado, para reestructurar la metodología entera, revisar un bloque (flujo git, documentación, calidad, agente) o cambiar una sola decisión. Úsala cuando la persona quiera cambiar cómo se aplica la metodología (autonomía, revisores, ramas, hooks, versiones, specs, idioma, modelos), rehacer el formulario inicial o reestructurar la configuración, en lugar de editar .claude/methodology.toml a mano.
+description: Repite la entrevista de adopción en un repo ya adoptado para reestructurar la metodología, revisar un bloque (flujo git, documentación, calidad, agente) o cambiar una decisión. Úsala si quieren cambiar autonomía, revisores, ramas, hooks, versiones, specs, idioma o modelos, en lugar de editar .claude/methodology.toml a mano.
 model: opus
 ---
 

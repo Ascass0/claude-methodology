@@ -1,6 +1,6 @@
 ---
 name: mth-commit
-description: Hace commits temáticos con mensaje Conventional Commits validado, cuerpo descriptivo y trailer Refs. Úsala cada vez que tengas un conjunto coherente de cambios listo para confirmar, en lugar de git commit; también para decidir cómo agrupar cambios en commits.
+description: Hace commits temáticos con Conventional Commits validado, cuerpo y trailer Refs. Úsala en lugar de git commit con cada conjunto coherente de cambios, y para decidir cómo agrupar commits.
 ---
 
 # Commits temáticos

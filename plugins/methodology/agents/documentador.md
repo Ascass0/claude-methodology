@@ -1,6 +1,6 @@
 ---
 name: documentador
-description: Actualiza la documentación afectada por una rama (docs, README, guías, fragmento de changelog y registros documentales que exija el repo) siguiendo las convenciones del repositorio. Úsalo al cerrar cualquier rama que cambie comportamiento, interfaces, configuración u operación, antes de la revisión.
+description: Actualiza la documentación que afecta una rama (docs, README, guías, fragmento de changelog y registros documentales del repo) según sus convenciones. Úsalo al cerrar una rama que cambie comportamiento, interfaces, configuración u operación, antes de la revisión.
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: mth-init
-description: Adopta claude-methodology en un repositorio con una entrevista guiada, o diagnostica su adopción. Úsala cuando el contexto de sesión diga que el repo no ha adoptado la metodología, cuando el usuario pida preparar o configurar un repo con ella, o cuando algo de la metodología falle (hook commit-msg, configuración inválida, gh sin autenticar).
+description: Adopta claude-methodology en un repo con una entrevista guiada, o diagnostica su adopción. Úsala si el contexto dice que el repo no ha adoptado la metodología, si piden prepararlo o configurarlo, o si algo falla (hook commit-msg, configuración inválida, gh sin autenticar).
 model: opus
 ---
 
