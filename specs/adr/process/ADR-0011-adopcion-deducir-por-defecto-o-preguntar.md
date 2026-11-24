@@ -28,7 +28,7 @@ Fuerzas: determinismo (§2); proporcionalidad (§12); cada pregunta tiene un cos
 2. **Reglas mínimas de deducción** (la spec las concreta y las prueba):
    - Rama de integración: si hay una única candidata (`develop` o `dev`) y todas las ramas de trabajo del remoto salen de ella → esa. Una rama «sale de» la candidata cuando su punto de bifurcación con ella no es ya parte de `main`. Sin ninguna candidata → `por_defecto`: se crea `development`. Con varias candidatas, o sin ramas de trabajo que lo confirmen → `decision`.
    - Hook `commit-msg` ajeno → se encadena siempre. "Sustituir" NO DEBE ofrecerse.
-   - CI y publicación: dependen de `forge` (ADR de `forge`, pendiente de escribir). Mientras no exista, un remoto que no sea `github.com` → sin CI de la metodología, y `mth release` (y `mth integrate`) fuera de las capacidades activas; la publicación es manual.
+   - CI y publicación: dependen de `forge` ([ADR-0012](ADR-0012-forja-configurable.md), que sustituye a la regla provisional original: un remoto que no era `github.com` desactivaba la CI de la metodología, `mth release` y `mth integrate`). Con `forge` distinto de `github`, `ci` se deduce a `sin-ci` y las capacidades son parciales: `mth` hace la parte local y la persona la de la forja.
    - Comando de tests: si existe un objetivo `test` en `Makefile` o `justfile` → ese, porque es el punto de entrada del proyecto. Otras herramientas equivalentes se añaden cuando el inventario las detecte.
    - Idioma: el detectado, si la detección es inequívoca (`es` o `en`); si no hay texto suficiente → `por_defecto` (`es`).
    - Escalera de modelos → `por_defecto`.
@@ -53,4 +53,4 @@ Detalle en [SPEC-0015](../../features/SPEC-0015-adopcion-deducir-por-defecto-o-p
 
 - **Positivas:** en el caso observado, 12 preguntas en 3 rondas pasan a 4 en una. La persona ve qué pierde antes de confirmar, y cada deducción queda trazada con su evidencia.
 - **Negativas:** hay que mantener las reglas de deducción y sus tests. Una regla mal escrita decide algo equivocado sin preguntar.
-- **Riesgo aceptado:** una deducción errónea. Lo mitiga el resumen previo, que permite corregir cualquier valor antes de escribir, y `mth reconfigure`. En concreto, un GitHub Enterprise con otro dominio se detecta como «no GitHub» hasta que exista el ADR de `forge`; el resumen lo muestra y se corrige respondiendo `ci`.
+- **Riesgo aceptado:** una deducción errónea. Lo mitiga el resumen previo, que permite corregir cualquier valor antes de escribir, y `mth reconfigure`. En concreto, un GitHub Enterprise con otro dominio se detecta como `none` ([ADR-0012](ADR-0012-forja-configurable.md)); el resumen lo muestra y se corrige respondiendo `forja` y `ci`.
