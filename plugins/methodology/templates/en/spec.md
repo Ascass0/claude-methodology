@@ -2,37 +2,41 @@
 
 - Status: draft
 - Date: {{DATE}}
+- Format: compact
 - ADRs: —
 - Supersedes: —
 
-<!-- Statuses: draft → approved → implemented → superseded.
-     "implemented" requires every AC to have a test with `verifies: {{ID}}/AC-NN`. -->
+<!-- Statuses: draft → approved → implemented → superseded. "implemented" requires a test with `verifies: {{ID}}/AC-NN` per AC.
+     Style (PRINCIPLES §7): one rule per line, tables instead of paragraphs, references by ID, no introduction or summary. -->
 
 ## Context
 
-The problem it solves and why now.
+Problem and why now.
 
 ## Goal
 
-What must be true when it is done.
+What is true when done.
 
 ## Out of scope
 
-What is explicitly not done.
+- What is not done.
 
 ## Behaviour
 
-Expected behaviour, interfaces and data. Link the ADRs that justify it.
+Interfaces and data, one rule per line. Link the ADRs.
 
 ## Failure modes
 
-| Failure | Detection | Response (safe state) |
-|---|---|---|
-| | | |
+| ID | Cause | Response (safe state) | Covered by |
+|---|---|---|---|
+| FM-01 | | | AC-01 |
 
 ## Acceptance criteria
 
-- **AC-01**: Verifiable, automatable check.
+<!-- EARS: WHEN <trigger>, <system> SHALL <response> · IF <condition>, THEN <system> SHALL <response>
+     · WHILE <state>, <system> SHALL <response> · <system> SHALL <response> (ubiquitous) -->
+
+- **AC-01**: WHEN <trigger>, <system> SHALL <verifiable response>.
 
 <!-- If you delegate two or more tasks to dev-* agents, add here the level-2 section
      "Work plan" with the format of the mth-spec skill. -->

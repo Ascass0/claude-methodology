@@ -1,6 +1,6 @@
 ---
 name: mth-spec
-description: Crea y mantiene specs (qué se construye y cómo se acepta) y ADRs (por qué se decide) con numeración, plantilla y estados correctos. Úsala antes de implementar cualquier feature sin spec, cuando haya que tomar una decisión estructural, cuando cambie el estado de una spec o un ADR, o cuando la implementación revele que una spec estaba mal.
+description: Crea y mantiene specs (qué se construye y cómo se acepta) y ADR (por qué se decide) con numeración, plantilla y estados correctos. Úsala antes de implementar una feature sin spec, ante una decisión estructural, al cambiar el estado de una spec o ADR, o si la implementación revela que la spec estaba mal.
 ---
 
 # Specs y ADRs
@@ -16,8 +16,10 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
 
 ## Contenido de una spec
 
-- **Criterios de aceptación** con formato `- **AC-01**: …`, cada uno verificable por un test automático. Si un criterio no se puede automatizar, reformúlalo.
-- **Modos de fallo**: cada fila genera al menos un test.
+Plantillas en formato compacto (`- Formato: compacto`, ADR-0014): una regla por línea, tablas en lugar de párrafos, referencias por ID, sin introducción ni resumen final. `mth trace` valida el formato; los documentos sin la marca no se validan.
+
+- **Criterios de aceptación** `- **AC-01**: …` en EARS, una línea cada uno y verificable por un test automático: `CUANDO <disparador>, <sistema> DEBE …` · `SI <condición>, ENTONCES <sistema> DEBE …` · `MIENTRAS <estado>, <sistema> DEBE …` · `<sistema> DEBE …`. Si no se puede automatizar, reformúlalo.
+- **Modos de fallo**: tabla `| ID | Causa | Respuesta | Cubierto por |` con `FM-NN` únicos (referencia: `SPEC-NNNN/FM-NN`). Cada fila genera al menos un test.
 - **Fuera de alcance** explícito: evita que la feature crezca.
 - Enlaza los ADR que la justifican (`ADR-NNNN`).
 - **Plan de trabajo** (solo si vas a delegar dos o más tareas en agentes `dev-*`; skill `mth-develop`):
@@ -40,6 +42,10 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
   - Ninguna decisión de diseño para quien implementa: si una tarea obliga a elegir un esquema, una API o cómo tratar un caso límite, fíjalo antes en la spec.
   - Columna opcional `Modelo` al final de la cabecera (`| Tarea | Oleada | Ficheros | Criterios | Modelo |`), con un alias de `models.ladder`; vacía = `models.task`. Elige el nivel por dificultad: `haiku` para lo mecánico (renombrados, fragmentos, ajustes repetitivos con el patrón dado), `sonnet` para implementar con criterio dentro de una spec cerrada, `opus` solo si la tarea exige razonamiento que la spec no puede fijar del todo.
   - Máximo 50 tareas. Valídalo con `mth plan check SPEC-NNNN` (también lo comprueba `mth trace`).
+
+## Contenido de un ADR
+
+Campos fijos: `Contexto` (pocas líneas), `Decisión` (numerada, con DEBE / NO DEBE), `Rechazado` (`alternativa: motivo`), `Consecuencias` (`+` / `−` / `riesgo`), `Impone` (`[script]`, `[hook]` o `[criterio]` y dónde). Se recorta prosa, no razonamiento.
 
 ## Estados
 

@@ -154,6 +154,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Cada AC tiene test | `mth trace`: una spec `implementada` sin `verifies: SPEC/AC` falla |
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
+| Specs y ADR con `- Formato: compacto`: criterios en EARS, `FM-NN` únicos y referenciados, campos fijos del ADR | `mth trace` (los documentos sin la marca no se validan). Ver [ADR-0014](specs/adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) |
 | Conventional Commits + cuerpo + `Refs:` | `mth commit`, hook `commit-msg`, revalidación en `mth integrate` |
 | Modelo de ramas y ramas hijas | `mth branch` (nombres validados; hijas con `--`) |
 | Hijas integradas antes que la padre | `mth integrate` |

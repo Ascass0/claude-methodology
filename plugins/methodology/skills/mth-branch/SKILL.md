@@ -1,6 +1,6 @@
 ---
 name: mth-branch
-description: Crea ramas de trabajo según el modelo de ramas de claude-methodology (feat, fix, chore, hotfix, prefijos del repo y ramas hijas con --). Úsala siempre que vayas a empezar un cambio, a dividir una feature en partes, o si estás en main o development y necesitas modificar algo.
+description: Crea ramas de trabajo (feat, fix, chore, hotfix, prefijos del repo, ramas hijas con --). Úsala al empezar un cambio, al dividir una feature o si estás en main o development y necesitas modificar algo.
 ---
 
 # Ramas

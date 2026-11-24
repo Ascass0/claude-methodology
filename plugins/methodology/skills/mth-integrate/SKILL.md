@@ -1,6 +1,6 @@
 ---
 name: mth-integrate
-description: Integra la rama actual en su destino (rama hija en su padre, feature en development) mediante PR con merge commit, tras pasar todos los gates. Úsala cuando una rama esté terminada; nunca hagas merges, push a ramas protegidas ni gh pr merge a mano.
+description: Integra la rama actual en su destino (hija en su padre, feature en development) por PR con merge commit tras los gates. Úsala con la rama terminada; nunca hagas merges, push a ramas protegidas ni gh pr merge a mano.
 ---
 
 # Integración

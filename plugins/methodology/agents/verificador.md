@@ -1,6 +1,6 @@
 ---
 name: verificador
-description: Verifica que una rama cumple de verdad su spec. Comprueba que cada criterio de aceptación y cada modo de fallo están implementados y cubiertos por un test que realmente lo comprueba, que los tests pasan y que lo que afirman commits, fragmento y docs es cierto. Se invoca desde la skill mth-review; es el primer revisor de correctitud.
+description: Verifica que una rama cumple su spec, con cada criterio de aceptación y modo de fallo implementado y cubierto por un test que lo comprueba, tests en verde, y commits, fragmento y docs veraces. Lo invoca mth-review; es el primer revisor de correctitud.
 tools: Read, Grep, Glob, Bash
 ---
 
