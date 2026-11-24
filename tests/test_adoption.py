@@ -123,13 +123,16 @@ class SurveyTests(RepoCase):
         self.write("README.md", "# demo\n")
         self.commit()
         new = self.inventory()
-        self.assertTrue(set(new.asked()) <= {"revisores", "autonomia", "idioma", "ci", "modelos"}, new.asked())
-        self.assertEqual(new.asked(), ["revisores", "autonomia", "idioma", "ci", "modelos"])
+        # The repository has no remote, so the CI question is settled without asking (SPEC-0015).
+        self.assertEqual([q["id"] for q in new.questions], ["autonomia", "revisores", "idioma", "ci", "modelos"])
+        self.assertEqual(new.asked(), ["autonomia", "revisores"])
         self.write("src/app.py")
         self.write(".github/workflows/ci.yml", "on: push\n")
         self.write("docs/guia.md", "El proyecto es para la gente que trabaja con el código de la casa. " * 6)
         existing = self.inventory()
-        self.assertEqual(existing.asked(), ["alcance", "ramas", "tests", "revisores", "autonomia", "modelos"])
+        self.assertEqual([q["id"] for q in existing.questions],
+                         ["autonomia", "alcance", "ramas", "tests", "revisores", "ci", "modelos"])
+        self.assertEqual(existing.asked(), ["autonomia", "tests", "revisores"])
         self.write("tests/test_app.py")  # one test candidate: no question
         self.assertNotIn("tests", self.inventory().asked())
 
@@ -177,6 +180,7 @@ class SurveyTests(RepoCase):
 class AnswersTests(unittest.TestCase):
     def survey_of(self, profile: str, **signals) -> survey.Survey:
         found = {"files": 3, "branches": ["main"], "upstream": profile == "fork", "tags": None, "specs": [],
+                 "forge": "github", "integration": {"candidates": [], "working": 0, "from_candidate": 0},
                  "adrs": [], "agents": [], "agent_collisions": [], "claude_dirs": [], "instructions": [],
                  "commit_hook": False, "hook_managers": [], "release_tools": [], "version_files": [],
                  "ci": False, "tests": [], "language": "es", **signals}
@@ -198,7 +202,8 @@ class AnswersTests(unittest.TestCase):
             agents=["verificador", "security-reviewer"], agent_collisions=["verificador"],
             commit_hook=True, tags={"prefix": "rel-", "count": 3},
             version_files=[{"path": "package.json", "pattern": '"version":\\s*"(\\d+\\.\\d+\\.\\d+)"'}],
-            instructions=["CLAUDE.md"], language="en")
+            instructions=["CLAUDE.md"], language="en",
+            integration={"candidates": ["develop"], "working": 2, "from_candidate": 2})
         answers = {
             "alcance": {"option": "gradual"}, "ramas": {"option": "usar", "branch": "develop"},
             "commits": {"option": "encadenar"},
@@ -212,7 +217,8 @@ class AnswersTests(unittest.TestCase):
             "autonomia": {"option": "supervised"}, "idioma": {"option": "en"}, "ci": {"option": "crear"},
             "modelos": {"option": "ahorro"},
         }
-        self.assertEqual(sorted(answers), sorted(inventory.asked()))
+        self.assertEqual(sorted(answers), sorted(q["id"] for q in inventory.questions))
+        self.assertTrue(set(inventory.asked()) <= set(answers))
         cfg = self.config(inventory, answers)
         self.assertEqual(cfg["trace"]["legacy_base"], "a" * 40)
         self.assertEqual(cfg["branches"]["development"], "develop")
@@ -257,7 +263,7 @@ class AnswersTests(unittest.TestCase):
 
     def test_invalid_answers(self):
         # verifies: SPEC-0004/AC-08
-        inventory = self.survey_of("existing")
+        inventory = self.survey_of("existing", integration={"candidates": ["develop"], "working": 0, "from_candidate": 0})
         valid = {q: DEFAULT_ANSWERS[q] for q in inventory.asked()}
         cases = {
             "falta la respuesta": {k: v for k, v in valid.items() if k != "autonomia"},
@@ -283,7 +289,7 @@ class AdoptionFlowTests(unittest.TestCase):
 
     def answers(self, overrides: dict | None = None) -> Path:
         questions = json.loads(self.mth("survey", "--json"))["questions"]
-        answers = {q["id"]: DEFAULT_ANSWERS[q["id"]] for q in questions}
+        answers = {q["id"]: DEFAULT_ANSWERS[q["id"]] for q in questions if q["outcome"] == survey.DECISION}
         path = self.tmp / "answers.json"
         path.write_text(json.dumps({"answers": {**answers, **(overrides or {})}}), encoding="utf-8")
         return path
@@ -363,8 +369,8 @@ class AdoptionFlowTests(unittest.TestCase):
         self.assertIn(adr, files)
         text = (self.work / adr).read_text()
         self.assertIn("perfil **methodology**", text)
-        self.assertIn("| `autonomia` | `until-pr` | autonomy.level = until-pr | — |", text)
-        self.assertIn("| `instrucciones` | `repo` |", text)
+        self.assertIn("| `autonomia` | `decision` | `until-pr` | autonomy.level = until-pr | — |", text)
+        self.assertIn("| `instrucciones` | `decision` | `repo` |", text)
         self.assertIn("Pregunta antes de hacer commit.", text)
         cfg = tomllib.loads((self.work / ".claude/methodology.toml").read_text())
         self.assertEqual(cfg["trace"]["legacy_base"], self.git("rev-parse", "origin/main"))

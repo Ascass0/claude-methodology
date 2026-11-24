@@ -276,7 +276,13 @@ def _cmd_survey(args: argparse.Namespace) -> int:
     for key, value in result.signals.items():
         if value:
             print(f"· {key}: {value}")
-    print("Preguntas: " + ", ".join(f"{q['id']} ({q.get('current') or q['evidence']})" for q in result.questions))
+    for q in result.questions:
+        if q.get("current"):
+            print(f"Pregunta {q['id']}: {q['current']}")
+        elif q["outcome"] == survey.DECISION:
+            print(f"Pregunta {q['id']} (se pregunta): {q['evidence']}")
+        else:
+            print(f"Pregunta {q['id']} ({q['outcome']}): {q['answer'] or 'sin efecto'} — {q['basis']}")
     for w in result.warnings:
         warn(w)
     return 0
@@ -343,6 +349,7 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--config", help="configuración preparada (fuera del repo) en lugar de la plantilla")
     mode.add_argument("--answers", help="respuestas de la entrevista de adopción (JSON, skill mth-init)")
     mode.add_argument("--decline", action="store_true", help="desactiva el plugin en este repo (no versionado)")
+    s.add_argument("--plan", action="store_true", help="con --answers: muestra el plan de adopción sin escribir nada")
     s = sub.add_parser("survey", help="inventario del repo antes de adoptar (solo lectura)")
     s.add_argument("--json", action="store_true", help="salida en JSON para la skill mth-init")
     s.add_argument("--reconfigure", action="store_true", help="inventario de un repo adoptado (skill mth-reconfigure)")
@@ -448,7 +455,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.decline:
             setup.decline(Path.cwd())
         else:
-            setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config, args.answers)
+            setup.init(Path.cwd(), args.marketplace_repo, args.github, args.config, args.answers, args.plan)
         return 0
     if c == "survey":
         if args.only and not args.reconfigure:
