@@ -172,6 +172,41 @@ class ReleasePlanFlowTests(unittest.TestCase):
         self.assertTrue(plans[-1]["reasons"])
 
 
+class ReleaseFailureModeTests(ReleasePlanFlowTests):
+    """Failure modes of the decision; the base tests do not run again here."""
+
+    test_integrate_and_release_refuse_a_level_below_the_minimum = None
+    test_plan_reads_and_decides_without_writing = None
+    test_plan_waits_for_open_work_and_skips_maintenance = None
+    test_major_before_one_dot_zero_is_blocked_unless_allowed = None
+    test_release_publishes_what_the_plan_proposed_and_traces_it = None
+
+    def test_unreadable_remote_branches_are_not_a_reason_to_wait(self):
+        # verifies: SPEC-0017/AC-04
+        from unittest import mock
+        from mthlib import flow
+        from mthlib.errors import MthError
+        ctx = mock.Mock()
+        ctx.cfg.development, ctx.cfg.main = "development", "main"
+        ctx.git.remote_branches.side_effect = MthError("git no responde")
+        with mock.patch.object(flow, "warn") as warned:
+            self.assertEqual(flow._open_work(ctx), [])
+        self.assertIn("se decide sin ellas", warned.call_args.args[0])
+
+    def test_invalid_fragments_stop_the_decision(self):
+        # verifies: SPEC-0017/AC-03
+        test_mth._write(self.work / "changes/feat-gadget.md", "---\nbump: minor\nrefs: SPEC-9999\n---\n### Añadido\n- Cambio.\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "add invalid fragment")
+        self.git("push", "-q", "origin", "development")
+        for args in (("release", "--plan"), ("release",)):
+            with self.subTest(args=args):
+                out = self.mth(*args, ok=False)
+                self.assertIn("Fragmentos inválidos", out)
+                self.assertNotIn("Decisión:", out)
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", "release/*"), "")
+
+
 class SkillTests(unittest.TestCase):
     def test_skills_document_the_autonomous_decision(self):
         # verifies: SPEC-0017/AC-07

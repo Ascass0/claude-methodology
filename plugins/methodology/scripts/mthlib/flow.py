@@ -517,7 +517,12 @@ def _release_manual(ctx: Ctx, head: str, version: str) -> None:
 def _open_work(ctx: Ctx) -> list[str]:
     """Remote work branches that will bring a changelog fragment (their content may belong in the next version)."""
     cfg, found = ctx.cfg, []
-    for name in ctx.git.remote_branches():
+    try:
+        remote = ctx.git.remote_branches()
+    except MthError as exc:  # SPEC-0017: decide without them rather than refuse; never recommend waiting for unknown work
+        warn(f"No se pudieron leer las ramas del remoto ({exc.message}); se decide sin ellas.")
+        return []
+    for name in remote:
         if name in (cfg.main, cfg.development) or branches.is_release(name):
             continue
         try:
