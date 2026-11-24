@@ -40,6 +40,12 @@ def _write(path: Path, text: str) -> None:
     path.write_text(textwrap.dedent(text).lstrip(), encoding="utf-8")
 
 
+def set_forge_url(case, url: str) -> None:
+    """Name the remote as a forge does; git still reaches the local bare repository (case.remote)."""
+    case.git("config", f"url.{case.remote}.insteadOf", url)
+    case.git("remote", "set-url", "origin", url)
+
+
 class CommitMessageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -244,6 +250,7 @@ class EndToEndTests(unittest.TestCase):
                     "MTH_CI_POLL_SECONDS": "0", "MTH_CI_POLL_ATTEMPTS": "1"}
         self.git("init", "-q", "--bare", "-b", "main", str(self.remote), cwd=self.tmp)
         self.git("clone", "-q", str(self.remote), str(self.work), cwd=self.tmp)
+        set_forge_url(self, "https://github.com/acme/app.git")
         self.git("checkout", "-q", "-b", "main")
         (self.work / "README.md").write_text("# demo\n")
         self.git("add", "-A")

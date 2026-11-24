@@ -145,6 +145,11 @@ class Git:
                 i += 1
         return changed
 
+    def remote_url(self) -> str | None:
+        """The URL configured for the remote, as written (no ``insteadOf`` rewriting); None without remote."""
+        proc = self.try_run("config", "--get", f"remote.{self.remote}.url")
+        return proc.stdout.strip() or None if proc.returncode == 0 else None
+
     def github_repo(self) -> str | None:
         """``owner/repo`` of the remote when it is hosted on GitHub, else None."""
         proc = self.try_run("remote", "get-url", self.remote)

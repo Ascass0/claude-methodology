@@ -16,34 +16,34 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from . import forge
 from .config import CONFIG_PATH, Config
 from .errors import MthError
 from .git import Git
 
 PLUGIN_AGENTS = Path(__file__).resolve().parents[2] / "agents"
 # Ordered by dependency (SPEC-0015): the precedence between the repo and the methodology conditions autonomy and the rest.
-QUESTIONS = ("instrucciones", "autonomia", "alcance", "ramas", "commits", "versiones", "specs", "decisiones",
+QUESTIONS = ("instrucciones", "autonomia", "forja", "alcance", "ramas", "commits", "versiones", "specs", "decisiones",
              "tests", "revisores", "colision", "idioma", "ci", "modelos")
 DEDUCED, DEFAULT, DECISION = "deducida", "por_defecto", "decision"
 OUTCOMES = (DEDUCED, DEFAULT, DECISION)
-FORGE_GITHUB, FORGE_OTHER = "github", "other"
 _INTEGRATION_NAMES = ("develop", "dev", "development")
 _MAX_WORKING_BRANCHES = 50
 PROFILES = ("new", "existing", "methodology", "fork")
 RECONFIGURE = "reconfigure"
 # Thematic blocks of the reconfiguration form (SPEC-0011): every question in exactly one.
 GROUPS: dict[str, tuple[str, ...]] = {
-    "flujo": ("ramas", "commits", "versiones", "ci"),
+    "flujo": ("forja", "ramas", "commits", "versiones", "ci"),
     "documentacion": ("alcance", "specs", "decisiones", "idioma", "instrucciones"),
     "calidad": ("tests", "revisores", "colision"),
     "agente": ("autonomia", "modelos"),
 }
 # "revisores" is always asked: it also offers the catalog agents (SPEC-0012).
 BASE: dict[str, tuple[str, ...]] = {
-    "new": ("revisores", "autonomia", "idioma", "modelos"),
-    "existing": ("alcance", "revisores", "autonomia", "modelos"),
-    "methodology": ("alcance", "revisores", "autonomia", "modelos"),
-    "fork": ("alcance", "versiones", "revisores", "autonomia", "modelos"),
+    "new": ("forja", "revisores", "autonomia", "idioma", "modelos"),
+    "existing": ("forja", "alcance", "revisores", "autonomia", "modelos"),
+    "methodology": ("forja", "alcance", "revisores", "autonomia", "modelos"),
+    "fork": ("forja", "alcance", "versiones", "revisores", "autonomia", "modelos"),
 }
 PROCESS_SIGNALS = ("specs", "adrs", "agents", "claude_dirs", "instructions", "commit_hook",
                    "hook_managers", "release_tools")
@@ -226,7 +226,8 @@ def signals(git: Git) -> tuple[dict[str, Any], list[str]]:
         "files": sum(1 for f in files if not _TRIVIAL.match(f)),
         "branches": sorted(b for b in _BRANCHES if b in remote_branches),
         "upstream": git.ok("remote", "get-url", "upstream"),
-        "forge": FORGE_GITHUB if git.github_repo() else FORGE_OTHER,
+        "forge": forge.forge_of(git.remote_url()),
+        "forge_host": forge.host_of(git.remote_url() or ""),
         "integration": _integration(git, sorted(b for b in _BRANCHES if b in remote_branches)),
         "tags": _tags(git),
         "specs": _doc_dirs(reader, files, _SPEC_DIRS, skip=_ADR_DIRS),
@@ -264,7 +265,7 @@ def questions(profile: str, found: dict[str, Any]) -> list[dict[str, Any]]:
     Base questions of the profile plus those triggered by a signal (SPEC-0004); then the
     resolution rules of SPEC-0015 decide which of them the person has to answer.
     """
-    github = found["forge"] == FORGE_GITHUB
+    github = found["forge"] == forge.GITHUB
     triggers = {
         "ramas": (None if "development" in found["branches"] or profile == "new"  # a new repo just creates it
                   else "no existe development en el remoto"),
@@ -279,7 +280,7 @@ def questions(profile: str, found: dict[str, Any]) -> list[dict[str, Any]]:
         "instrucciones": _evidence(found, "instructions"),
         "idioma": None if found["language"] == "es" else f"idioma detectado: {found['language']}",
         "ci": ("no hay workflows en .github/workflows" if not found["ci"]
-               else None if github else "el remoto no es GitHub"),
+               else None if github else f"forge = {found['forge']}"),
     }
     out = []
     for qid in QUESTIONS:
@@ -335,9 +336,19 @@ def _resolve_commits(profile: str, found: dict[str, Any]) -> Resolution:
 
 
 def _resolve_releases(profile: str, found: dict[str, Any]) -> Resolution | None:
-    if found["forge"] == FORGE_GITHUB:
+    """Without GitHub, tags with a prefix and no other release tool: the numbering simply continues (SPEC-0016)."""
+    tags = found["tags"]
+    if found["forge"] == forge.GITHUB or not tags or not tags["prefix"] or found["release_tools"]:
         return None
-    return Resolution(DEDUCED, None, "el remoto no es GitHub: mth release no está disponible y se publica a mano")
+    return Resolution(DEDUCED, {"option": "continuar", "version_files": found["version_files"]},
+                      f"etiquetas {tags['prefix']}X.Y.Z y ninguna herramienta de publicación: se continúa la numeración "
+                      "(mth release hace la parte local; el merge y la publicación son manuales)")
+
+
+def _resolve_forge(profile: str, found: dict[str, Any]) -> Resolution:
+    host = found.get("forge_host")
+    where = f"el host del remoto es {host}" if host else "no hay remoto legible"
+    return Resolution(DEDUCED, {"option": found["forge"]}, f"{where}: forja {found['forge']}")
 
 
 def _resolve_tests(profile: str, found: dict[str, Any]) -> Resolution | None:
@@ -356,9 +367,10 @@ def _resolve_language(profile: str, found: dict[str, Any]) -> Resolution:
 
 
 def _resolve_ci(profile: str, found: dict[str, Any]) -> Resolution | None:
-    if found["forge"] == FORGE_GITHUB:
+    if found["forge"] == forge.GITHUB:
         return None
-    return Resolution(DEDUCED, {"option": "sin-ci"}, "el remoto no es GitHub: la CI de la metodología (GitHub Actions) no aplica")
+    return Resolution(DEDUCED, {"option": "sin-ci"},
+                      f"forge = {found['forge']}: la CI de la metodología (GitHub Actions) no aplica")
 
 
 def _resolve_models(profile: str, found: dict[str, Any]) -> Resolution:
@@ -367,20 +379,18 @@ def _resolve_models(profile: str, found: dict[str, Any]) -> Resolution:
 
 _RESOLVERS: dict[str, Callable[[str, dict[str, Any]], Resolution | None]] = {
     "alcance": _resolve_scope, "ramas": _resolve_branches, "commits": _resolve_commits,
-    "versiones": _resolve_releases, "tests": _resolve_tests, "idioma": _resolve_language,
+    "versiones": _resolve_releases, "forja": _resolve_forge, "tests": _resolve_tests, "idioma": _resolve_language,
     "ci": _resolve_ci, "modelos": _resolve_models,
 }
 
 
 def offered(qid: str, found: dict[str, Any]) -> list[str] | None:
     """Options of ``qid`` that work with this inventory; None when every option does (ADR-0011, point 3)."""
-    github = found["forge"] == FORGE_GITHUB
+    github = found["forge"] == forge.GITHUB
     if qid == "commits":
         return ["encadenar"]
     if qid == "ramas":
         return (["usar"] if found["integration"]["candidates"] else []) + ["crear"]
-    if qid == "versiones" and not github:
-        return []
     if qid == "ci" and not github:
         return ["sin-ci"]
     return None
@@ -443,6 +453,7 @@ def current(cfg: Config, qid: str) -> str:
         "autonomia": f"autonomy.level = {d['autonomy']['level']}",
         "idioma": f"language.docs = {d['language']['docs']}",
         "ci": f"ci.required = {str(d['ci']['required']).lower()}",
+        "forja": f"forge = {d['forge']}",
         "modelos": f"models.ladder = {', '.join(d['models']['ladder'])}; task = {d['models']['task']}; "
                    f"review = {d['models']['review']}",
     }

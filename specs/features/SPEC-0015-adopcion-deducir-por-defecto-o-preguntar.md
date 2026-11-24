@@ -22,7 +22,7 @@ La entrevista de [SPEC-0004](SPEC-0004-adopcion-guiada.md) pregunta todo lo que 
 
 ## Fuera de alcance
 
-- Detectar otras forjas (GitLab, Bitbucket) y soportarlas: lo hará el ADR de `forge`. Aquí, todo remoto que no sea `github.com` cuenta como «no GitHub».
+- Detectar otras forjas (GitLab, Bitbucket) y soportarlas: lo hace [SPEC-0016](SPEC-0016-forja-configurable.md) con la clave `forge`, que sustituye a la regla provisional de esta spec.
 - Cambiar `mth reconfigure`: sigue mostrando todas las preguntas con su valor actual; solo cambia el orden de las preguntas y desaparece la opción `sustituir`.
 - Que `mth` pida la confirmación: la pide la skill `mth-init` ([ADR-0011](../adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md), alternativas).
 
@@ -41,7 +41,7 @@ La entrevista de [SPEC-0004](SPEC-0004-adopcion-guiada.md) pregunta todo lo que 
 
 Las preguntas siguen el orden `instrucciones`, `autonomia`, `alcance`, `ramas`, `commits`, `versiones`, `specs`, `decisiones`, `tests`, `revisores`, `colision`, `idioma`, `ci`, `modelos`: primero la precedencia entre el repo y la metodología, después lo que depende de ella.
 
-El inventario añade dos señales: `forge` (`github` si el remoto está en `github.com`, `other` en otro caso) e `integration` (ramas candidatas a integración y cuántas ramas de trabajo salen de ellas).
+El inventario añade dos señales: `forge` (`github`, `gitlab` o `none`, deducida del remoto; ver [SPEC-0016](SPEC-0016-forja-configurable.md)) e `integration` (ramas candidatas a integración y cuántas ramas de trabajo salen de ellas).
 
 ### Reglas de resolución
 
@@ -50,16 +50,16 @@ El inventario añade dos señales: `forge` (`github` si el remoto está en `gith
 | `alcance` | `deducida`: `gradual`, en los perfiles `existing`, `methodology` y `fork` |
 | `ramas` | `deducida` (`usar` la candidata) si hay una única rama candidata (`develop` o `dev`) y todas las ramas de trabajo del remoto, al menos una, salen de ella; `por_defecto` (`crear`) si no hay candidata; `decision` en los demás casos. Una rama sale de la candidata si el punto de bifurcación entre ambas no es ya parte de `main` |
 | `commits` | `deducida`: `encadenar`. Solo se ofrece `encadenar` |
-| `versiones` | Si `forge` es `other`: `deducida` sin efecto en la configuración (`answer` nulo): `mth release` no está disponible. Con GitHub, `decision` |
+| `versiones` | Sin GitHub, con etiquetas con prefijo y sin herramienta de publicación: `deducida` (`continuar`, con los `version_files` detectados); en otro caso, `decision` ([SPEC-0016](SPEC-0016-forja-configurable.md)) |
 | `tests` | `deducida` (`comando`) si el inventario detecta `make test` o `just test` (receta llamada exactamente `test` en `Makefile` o `justfile`: `test-all` no cuenta; `make test` primero); en otro caso, `decision` |
 | `idioma` | `deducida` si el idioma detectado es `es` o `en`; `por_defecto` (`es`) si es `unknown` |
-| `ci` | Si `forge` es `other`: `deducida` (`sin-ci`) y solo se ofrece `sin-ci`. Con GitHub, `decision` |
+| `ci` | Si `forge` no es `github`: `deducida` (`sin-ci`) y solo se ofrece `sin-ci`. Con GitHub, `decision` |
 | `modelos` | `por_defecto`: `equilibrado` |
 | `instrucciones`, `autonomia`, `specs`, `decisiones`, `revisores`, `colision` | `decision` |
 
-`ci` se pregunta también cuando `forge` es `other`, aunque haya workflows, para que el resultado conste.
+`ci` se pregunta también cuando `forge` no es `github`, aunque haya workflows, para que el resultado conste.
 
-Si `forge` es `other`, no se ofrecen `versiones: continuar` ni `prefijo` (usan `mth release`) ni `ci: crear` (crea un workflow de GitHub Actions). Si no hay candidata a integración, no se ofrece `ramas: usar`.
+Si `forge` no es `github`, no se ofrece `ci: crear` (crea un workflow de GitHub Actions). Si no hay candidata a integración, no se ofrece `ramas: usar`.
 
 ### Respuestas: `mth init --answers`
 
@@ -75,7 +75,7 @@ Si `forge` es `other`, no se ofrecen `versiones: continuar` ni `prefijo` (usan `
 1. **Deducido**: cada pregunta, su valor y su evidencia.
 2. **Por defecto**: cada pregunta y su valor; se cambia con `mth reconfigure`.
 3. **Decidido**: cada pregunta, la opción elegida y su efecto.
-4. **Capacidades**: activas y desactivadas, cada una con su motivo. Son: `mth integrate`, `mth release` (ambas necesitan GitHub), CI exigida para integrar (`ci.required`), tests antes de integrar (`commands.test`), validación de mensajes de commit y agentes del catálogo.
+4. **Capacidades**: activas y desactivadas, cada una con su motivo. Son: `mth integrate`, `mth release` (con otra forja, solo su parte local; [SPEC-0016](SPEC-0016-forja-configurable.md)), CI exigida para integrar (`ci.required`), tests antes de integrar (`commands.test`), validación de mensajes de commit y agentes del catálogo.
 
 ### ADR de adopción
 
@@ -103,7 +103,7 @@ La tabla del ADR de adopción tiene una columna **Resultado** (`deducida`, `por_
 - **AC-01**: `mth survey --json` da a cada pregunta un `outcome` entre `deducida`, `por_defecto` y `decision`, con `answer` y `basis` en las no decididas, y `asked()` devuelve solo las `decision`, en el orden de dependencia (`instrucciones` y `autonomia` primero).
 - **AC-02**: `ramas` es `deducida` con una única candidata de la que salen todas las ramas de trabajo, `por_defecto` (`crear`) sin candidata y `decision` con varias candidatas o sin ramas de trabajo que la confirmen.
 - **AC-03**: Con un hook `commit-msg` ajeno, `commits` es `deducida` (`encadenar`), solo se ofrece `encadenar` y `sustituir` se rechaza.
-- **AC-04**: Con un remoto que no es GitHub, `ci` es `deducida` (`sin-ci`), `versiones` es `deducida` sin efecto, y `versiones: continuar`, `versiones: prefijo` y `ci: crear` se rechazan; con GitHub se preguntan.
+- **AC-04**: Con una forja que no es GitHub, `ci` es `deducida` (`sin-ci`) y `ci: crear` se rechaza; con GitHub se pregunta. La deducción de `versiones` sin GitHub la fija [SPEC-0016](SPEC-0016-forja-configurable.md).
 - **AC-05**: `tests` es `deducida` con un objetivo `test` en `Makefile` o `justfile` aunque haya más candidatos, y `decision` si no.
 - **AC-06**: `idioma` es `deducida` con idioma detectado (`es` o `en`) y `por_defecto` (`es`) con `unknown`; `modelos` es `por_defecto`; `alcance` es `deducida` (`gradual`) en `existing`, `methodology` y `fork`.
 - **AC-07**: `mth init --answers` exige respuesta solo a las `decision`, aplica el valor de las demás, deja que una respuesta explícita lo sustituya y rechaza una opción no ofrecida o una pregunta fuera del inventario.

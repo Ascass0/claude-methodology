@@ -124,14 +124,14 @@ class SurveyTests(RepoCase):
         self.commit()
         new = self.inventory()
         # The repository has no remote, so the CI question is settled without asking (SPEC-0015).
-        self.assertEqual([q["id"] for q in new.questions], ["autonomia", "revisores", "idioma", "ci", "modelos"])
+        self.assertEqual([q["id"] for q in new.questions], ["autonomia", "forja", "revisores", "idioma", "ci", "modelos"])
         self.assertEqual(new.asked(), ["autonomia", "revisores"])
         self.write("src/app.py")
         self.write(".github/workflows/ci.yml", "on: push\n")
         self.write("docs/guia.md", "El proyecto es para la gente que trabaja con el código de la casa. " * 6)
         existing = self.inventory()
         self.assertEqual([q["id"] for q in existing.questions],
-                         ["autonomia", "alcance", "ramas", "tests", "revisores", "ci", "modelos"])
+                         ["autonomia", "forja", "alcance", "ramas", "tests", "revisores", "ci", "modelos"])
         self.assertEqual(existing.asked(), ["autonomia", "tests", "revisores"])
         self.write("tests/test_app.py")  # one test candidate: no question
         self.assertNotIn("tests", self.inventory().asked())
@@ -180,7 +180,7 @@ class SurveyTests(RepoCase):
 class AnswersTests(unittest.TestCase):
     def survey_of(self, profile: str, **signals) -> survey.Survey:
         found = {"files": 3, "branches": ["main"], "upstream": profile == "fork", "tags": None, "specs": [],
-                 "forge": "github", "integration": {"candidates": [], "working": 0, "from_candidate": 0},
+                 "forge": "github", "forge_host": "github.com", "integration": {"candidates": [], "working": 0, "from_candidate": 0},
                  "adrs": [], "agents": [], "agent_collisions": [], "claude_dirs": [], "instructions": [],
                  "commit_hook": False, "hook_managers": [], "release_tools": [], "version_files": [],
                  "ci": False, "tests": [], "language": "es", **signals}
@@ -205,7 +205,8 @@ class AnswersTests(unittest.TestCase):
             instructions=["CLAUDE.md"], language="en",
             integration={"candidates": ["develop"], "working": 2, "from_candidate": 2})
         answers = {
-            "alcance": {"option": "gradual"}, "ramas": {"option": "usar", "branch": "develop"},
+            "forja": {"option": "gitlab"}, "alcance": {"option": "gradual"},
+            "ramas": {"option": "usar", "branch": "develop"},
             "commits": {"option": "encadenar"},
             "versiones": {"option": "continuar", "version_files": inventory.signals["version_files"]},
             "specs": {"option": "mapear", "path": "rfcs", "kind": "RFC", "pattern": "RFC-\\d{3}"},

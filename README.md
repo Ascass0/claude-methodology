@@ -28,7 +28,7 @@ claude-methodology/
 ## Requisitos
 
 - Python ≥ 3.11 instalado (no hace falta que sea el `python3` activo: el lanzador `scripts/mth` busca uno válido aunque pyenv o un venv apunten a otra versión; `MTH_PYTHON` lo fija), git y [GitHub CLI](https://cli.github.com/) autenticado (`gh auth login`).
-- Un repositorio en GitHub con `main` y al menos un commit.
+- Un repositorio con `main` y al menos un commit. El flujo completo (PR, CI, merges y releases) necesita GitHub; en GitLab o sin forja, `mth` hace la parte local y te dice los pasos manuales (ver «Forja»).
 
 ## Instalación
 
@@ -59,7 +59,7 @@ Mientras un repositorio no tiene `.claude/methodology.toml`, el plugin está ina
 La adopción es una entrevista guiada, con la skill `mth-init`:
 
 1. `mth survey` inventaria el repo sin modificarlo (ramas, specs y ADR existentes, agentes, hooks, herramientas de release, CI, forja del remoto) y resuelve cada pregunta como `deducida` (la resuelve una señal, con su evidencia), `por_defecto` o `decision` ([SPEC-0015](specs/features/SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md), [ADR-0011](specs/adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md)).
-2. Opus presenta la metodología y pregunta, en una sola ronda y empezando por la precedencia entre el repo y la metodología, solo las `decision`. Solo ofrece las opciones que funcionan con el repo: por ejemplo, un hook `commit-msg` ajeno solo se encadena, y sin GitHub no se ofrece `mth release`.
+2. Opus presenta la metodología y pregunta, en una sola ronda y empezando por la precedencia entre el repo y la metodología, solo las `decision`. Solo ofrece las opciones que funcionan con el repo: por ejemplo, un hook `commit-msg` ajeno solo se encadena, y sin GitHub no se ofrece `ci: crear`.
 3. `mth init --answers <json> --plan` muestra, sin escribir nada, lo deducido, lo que va por defecto, lo decidido y las capacidades activas y desactivadas con su motivo. Con la confirmación de la persona, `mth init --answers <json>` convierte las respuestas en `.claude/methodology.toml` y en el ADR de adopción, que registra el resultado de cada pregunta.
 4. Si no se quiere adoptar, `mth init --decline` desactiva el plugin en ese repo (`.claude/settings.local.json`, no versionado).
 
@@ -71,6 +71,20 @@ La adopción es una entrevista guiada, con la skill `mth-init`:
 - con `--github`: solo merge commits en el repo y un ruleset que protege `main` y `development` (PR obligatorio, sin borrado ni force-push).
 
 Después se ajusta `.claude/methodology.toml` (comando de tests, esquema de IDs, revisores, roles, prefijos de rama propios), se comprueba con `mth doctor` y se integra con `mth integrate`. En una adopción gradual, `trace.legacy_base` evita que el contenido anterior bloquee la trazabilidad; `mth trace --legacy` lo lista.
+
+### Decisión de versión
+
+Si un cambio merece versión, y de qué nivel, lo decide `mth` en código ([SPEC-0017](specs/features/SPEC-0017-decision-autonoma-de-version.md), [ADR-0013](specs/adr/process/ADR-0013-decision-autonoma-de-version.md)). Tras integrar en `development`, `mth release --plan` (solo lee) imprime los fragmentos con su nivel, la versión propuesta y una decisión con sus motivos: `publicar`, `esperar` (hay ramas abiertas con fragmento), `no publicar` (sin fragmentos: el mantenimiento no versiona) o `bloqueado`. El nivel sigue SemVer: el mayor entre los fragmentos, con un mínimo por fragmento que se comprueba al integrar y al publicar (`feat` → `minor`; `fix`, `hotfix` y `security` → `patch`; eliminar funcionalidad → `minor` en `0.y.z` y `major` desde `1.0.0`). `1.0.0` declara la API estable: solo se publica con `mth release --allow-major`, decisión de la persona. Con `autonomy.level = full`, el agente publica cuando la decisión es `publicar`.
+
+### Forja
+
+`forge` (`github`, `gitlab` o `none`) se deduce de la URL del remoto: `github.com` es `github`; `gitlab.com` o un host cuya primera etiqueta es `gitlab`, `gitlab`; el resto, `none`. Con `github` todo funciona como se describe aquí. Con `gitlab` o `none`, `mth` nunca fusiona, porque no puede comprobar la CI:
+
+- `mth integrate` supera los gates locales, sube la rama, deja el título y la descripción del MR en `.work/merge-request/` y lista los pasos manuales (abrir el MR, esperar a la CI, fusionar con merge commit y volver a ejecutar `mth integrate`, que detecta el merge y limpia).
+- `mth release` calcula la versión, genera el `CHANGELOG.md`, prepara y sube `release/vX.Y.Z` y lista los pasos manuales (MR a `main`, etiqueta, release y MR de vuelta a `development`), marcando los que git confirma al repetirlo.
+- `mth hotfix finish` no está soportado; `mth doctor` no pide `gh` ni CI; el guard bloquea `glab mr merge` igual que `gh pr merge`.
+
+El soporte completo de GitLab (`glab`, estado de los pipelines, releases) queda fuera: se abrirá un ADR propio cuando haya demanda.
 
 ### Reestructurar la metodología
 
@@ -103,6 +117,7 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 | `hooks.commit_msg` | Qué hacer con un hook `commit-msg` ajeno: `own` (lo deja), `replace` (instala el de mth) o `chain` (lo ejecuta antes de validar). Ver [SPEC-0006](specs/features/SPEC-0006-hooks-commit-msg-encadenados.md) |
 | `autonomy.level` | `full` (por defecto), `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, ramas, commits y push). Ver [SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md) y [ADR-0004](specs/adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) |
 | `language.docs` | Idioma de docs, specs, ADR, changelog y PR: `es` (por defecto) o `en`. Código y commits, siempre en inglés. Ver [SPEC-0008](specs/features/SPEC-0008-idioma-de-la-documentacion-configurable.md) |
+| `forge` | Forja del remoto: `github` (por defecto), `gitlab` o `none`. Se deduce del remoto al adoptar. Ver [SPEC-0016](specs/features/SPEC-0016-forja-configurable.md) y [ADR-0012](specs/adr/process/ADR-0012-forja-configurable.md) |
 | `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
 | `[agents.<agente>]` | Variables de un agente del catálogo (`bench`, `databases`…). Opcional; solo admite las claves que declara ese agente. Requiere plugin ≥ 0.8.0 (un plugin anterior la rechaza, ver [SPEC-0009](specs/features/SPEC-0009-actualizacion-del-plugin-con-configuracion-mas-nueva.md)) |
 | `work.dirs` | Subdirectorios propios del repo en `.work/`, además de los de serie. Ver [Directorio de trabajo local](#directorio-de-trabajo-local) |

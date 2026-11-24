@@ -34,6 +34,10 @@ mth integrate --title "feat(runner): ephemeral container per task" \
 
 Es idempotente: si falla a mitad (CI en rojo, red), corrige y vuelve a ejecutarlo.
 
+## Con `forge` = `gitlab` o `none`
+
+`mth integrate` hace los mismos gates, sube la rama y deja el título y la descripción del MR en `.work/merge-request/<rama>.md`, pero **no fusiona** (no puede comprobar la CI) ni llama a `gh`. Termina con los pasos manuales: abrir el MR, esperar a la CI, fusionar con merge commit y volver a ejecutar el mismo `mth integrate`, que detecta el merge y limpia la rama. Muéstrale esos pasos a la persona tal cual y espera: no hagas el merge por otra vía (el guard bloquea `glab mr merge`).
+
 ## Hotfix
 
 Una rama `hotfix/` de primer nivel no se integra: se publica con `mth hotfix finish` (skill `mth-release`).

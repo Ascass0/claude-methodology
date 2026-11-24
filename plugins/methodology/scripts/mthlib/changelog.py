@@ -25,6 +25,7 @@ from .ids import IdRegistry
 BUMPS = ("patch", "minor", "major")
 MARKER = "<!-- mth:releases -->"
 DEFAULT_BUMP = {"feat": "minor", "fix": "patch", "hotfix": "patch", "security": "patch"}
+STABLE = (1, 0, 0)  # from here on, an incompatible change is a major version (SemVer 2.0)
 _PLACEHOLDER = re.compile(r"<[^>\n]+>")
 _FRONT = re.compile(r"^---\n(?P<meta>.*?)\n---\n(?P<body>.*)$", re.DOTALL)
 
@@ -98,6 +99,28 @@ def validate(frag: Fragment, registry: IdRegistry, refs_required: bool,
         if any(_PLACEHOLDER.search(b) for b in bullets):
             errors.append(f"{name}: contiene texto de plantilla '<...>' sin completar")
     return errors
+
+
+def minimum_bump(frag: Fragment, current: tuple[int, int, int], vocab: lang.Vocabulary = lang.ES) -> tuple[str, str]:
+    """Lowest level the fragment can declare, and why (SPEC-0017): by type, and for removals by version."""
+    kind = frag.path.name.split("-", 1)[0]
+    level, why = ("minor", f"tipo {kind}") if kind == "feat" else ("patch", f"tipo {kind}")
+    removed = vocab.changelog_sections[3]
+    if frag.sections.get(removed):
+        needed = "major" if current >= STABLE else "minor"
+        if BUMPS.index(needed) > BUMPS.index(level):
+            level, why = needed, f"elimina funcionalidad (sección '{removed}')"
+    return level, why
+
+
+def bump_errors(frag: Fragment, current: tuple[int, int, int], vocab: lang.Vocabulary = lang.ES) -> list[str]:
+    """Error when the declared level is below the minimum (an unknown level is ``validate``'s business)."""
+    if frag.bump not in BUMPS:
+        return []
+    need, why = minimum_bump(frag, current, vocab)
+    if BUMPS.index(frag.bump) < BUMPS.index(need):
+        return [f"{frag.path.name}: bump '{frag.bump}' por debajo del mínimo '{need}' ({why})"]
+    return []
 
 
 def load_all(directory: Path) -> list[Fragment]:
