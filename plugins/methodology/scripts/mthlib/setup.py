@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from . import adoption, agents, changelog, commits, lang, survey, versions, work
+from . import adoption, agents, changelog, commits, forge, lang, survey, versions, work
 from .files import atomic_write
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
@@ -242,7 +242,9 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
         config = source.read_text(encoding="utf-8")
     else:
         config = (TEMPLATES / "methodology.toml").read_text(encoding="utf-8").replace('main = "main"', f'main = "{main}"')
-        if not (root / ".github" / "workflows").is_dir():
+        detected = forge.forge_of(git.remote_url())
+        config = config.replace('forge = "github"', f'forge = "{detected}"')
+        if detected != forge.GITHUB or not (root / ".github" / "workflows").is_dir():
             config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
     cfg = parse(root, config, config_file or answers_file or "plantilla")  # validate before any mutation
     check_hook_mode(git, cfg["hooks"]["commit_msg"])
@@ -472,8 +474,11 @@ def doctor(start: Path) -> int:
         git.fetch()
         for branch in (cfg.main, cfg.development):
             report(git.remote_has(branch), f"Rama {branch} en el remoto")
-    gh_ok = GitHub(git.root)._gh("auth", "status", check=False).returncode == 0 if _has_gh() else False
-    report(gh_ok, "gh instalado y autenticado")
+    if cfg.forge == forge.GITHUB:
+        gh_ok = GitHub(git.root)._gh("auth", "status", check=False).returncode == 0 if _has_gh() else False
+        report(gh_ok, "gh instalado y autenticado")
+    else:
+        report(True, f"forge = {cfg.forge}: mth integrate y mth release hacen solo la parte local (SPEC-0016)")
     try:
         status = install_hook(git, cfg["hooks"]["commit_msg"])
         report(status != "foreign", f"Hook commit-msg: {status}")
@@ -520,7 +525,8 @@ def doctor(start: Path) -> int:
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)
-    report(cfg["ci"]["required"], "ci.required = true", blocking=False)
+    if cfg.forge == forge.GITHUB:
+        report(cfg["ci"]["required"], "ci.required = true", blocking=False)
     return problems
 
 

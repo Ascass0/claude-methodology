@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -27,7 +28,7 @@ def inventory(profile: str = "existing", **signals) -> survey.Survey:
     found = {"files": 500, "branches": ["main"], "upstream": profile == "fork", "tags": None, "specs": [],
              "adrs": [], "agents": [], "agent_collisions": [], "claude_dirs": [], "instructions": [],
              "commit_hook": False, "hook_managers": [], "release_tools": [], "version_files": [],
-             "ci": False, "tests": [], "language": "es", "forge": "github",
+             "ci": False, "tests": [], "language": "es", "forge": "github", "forge_host": "github.com",
              "integration": {"candidates": [], "working": 0, "from_candidate": 0}, **signals}
     return survey.Survey(profile, found, survey.questions(profile, found))
 
@@ -40,7 +41,7 @@ class ClassificationTests(unittest.TestCase):
     def test_every_question_has_an_outcome_in_dependency_order(self):
         # verifies: SPEC-0015/AC-01
         inv = inventory("methodology", commit_hook=True, adrs=[{"path": "docs/adr", "files": 3, "pattern": None}],
-                        instructions=["CLAUDE.md"], forge="other")
+                        instructions=["CLAUDE.md"], forge="gitlab")
         for question in inv.questions:
             self.assertIn(question["outcome"], survey.OUTCOMES)
             if question["outcome"] == survey.DECISION:
@@ -92,16 +93,25 @@ class ClassificationTests(unittest.TestCase):
 
     def test_without_github_nothing_that_needs_it_is_offered(self):
         # verifies: SPEC-0015/AC-04
-        other = inventory("existing", forge="other", tags={"prefix": "v", "count": 2})
-        self.assertEqual((other.question("ci")["outcome"], other.question("ci")["answer"], other.question("ci")["options"]),
-                         (survey.DEDUCED, {"option": "sin-ci"}, ["sin-ci"]))
-        releases = other.question("versiones")
-        self.assertEqual((releases["outcome"], releases["answer"], releases["options"]), (survey.DEDUCED, None, []))
-        for qid, answer in (("ci", {"option": "crear"}), ("versiones", {"option": "continuar"}),
-                            ("versiones", {"option": "prefijo", "tag_prefix": "r"})):
-            with self.subTest(qid=qid, answer=answer), self.assertRaises(MthError) as ctx:
-                adoption.validate(other, {**self.decisions(other), qid: answer})
-            self.assertIn("no funciona con este repo", ctx.exception.message)
+        # verifies: SPEC-0016/AC-04
+        for forge_name in ("gitlab", "none"):
+            with self.subTest(forge=forge_name):
+                other = inventory("existing", forge=forge_name, tags={"prefix": "v", "count": 2})
+                ci, forja = other.question("ci"), other.question("forja")
+                self.assertEqual((ci["outcome"], ci["answer"], ci["options"]), (survey.DEDUCED, {"option": "sin-ci"}, ["sin-ci"]))
+                self.assertEqual((forja["outcome"], forja["answer"]), (survey.DEDUCED, {"option": forge_name}))
+                with self.assertRaises(MthError) as ctx:
+                    adoption.validate(other, {**self.decisions(other), "ci": {"option": "crear"}})
+                self.assertIn("no funciona con este repo", ctx.exception.message)
+                releases = other.question("versiones")  # tags with a prefix and no release tool: the numbering continues
+                self.assertEqual((releases["outcome"], releases["answer"]),
+                                 (survey.DEDUCED, {"option": "continuar", "version_files": []}))
+                self.assertNotIn("options", releases)
+        for signals in ({"release_tools": ["release-please-config.json"]}, {"tags": {"prefix": "", "count": 2}}):
+            with self.subTest(signals=signals):
+                asked = inventory("existing", forge="gitlab", **{"tags": {"prefix": "v", "count": 2}, **signals})
+                self.assertEqual(asked.question("versiones")["outcome"], survey.DECISION)
+                adoption.validate(asked, {**self.decisions(asked), "versiones": {"option": "prefijo", "tag_prefix": "r"}})
         github = inventory("existing", tags={"prefix": "v", "count": 2})
         self.assertEqual([github.question(q)["outcome"] for q in ("ci", "versiones")], [survey.DECISION] * 2)
         self.assertNotIn("options", github.question("ci"))
@@ -137,7 +147,7 @@ class ClassificationTests(unittest.TestCase):
 class AnswersTests(unittest.TestCase):
     def test_only_decisions_are_required_and_anything_can_be_overridden(self):
         # verifies: SPEC-0015/AC-07
-        inv = inventory(language="en", forge="other", tags={"prefix": "v", "count": 1}, tests=["make test"])
+        inv = inventory(language="en", forge="gitlab", tags={"prefix": "v", "count": 1}, tests=["make test"])
         self.assertEqual(inv.asked(), ["autonomia", "revisores"])
         answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []}}
         adoption.validate(inv, answers)
@@ -149,7 +159,8 @@ class AnswersTests(unittest.TestCase):
         self.assertFalse(plan.data["ci"]["required"])
         self.assertEqual((by_question["idioma"].outcome, by_question["autonomia"].outcome),
                          (survey.DEDUCED, survey.DECISION))
-        self.assertEqual((by_question["versiones"].option, by_question["versiones"].outcome), ("ninguna", survey.DEDUCED))
+        self.assertEqual((by_question["versiones"].option, by_question["versiones"].outcome), ("continuar", survey.DEDUCED))
+        self.assertEqual((plan.data["forge"], by_question["forja"].outcome), ("gitlab", survey.DEDUCED))
         self.assertEqual(by_question["modelos"].outcome, survey.DEFAULT)
         # An explicit answer replaces the deduced value and is recorded as a decision.
         answers["idioma"] = {"option": "es"}
@@ -169,7 +180,7 @@ class AnswersTests(unittest.TestCase):
 
     def test_adoption_adr_records_the_outcome_of_every_question(self):
         # verifies: SPEC-0015/AC-09
-        inv = inventory("methodology", language="en", forge="other", commit_hook=True, tests=["make test"])
+        inv = inventory("methodology", language="en", forge="gitlab", commit_hook=True, tests=["make test"])
         answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []}}
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
@@ -201,6 +212,7 @@ class OfferedOptionsTests(unittest.TestCase):
         ("autonomia", "full"): {}, ("autonomia", "until-pr"): {}, ("autonomia", "supervised"): {},
         ("idioma", "es"): {}, ("idioma", "en"): {},
         ("ci", "sin-ci"): {}, ("ci", "crear"): {},
+        ("forja", "github"): {}, ("forja", "gitlab"): {}, ("forja", "none"): {},
         ("modelos", "equilibrado"): {}, ("modelos", "calidad"): {}, ("modelos", "ahorro"): {},
     }
 
@@ -247,7 +259,7 @@ class OfferedOptionsTests(unittest.TestCase):
 
     def test_paths_limit_a_reviewer_to_an_area(self):
         # verifies: SPEC-0015/AC-10
-        inv = inventory("methodology", agents=["api-reviewer"], forge="other", tests=["make test"])
+        inv = inventory("methodology", agents=["api-reviewer"], forge="gitlab", tests=["make test"])
         answers = {"revisores": {"option": "agentes", "agents": ["api-reviewer"],
                                  "paths": {"api-reviewer": ["api/**", "!api/docs/**"]}},
                    "instrucciones": {"option": "metodologia"}, "autonomia": {"option": "full"}}
@@ -282,7 +294,8 @@ class OfferedOptionsTests(unittest.TestCase):
 
 class SignalTests(RepoCase):
     def test_integration_signal_and_justfile(self):
-        # verifies: SPEC-0015/AC-02, SPEC-0015/AC-05
+        # verifies: SPEC-0015/AC-02
+        # verifies: SPEC-0015/AC-05
         self.write("README.md", SPANISH)
         self.write("justfile", "set shell := ['sh', '-c']\n\ntest *args:\n\tpytest\n")
         self.commit()
@@ -371,13 +384,15 @@ class BoundedSignalTests(RepoCase):
         self.assertEqual(self.inventory().question("ramas")["outcome"], survey.DECISION)
 
 
-class RealCaseTests(test_mth.EndToEndTests):
+class RealCaseTests(unittest.TestCase):
     """The adoption that motivated ADR-0011: GitLab, `dev`, a foreign hook, Makefile, 42 ADR, own CLAUDE.md."""
 
-    test_full_flow = None  # inherited end-to-end flow: not part of this case
+    tearDown = test_mth.EndToEndTests.tearDown
+    git = test_mth.EndToEndTests.git
+    mth = test_mth.EndToEndTests.mth
 
     def setUp(self):
-        super().setUp()
+        test_mth.EndToEndTests.setUp(self)
         write = lambda rel, text: test_mth._write(self.work / rel, text)  # noqa: E731
         write("README.md", SPANISH)
         write("Makefile", "test:\n\tpytest\n")
@@ -406,9 +421,7 @@ class RealCaseTests(test_mth.EndToEndTests):
         hook.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         hook.chmod(0o755)
         # The remote is on GitLab; git still reaches the local bare repository.
-        gitlab = "https://gitlab.com/acme/app.git"
-        self.git("config", f"url.{self.remote}.insteadOf", gitlab)
-        self.git("remote", "set-url", "origin", gitlab)
+        test_mth.set_forge_url(self, "https://gitlab.com/acme/app.git")
 
     def survey(self) -> dict:
         return json.loads(self.mth("survey", "--json"))
@@ -422,7 +435,8 @@ class RealCaseTests(test_mth.EndToEndTests):
         return str(path)
 
     def test_the_interview_asks_four_questions_in_one_round(self):
-        # verifies: SPEC-0015/AC-11, SPEC-0015/AC-01
+        # verifies: SPEC-0015/AC-11
+        # verifies: SPEC-0015/AC-01
         result = self.survey()
         by_id = {q["id"]: q for q in result["questions"]}
         self.assertEqual(result["profile"], "methodology")
@@ -432,14 +446,17 @@ class RealCaseTests(test_mth.EndToEndTests):
         self.assertEqual(by_id["commits"]["answer"], {"option": "encadenar"})
         self.assertEqual(by_id["tests"]["answer"]["command"], "make test")
         self.assertEqual((by_id["ci"]["outcome"], by_id["versiones"]["answer"], by_id["alcance"]["outcome"],
-                          by_id["modelos"]["outcome"]), ("deducida", None, "deducida", "por_defecto"))
+                          by_id["modelos"]["outcome"], by_id["forja"]["answer"]),
+                         ("deducida", {"option": "continuar", "version_files": []}, "deducida", "por_defecto",
+                          {"option": "gitlab"}))
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("una sola ronda", skill)
         self.assertIn("--plan", skill)
         self.assertLess(skill.index("--plan"), skill.index("--marketplace-repo"))
 
     def test_the_plan_is_shown_before_anything_is_written(self):
-        # verifies: SPEC-0015/AC-08, SPEC-0015/AC-11
+        # verifies: SPEC-0015/AC-08
+        # verifies: SPEC-0015/AC-11
         before = self.git("status", "--porcelain"), self.git("branch", "--list")
         out = self.mth("init", "--answers", self.answers(), "--plan")
         self.assertEqual((self.git("status", "--porcelain"), self.git("branch", "--list")), before)
@@ -447,8 +464,9 @@ class RealCaseTests(test_mth.EndToEndTests):
         positions = [out.index(text) for text in ("Deducido del repo (", "Por defecto (", "Decidido (", "Capacidades")]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("ramas: usar → branches.development = dev (única candidata (dev) y las 2 ramas", out)
-        self.assertIn("✗ mth integrate (PR con merge commit) — el remoto no es GitHub", out)
-        self.assertIn("✗ mth release (versión, etiqueta y CHANGELOG) — el remoto no es GitHub: la publicación es manual", out)
+        self.assertIn("✓ mth integrate (PR con merge commit) — forge = gitlab: solo la parte local", out)
+        self.assertIn("✓ mth release (versión, etiqueta y CHANGELOG) — forge = gitlab: solo la parte local", out)
+        self.assertIn("forja: gitlab → forge = gitlab (el host del remoto es gitlab.com", out)
         self.assertIn("✓ tests antes de integrar — commands.test = make test", out)
         self.assertIn("✓ validación de mensajes de commit — hooks.commit_msg = chain", out)
         self.assertIn("✗ CI exigida para integrar — ci.required = false", out)
@@ -466,6 +484,8 @@ class RealCaseTests(test_mth.EndToEndTests):
         adr = next((self.work / "docs/adr/methodology").glob("*.md")).read_text(encoding="utf-8")
         self.assertIn("| `ramas` | `deducida` | `usar` |", adr)
         self.assertIn("| `modelos` | `por_defecto` | `equilibrado` |", adr)
+        self.assertIn("| `forja` | `deducida` | `gitlab` |", adr)
+        self.assertEqual(tomllib.loads((self.work / ".claude/methodology.toml").read_text())["forge"], "gitlab")
         self.assertIn("| `autonomia` | `decision` | `full` |", adr)
 
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, catalog, lang, versions, work
+from . import __version__, catalog, forge, lang, versions, work
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -20,6 +20,7 @@ CONFIG_PATH = Path(".claude") / "methodology.toml"
 DEFAULTS: dict[str, Any] = {
     "version": 1,
     "remote": "origin",
+    "forge": "github",  # SPEC-0016
     "commands": {"test": None, "precommit": ""},
     "paths": {
         "docs": "docs",
@@ -63,6 +64,7 @@ AUTONOMY_LEVELS = ("full", "until-pr", "supervised")  # SPEC-0007
 _SCHEMA: dict[str, Any] = {
     "version": int,
     "remote": str,
+    "forge": str,
     "commands": {"test": str, "precommit": str},
     "paths": {"docs": str, "specs": str, "adr": str, "changes": str,
               "changelog": str, "claude_md": str, "tests": list},
@@ -107,6 +109,10 @@ class Config:
     @property
     def remote(self) -> str:
         return self.data["remote"]
+
+    @property
+    def forge(self) -> str:
+        return self.data["forge"]
 
     @property
     def main(self) -> str:
@@ -184,6 +190,8 @@ def _check_semantics(data: dict[str, Any]) -> None:
         raise MthError("'release.tag_prefix' debe empezar por una letra y contener solo letras, dígitos, '.', '_' o '-'.")
     versions.validate(data["release"]["version_files"])
     work.validate(data["work"]["dirs"])
+    if data["forge"] not in forge.FORGES:
+        raise MthError(f"'forge' = '{data['forge']}' debe ser uno de {', '.join(forge.FORGES)}.")
     if data["hooks"]["commit_msg"] not in HOOK_MODES:
         raise MthError(f"'hooks.commit_msg' = '{data['hooks']['commit_msg']}' debe ser uno de {', '.join(HOOK_MODES)}.")
     if data["autonomy"]["level"] not in AUTONOMY_LEVELS:

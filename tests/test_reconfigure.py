@@ -66,7 +66,7 @@ class InventoryTests(unittest.TestCase):
         cfg = self.adopt()
         self.assertEqual(sorted(q for block in survey.GROUPS.values() for q in block), sorted(survey.QUESTIONS))
         self.assertEqual(survey.reconfigure(self.repo, cfg, "agente,tests").asked(), ["autonomia", "tests", "modelos"])
-        self.assertEqual(survey.reconfigure(self.repo, cfg, "flujo").asked(), ["ramas", "commits", "versiones", "ci"])
+        self.assertEqual(survey.reconfigure(self.repo, cfg, "flujo").asked(), ["forja", "ramas", "commits", "versiones", "ci"])
         with self.assertRaises(MthError) as ctx:
             survey.reconfigure(self.repo, cfg, "agente,nada")
         self.assertIn("'nada' no es una pregunta ni un bloque", ctx.exception.message)
@@ -149,7 +149,7 @@ class ReconfigureTests(unittest.TestCase):
              "agente", "idioma: la pregunta no está en el inventario"),
             ({"revisores": {"option": "agentes", "agents": []}, "tests": {"option": "ninguno"}},
              "calidad", "review.paths.verificador"),
-            ({"ramas": {"option": "usar", "branch": "develop"}, "commits": {"option": "otro", "config": {}},
+            ({"forja": {"option": "github"}, "ramas": {"option": "usar", "branch": "develop"}, "commits": {"option": "otro", "config": {}},
               "versiones": {"option": "continuar"}, "ci": {"option": "sin-ci"}}, "flujo", "no existe en el remoto"),
             ({"commits": {"option": "encadenar"}}, "commits", "no hay ninguno"),
         ]
