@@ -56,7 +56,7 @@ class GuardTests(unittest.TestCase):
     def test_glab_merge_is_blocked_like_gh_merge(self):
         # verifies: SPEC-0016/AC-09
         protected = {"main", "development"}
-        for command in ("glab mr merge 5", "gh pr merge 3 --merge", "echo x && glab mr merge 7 --squash"):
+        for command in ("glab mr merge 5", "glab mr accept 5", "gh pr merge 3 --merge", "echo x && glab mr merge 7 --squash"):
             with self.subTest(command=command):
                 self.assertIn("mth integrate", guard.violation(command, protected, "feat/x") or "")
         for command in ("glab mr list", "glab mr view 5", "gh pr view 3", "glab ci status"):
@@ -178,6 +178,42 @@ class ManualForgeTests(unittest.TestCase):
         self.assertEqual(self.git("branch", "--show-current"), "development")
         self.assertEqual(self.git("ls-remote", "--heads", "origin", "release/v0.1.0"), "")
         self.assertEqual(self.remote_files("development", "changes/feat-widget.md"), "")
+
+    def test_release_resumes_when_the_forge_deleted_the_release_branch(self):
+        # verifies: SPEC-0016/AC-07
+        self.prepare_release()
+        self.person_merges("release/v0.1.0", "main")
+        self.git("push", "-q", "origin", "--delete", "release/v0.1.0")  # the forge removes the source branch on merge
+        self.git("checkout", "-q", "development")
+        self.git("branch", "-D", "release/v0.1.0")
+        out = self.mth("release")
+        self.assertIn("Reanudando la publicación manual de v0.1.0", out)
+        self.assertIn("✓ 1.", out)
+        self.assertIn("· 2.", out)
+        self.assertNotIn("No hay fragmentos", out)
+        self.git("fetch", "-q", "origin")
+        self.git("tag", "-a", "v0.1.0", "-m", "v0.1.0", "origin/main")
+        self.git("push", "-q", "origin", "v0.1.0")
+        self.person_merges("main", "development")
+        self.assertIn("nada que publicar", self.mth("release", ok=False))  # everything is done: no new version either
+        self.assert_no_gh()
+        self.assertEqual(self.git("branch", "--show-current"), "development")
+
+    def test_a_tag_that_is_not_published_on_main_does_not_count(self):
+        # verifies: SPEC-0016/AC-07
+        self.prepare_release()
+        self.person_merges("release/v0.1.0", "main")
+        self.git("fetch", "-q", "origin")
+        self.git("tag", "-a", "v0.1.0", "-m", "v0.1.0", "origin/main")  # created, not pushed
+        self.assertIn("· 2.", self.mth("release"))
+        self.git("tag", "-d", "v0.1.0")
+        stray = self.git("commit-tree", "-m", "stray", self.git("rev-parse", "origin/main^{tree}"))
+        self.git("tag", "-a", "v0.1.0", "-m", "v0.1.0", stray)  # pushed, but not part of main
+        self.git("push", "-q", "origin", "v0.1.0")
+        self.assertIn("· 2.", self.mth("release"))
+        self.person_merges("main", "development")
+        self.assertNotIn("publicada a mano", self.mth("release"))  # still no valid tag: nothing is cleaned up
+        self.assertNotEqual(self.git("ls-remote", "--heads", "origin", "release/v0.1.0"), "")
 
     def test_hotfix_finish_refuses_before_touching_anything(self):
         # verifies: SPEC-0016/AC-08

@@ -69,11 +69,11 @@ Con los mismos gates y el mismo cálculo de versión que con GitHub, `mth` crea 
 Después muestra la lista de pasos manuales, cada uno marcado como hecho o pendiente según git:
 
 1. Abrir el MR `release/vX.Y.Z → main` y fusionarlo con merge commit tras la CI en verde (hecho si la rama ya está en `main`).
-2. Crear la etiqueta anotada `vX.Y.Z` sobre `main` y subirla, con los comandos exactos (hecho si la etiqueta existe).
+2. Crear la etiqueta anotada `vX.Y.Z` sobre `main` y subirla, con los comandos exactos, citados para el shell (hecho si la etiqueta está en el remoto y apunta a un commit de `main`).
 3. Publicar la release en la forja con las notas del fichero (no comprobable: se muestra siempre).
 4. Abrir el MR `main → development` y fusionarlo con merge commit (hecho si `main` ya está en `development`).
 
-Al volver a ejecutar `mth release` con la rama de release ya abierta, retoma: recalcula el estado de los pasos y, si 1, 2 y 4 están hechos, borra la rama de release, sincroniza `development` y lo dice.
+Al volver a ejecutar `mth release` retoma, con la rama de release abierta o sin ella (la forja puede borrarla al fusionar: entonces la versión se lee del `CHANGELOG.md` de `main`): recalcula el estado de los pasos y, si 1, 2 y 4 están hechos, borra la rama de release, sincroniza `development` y lo dice.
 
 ### `mth hotfix finish` con `gitlab` o `none`
 
@@ -81,7 +81,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 
 ### Guard, doctor y plantilla
 
-- El guard bloquea `glab mr merge …` con el mismo mensaje que `gh pr merge`; otros subcomandos de `glab` pasan.
+- El guard bloquea `glab mr merge …` y su alias `glab mr accept …` con el mismo mensaje que `gh pr merge`; otros subcomandos de `glab` pasan.
 - `mth doctor` con `gitlab` o `none` no comprueba `gh` ni avisa de `ci.required`; con `github`, igual que antes.
 - La plantilla `methodology.toml` documenta `forge`.
 
@@ -94,7 +94,8 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 | `mth hotfix finish` con `gitlab` o `none` | `mth hotfix finish` | Error antes de modificar nada |
 | `gh` no está instalado y `forge` no es `github` | `mth integrate`, `mth release` | No se usa: los comandos funcionan igual |
 | Versión ya publicada a mano sin rama de release | `mth release` | Los gates y el cálculo de versión son los de siempre: la persona decide qué hacer con la etiqueta existente |
-| Etiqueta ya existente al retomar | `mth release` | El paso 2 se marca como hecho y no se vuelve a crear |
+| Etiqueta ya existente al retomar | `mth release` | El paso 2 se marca como hecho y no se vuelve a crear, pero solo si la etiqueta está en el remoto y apunta a un commit de `main`; una etiqueta solo local o puesta en otro commit no cuenta y no se borra la rama |
+| La forja borra la rama de release al fusionar el MR | `mth release` | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development`, y retoma esa publicación sin calcular otra versión |
 
 ## Criterios de aceptación
 
