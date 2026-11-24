@@ -1,6 +1,6 @@
 # SPEC-0018 · Formato compacto de specs y ADR
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-24
 - Formato: compacto
 - ADRs: [ADR-0014](../adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md)
