@@ -114,10 +114,17 @@ Los antipatrones **STUPID** (Singleton, Tight coupling, Untestability, Premature
 
 Los necesarios y ninguno más:
 
-- Un test por **criterio de aceptación**. [script]
+- Un test por **criterio de aceptación** (con la triangulación de abajo). [script]
 - Un test por **modo de fallo** diseñado en la spec. [criterio]
 - Un test de **regresión** por bug corregido, que falle sin el fix. [criterio]
 - Tests de las **funciones públicas con lógica no trivial** no cubiertas por lo anterior. [criterio]
+
+Cada test declara por qué existe (ADR-0015):
+
+- **Etiqueta obligatoria** en el comentario del test: `verifies: SPEC-NNNN/AC-NN`, `verifies: SPEC-NNNN/FM-NN`, `regression: <referencia>` o `unit: <símbolo público>`. Un test sin etiqueta es andamiaje: error en `mth trace` y bloquea `mth integrate` (aviso en ficheros legados). [script: `mth trace`]
+- **Triangulación:** todo AC cuya salida dependa de la entrada DEBE tener al menos dos ejemplos de clases de equivalencia distintas (dos tests o uno parametrizado). Un AC sin entrada variable queda exento. [criterio; `mth trace` avisa de los AC con un único test]
+- **Andamiaje fuera:** dos tests de la misma clase para el mismo AC, uno sobra; un test se conserva solo si aporta una clase, un límite o un modo de fallo propio. [criterio]
+- Una implementación con casos especiales para los valores del test NO DEBE aceptarse. [criterio]
 
 Además:
 

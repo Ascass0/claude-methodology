@@ -11,7 +11,7 @@ import unicodedata
 from dataclasses import dataclass
 from urllib.parse import unquote
 
-from . import compact, globs, plan
+from . import compact, globs, plan, testlabels
 from .config import Config
 from .ids import IdRegistry, read_text
 
@@ -106,7 +106,54 @@ class Tracer:
             findings += self._acceptance(texts)
         findings += self._plans(texts)
         findings += self._compact(texts)
+        findings += self._test_labels(texts)
         return findings
+
+    def _test_labels(self, texts: dict[str, str]) -> list[Finding]:
+        """Tests without a declared purpose (ADR-0015)."""
+        patterns = self.cfg["trace"]["test_patterns"]
+        spec_pattern = self.registry.kinds[self.cfg["trace"]["spec_kind"]]
+        out = []
+        for path, text in texts.items():
+            if not globs.match_any(path, self.cfg["paths"]["tests"]):
+                continue
+            opening = testlabels.pattern_for(path, patterns)
+            if opening is None and not testlabels.is_test_file(path):
+                continue
+            out += [Finding(path, p.line, p.message) for p in testlabels.file_problems(text, opening, spec_pattern)]
+        return out
+
+    def single_test(self) -> list[Finding]:
+        """Acceptance criteria verified by exactly one test (a warning, never an error)."""
+        texts = {f: t for f in self.files if (t := read_text(self.root / f)) is not None}
+        spec_kind = self.cfg["trace"]["spec_kind"]
+        specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
+        counts = self._verifications(texts)
+        out = []
+        for path, text in texts.items():
+            if not (path.startswith(specs_dir) and path.endswith(".md")):
+                continue
+            spec_id = next((i for i, places in self.registry.definitions.items()
+                            if any(p == path for p, _ in places) and self.registry.kind_of(i) == spec_kind), None)
+            if spec_id is None:
+                continue
+            for lineno, line in enumerate(text.splitlines(), 1):
+                for ac in _AC.findall(line):
+                    if len(counts.get((spec_id, ac), ())) == 1:
+                        out.append(Finding(path, lineno, f"{spec_id}/{ac} tiene un único test"))
+        return out
+
+    def _verifications(self, texts: dict[str, str]) -> dict[tuple[str, str], list[tuple[str, int]]]:
+        """Places of every ``verifies: SPEC-NNNN/AC-NN`` comment in the test files."""
+        id_re = self.registry.kinds[self.cfg["trace"]["spec_kind"]]
+        verifies = re.compile(rf"verifies:\s*({id_re})/(AC-\d{{2,3}})", re.IGNORECASE)
+        found: dict[tuple[str, str], list[tuple[str, int]]] = {}
+        for path, text in texts.items():
+            if globs.match_any(path, self.cfg["paths"]["tests"]):
+                for lineno, line in enumerate(text.splitlines(), 1):
+                    for m in verifies.finditer(line):
+                        found.setdefault((m.group(1), m.group(2).upper()), []).append((path, lineno))
+        return found
 
     def _compact(self, texts: dict[str, str]) -> list[Finding]:
         """Compact-format checks (ADR-0014): only documents that declare the format, plus ``SPEC-NNNN/FM-NN`` refs."""
@@ -209,18 +256,11 @@ class Tracer:
     def _acceptance(self, texts: dict[str, str]) -> list[Finding]:
         spec_kind = self.cfg["trace"]["spec_kind"]
         specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
-        id_re = self.registry.kinds[spec_kind]
-        verifies = re.compile(rf"verifies:\s*({id_re})/(AC-\d{{2,3}})", re.IGNORECASE)
         vocab = self.cfg.vocab
         status_re = re.compile(rf"^-\s*{re.escape(vocab.status_label)}:\s*([a-záéíóú]+)", re.IGNORECASE | re.MULTILINE)
 
-        covered: dict[tuple[str, str], tuple[str, int]] = {}
+        covered = {key: places[0] for key, places in self._verifications(texts).items()}
         out = []
-        for path, text in texts.items():
-            if globs.match_any(path, self.cfg["paths"]["tests"]):
-                for lineno, line in enumerate(text.splitlines(), 1):
-                    for m in verifies.finditer(line):
-                        covered.setdefault((m.group(1), m.group(2).upper()), (path, lineno))
 
         declared: set[tuple[str, str]] = set()
         for path, text in texts.items():

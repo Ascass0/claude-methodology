@@ -1,6 +1,6 @@
 # SPEC-0019 · Triangulación y motivo declarado de cada test
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-25
 - Formato: compacto
 - ADRs: [ADR-0015](../adr/process/ADR-0015-triangulacion-y-motivo-declarado-de-cada-test.md), [ADR-0014](../adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md)

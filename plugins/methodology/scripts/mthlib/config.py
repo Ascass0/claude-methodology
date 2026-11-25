@@ -43,7 +43,12 @@ DEFAULTS: dict[str, Any] = {
     "roles": {"coder": "", "documenter": "", "verifier": ""},
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
-              "adr_kind": "ADR", "include": ["**"], "exclude": [], "legacy_base": ""},
+              "adr_kind": "ADR", "include": ["**"], "exclude": [], "legacy_base": "",
+              "test_patterns": {
+                  "**/*.py": r"^\s*(?:async\s+)?def\s+test\w*\s*\(",
+                  **{f"**/*.{ext}": r"^\s*(?:it|test)(?:\.\w+)*\s*\(" for ext in ("js", "jsx", "mjs", "cjs", "ts", "tsx")},
+                  "**/*.go": r"^func\s+Test\w*\s*\(",
+              }},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
@@ -76,7 +81,8 @@ _SCHEMA: dict[str, Any] = {
     "roles": {"coder": str, "documenter": str, "verifier": str},
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
-              "adr_kind": str, "include": list, "exclude": list, "legacy_base": str},
+              "adr_kind": str, "include": list, "exclude": list, "legacy_base": str,
+              "test_patterns": dict},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
     "language": {"docs": str},
@@ -199,6 +205,13 @@ def _check_semantics(data: dict[str, Any]) -> None:
     legacy = data["trace"]["legacy_base"]
     if legacy and not _COMMIT.match(legacy):
         raise MthError(f"'trace.legacy_base' = '{legacy}' debe ser el hash completo de un commit (40 caracteres hexadecimales).")
+    for glob, regex in data["trace"]["test_patterns"].items():
+        if not isinstance(regex, str):
+            raise MthError(f"'trace.test_patterns.\"{glob}\"' debe ser una expresión regular (texto) o \"\" para desactivarla.")
+        try:
+            re.compile(regex)
+        except re.error as exc:
+            raise MthError(f"'trace.test_patterns.\"{glob}\"' no es una expresión regular válida: {exc}.") from exc
     if data["language"]["docs"] not in lang.LANGUAGES:
         raise MthError(f"'language.docs' = '{data['language']['docs']}' no es un idioma admitido ({', '.join(lang.LANGUAGES)}).")
     _check_models(data["models"])
