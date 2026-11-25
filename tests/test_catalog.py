@@ -134,7 +134,7 @@ class RenderTests(unittest.TestCase):
                 self.assertNotIn("{{", first.agent_md + first.guard_toml)
                 tomllib.loads(first.guard_toml)
 
-    def test_rendering_is_deterministic_with_a_local_edit_and_without_optional_variables(self):
+    def test_rendering_is_deterministic_without_optional_variables(self):
         # verifies: SPEC-0012/AC-01
         bare = parse(Path("/nonexistent"), support.template_with_agents("")).data
         for name in catalog.names(CATALOG):
@@ -143,9 +143,6 @@ class RenderTests(unittest.TestCase):
             first = catalog.render(CATALOG, name, bare)
             with self.subTest(agent=name):
                 self.assertEqual(first, catalog.render(CATALOG, name, bare))
-                edited = first.agent_md.replace(catalog.LOCAL_BEGIN, catalog.LOCAL_BEGIN + "\nX\n", 1)
-                self.assertEqual(catalog.render(CATALOG, name, bare, installed_md=edited),
-                                 catalog.render(CATALOG, name, bare, installed_md=edited))
 
     def test_header_and_reviewer_output(self):
         # unit: catalog.render

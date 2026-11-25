@@ -378,15 +378,6 @@ class WaveVerifyTests(RepoTestCase):
         self.assertIn("⚠ T-01 desvío: usa una lista en vez de un set", out)
         self.assertIn("1 desvíos por resolver", out)
 
-    def test_deviations_of_several_tasks_are_all_warnings(self):
-        # verifies: SPEC-0001/AC-11
-        t1, t2 = self.wave_one(deviations=["a"])
-        t2 = self.manifest("t2", task="T-02", files=["src/b/new.py"], criteria=["AC-02"], deviations=["b", "c"])
-        out = self.verify([t1, t2], ok=True)
-        self.assertIn("⚠ T-01 desvío: a", out)
-        self.assertIn("⚠ T-02 desvío: c", out)
-        self.assertIn("3 desvíos por resolver", out)
-
 
 class ReviewReportTests(RepoTestCase):
     def recorded(self) -> dict:

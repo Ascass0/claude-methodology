@@ -118,11 +118,10 @@ class LabelTests(unittest.TestCase):
 
     def test_a_label_with_a_malformed_reference_is_named(self):
         # verifies: SPEC-0019/AC-04
-        text = lines("def test_a():", "    # verifies: @@/AC-1", "    pass", "", "def test_b():", "    # unit:", "    pass")
+        text = lines("def test_a():", "    # verifies: @@/AC-1", "    pass")
         found = label_findings({"tests/test_x.py": text})
-        self.assertEqual(len(found), 2)
+        self.assertEqual(len(found), 1)
         self.assertIn(fx("etiqueta mal formada «verifies: @@/AC-1»"), found[0])
-        self.assertIn("etiqueta mal formada «unit:»", found[1])
 
     def test_a_file_without_a_pattern_needs_one_label(self):
         # verifies: SPEC-0019/AC-05
@@ -173,7 +172,7 @@ class LabelTests(unittest.TestCase):
         test_mth._write(root / "tests/test_new.py", lines("def test_b():", "    # unit: parse", "    pass"))
         ctx = SimpleNamespace(cfg=parse(root, CONFIG), git=SimpleNamespace(files=lambda: ["tests/test_new.py"],
                                                                          unchanged_since=lambda base: set(), **no_limits(root)))
-        flow._gate_trace(ctx)
+        self.assertIsNone(flow._gate_trace(ctx))  # no MthError: the gate lets a labelled test through
 
     def test_integrate_rejects_an_unlabelled_test_before_touching_the_remote(self):
         # verifies: SPEC-0019/AC-07

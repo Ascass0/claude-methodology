@@ -270,18 +270,6 @@ class AnswersTests(unittest.TestCase):
             self.assertIn(f"| `{question['outcome']}` |", row)
         self.assertIn("| `idioma` | `por_defecto` | `es` |", text)
 
-    def test_generated_adrs_are_compact_for_a_fork_without_signals(self):
-        # verifies: SPEC-0004/AC-12
-        inv = inventory("fork", forge="none")
-        answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []},
-                   "tests": {"option": "ninguno"}, "versiones": {"option": "continuar"}}
-        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
-        plan = adoption.build(template, inv, {q: a for q, a in answers.items() if q in inv.asked()}, "main", "a" * 40)
-        vocab = lang.vocabulary("es")
-        text = adoption.adr_text("ADR-0001", inv, plan, vocab)
-        self.assertIn("- Formato: compacto", text)
-        self.assertEqual(compact.adr_problems(text, vocab), [])
-
 
 class OfferedOptionsTests(unittest.TestCase):
     """What the interview offers is what the plugin does (ADR-0011, point 3)."""

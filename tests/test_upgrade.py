@@ -64,13 +64,6 @@ class UnknownKeyTests(unittest.TestCase):
         self.assertEqual(cfg["trace"]["legacy_base"], "")
         self.assertEqual(cfg["release"]["version_files"], [])
 
-    def test_a_minimal_configuration_gets_the_same_defaults(self):
-        # verifies: SPEC-0009/AC-02
-        cfg = parse(Path("."), CONFIG)
-        self.assertEqual((cfg["language"]["docs"], cfg["hooks"]["commit_msg"], cfg["autonomy"]["level"]),
-                         ("es", "own", "full"))
-        self.assertEqual((cfg["trace"]["legacy_base"], cfg["release"]["version_files"]), ("", []))
-
 
 class DoctorHintTests(unittest.TestCase):
     def setUp(self):

@@ -92,10 +92,11 @@ class BeforeAdoptionTests(RepoCase):
     def test_guard_blocks_pushing_to_main_once_adopted(self):
         # verifies: SPEC-0004/AC-02
         self.commit()
-        self.write(".claude/methodology.toml", CONFIG)
+        payload = json.dumps({"tool_input": {"command": "git push origin main"}, "cwd": str(self.root)})
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            code = guard.main(json.dumps({"tool_input": {"command": "git push origin main"}, "cwd": str(self.root)}))
-        self.assertEqual(code, guard.BLOCK)
+            self.assertEqual(guard.main(payload), 0)  # not adopted yet: the guard stays out of the way
+            self.write(".claude/methodology.toml", CONFIG)
+            self.assertEqual(guard.main(payload), guard.BLOCK)
 
     def test_decline_creates_the_settings_file_or_refuses_a_non_object(self):
         # verifies: SPEC-0004/AC-03
@@ -107,6 +108,10 @@ class BeforeAdoptionTests(RepoCase):
         with self.assertRaises(MthError):
             setup.decline(self.root)
         self.assertEqual(settings.read_text(), "[]")
+        settings.write_text("{", encoding="utf-8")  # not valid JSON at all
+        with self.assertRaises(MthError):
+            setup.decline(self.root)
+        self.assertEqual(settings.read_text(), "{")
 
     def test_decline_disables_the_plugin_locally(self):
         # verifies: SPEC-0004/AC-03

@@ -65,6 +65,7 @@ class SmokeTestCase(test_agents.AgentsTestCase):
 class VerdictTests(SmokeTestCase):
     def test_a_guard_that_acts_passes_and_records_the_literal_version(self):
         # verifies: SPEC-0014/AC-01
+        # verifies: SPEC-0014/AC-05 (a write the guard saw is not a failure)
         result = self.run_smoke("obey")
         self.assertEqual((result.outcome, result.summary[:5]), (smoke.PASS, "PASA:"), result)
         self.assertEqual(self.record()["claude_version"], "9.9.9 (Fake Claude Code)")
@@ -109,10 +110,6 @@ class VerdictTests(SmokeTestCase):
         result = self.run_smoke("hang", timeout=1.0)
         self.assertEqual(result.outcome, smoke.INCONCLUSIVE, result)
         self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
-
-    def test_a_write_the_guard_saw_is_not_a_failure(self):
-        # verifies: SPEC-0014/AC-05
-        self.assertEqual(self.run_smoke("obey").outcome, smoke.PASS)
 
     def test_a_write_the_guard_never_saw_fails(self):
         # verifies: SPEC-0014/AC-05
