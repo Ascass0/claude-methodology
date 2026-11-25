@@ -22,13 +22,12 @@ sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
 import catalog_support as support  # noqa: E402
 import test_mth  # noqa: E402
-from mthlib import agents, compact, lang, setup, update, updating  # noqa: E402
+from mthlib import agents, catalog, compact, lang, setup, update, updating  # noqa: E402
 from mthlib.config import load  # noqa: E402
-from mthlib import catalog  # noqa: E402
-
-FALLOS = catalog.load_meta(catalog.CATALOG_DIR, "revisor-fallos")["version"]
 from mthlib.errors import MthError  # noqa: E402
 from mthlib.git import Git  # noqa: E402
+
+FALLOS = catalog.load_meta(catalog.CATALOG_DIR, "revisor-fallos")["version"]
 
 COMPACT = "# SPEC-0001 · T\n\n- Estado: aprobada\n- Formato: compacto\n"
 LEGACY = "# SPEC-0002 · T\n\n- Estado: aprobada\n"

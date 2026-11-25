@@ -148,8 +148,9 @@ class RenderTests(unittest.TestCase):
 
     def test_installed_files_carry_no_plugin_internal_ids(self):
         # verifies: SPEC-0012/AC-28
-        shim = (CATALOG / "_shared" / "mth-agent-guard.sh").read_text(encoding="utf-8")
-        self.assertIsNone(_INTERNAL_ID.search(shim))
+        for shared in (CATALOG / "_shared").glob("*"):
+            with self.subTest(shared=shared.name):
+                self.assertIsNone(_INTERNAL_ID.search(shared.read_text(encoding="utf-8")))
         for name in catalog.names(CATALOG):
             r = catalog.render(CATALOG, name, self.config)
             with self.subTest(agent=name):
