@@ -1,6 +1,6 @@
 # SPEC-0021 · Actualización del repo adoptado al plugin nuevo
 
-- Estado: borrador
+- Estado: aprobada
 - Fecha: 2026-11-25
 - Formato: compacto
 - ADRs: ADR-0017
