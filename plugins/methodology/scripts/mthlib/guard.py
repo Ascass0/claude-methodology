@@ -29,11 +29,11 @@ _FORGES = {"gh", "glab"}
 _JUDGED = {"git"} | _FORGES  # the programs whose subcommands the guard inspects
 _SHELL_WORDS = {"then", "do", "else", "elif", "if", "while", "until", "!"}  # keywords that precede a command
 _GROUPING = re.compile(r"[(){}`]")  # (cmd), { cmd; }, `cmd`, $(cmd) run cmd like a plain command
-_DATA_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")  # gh/glab api: a request body (POST unless -X says otherwise)
+_DATA_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")  # gh/glab api: a request body (POST unless -X says), also `-fk=v`
 _GRAPHQL_MERGES = ("mergePullRequest", "enablePullRequestAutoMerge", "mergeBranch")  # GraphQL mutations that merge
 _FORGE_VALUE_OPTIONS = {"-R", "--repo", "--hostname"}  # gh/glab global options that take a value
 _MERGE_BY_HAND = "los merges se hacen con `mth integrate`, `mth release` o `mth hotfix finish`"
-_SPLIT = re.compile(r"\|\||&&|;|\||\n")
+_SPLIT = re.compile(r"\|\||&&|(?<![>&])&(?![&>])|;|\||\n")  # a lone & (background) also separates commands
 BLOCK = 2  # Claude Code: exit code 2 blocks the tool call and shows stderr to the model.
 _MTH_SPELLINGS = ("$MTH", "${MTH}")
 _MTH_NAMES = ("mth", "mth.py")
@@ -153,12 +153,11 @@ def _merges_through_api(args: list[str]) -> bool:
     """
     if any(m in a for a in args for m in _GRAPHQL_MERGES):
         return True
-    if "graphql" in args and any(a == "--input" or "=@" in a or a.startswith("@") for a in args):
+    if "graphql" in args and any(a.startswith("--input") or "=@" in a or a.startswith("@") for a in args):
         return True  # the query lives in a file the guard cannot read
     if not any(a.split("?", 1)[0].rstrip("/").endswith(("/merge", "/merges")) for a in args if not a.startswith("-")):
         return False
-    sends_data = any(a in _DATA_FLAGS or a.startswith(("--field=", "--raw-field=", "--input=", "-f", "-F"))
-                     for a in args if a.startswith("-"))
+    sends_data = any(a.startswith(_DATA_FLAGS) for a in args)
     return sends_data or _api_method(args) not in (None, "GET")
 
 
@@ -227,7 +226,7 @@ def main(stdin: str) -> int:
     try:
         event = json.loads(stdin or "{}")
         command = event.get("tool_input", {}).get("command", "")
-        if not re.search(r"\b(git|gh|mth)\b", command, re.IGNORECASE):
+        if not re.search(r"\b(git|gh|glab|mth)\b", command, re.IGNORECASE):
             return 0
         ctx = _context(Path(event.get("cwd") or "."))
         if not ctx.adopted:

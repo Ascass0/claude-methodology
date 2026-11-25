@@ -1,12 +1,14 @@
 """Tests of the configurable forge (SPEC-0016, ADR-0012)."""
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -100,7 +102,7 @@ class MergeBypassTests(unittest.TestCase):
 
     def test_a_merge_by_hand_is_blocked_however_it_is_spelled(self):
         # verifies: SPEC-0016/AC-12
-        for command in ("gh -R owner/repo pr merge 3", "glab --repo owner/repo mr merge 5", "gh --hostname h pr merge 3",
+        for command in ("gh -R owner/repo pr merge 3", "gh --hostname h pr merge 3",
                         "gh pr -R owner/repo merge 3", "sudo -u root gh pr merge 3", "env -i GH_TOKEN=x gh pr merge 3",
                         "command gh pr merge 3", "setsid glab mr accept 5"):
             with self.subTest(command=command):
@@ -109,7 +111,7 @@ class MergeBypassTests(unittest.TestCase):
     def test_a_merge_inside_a_shell_construct_is_blocked(self):
         # verifies: SPEC-0016/AC-12
         for command in ("(gh pr merge 3)", "{ gh pr merge 3; }", "true && if x; then gh pr merge 3; fi", "`gh pr merge 3`",
-                        "gh pr \\\nmerge 3"):
+                        "gh pr \\\nmerge 3", "sleep 1 & gh pr merge 3"):
             with self.subTest(command=command):
                 self.assertTrue(self.blocked(command))
 
@@ -117,12 +119,20 @@ class MergeBypassTests(unittest.TestCase):
         # verifies: SPEC-0016/AC-12
         for command in ("gh api -X PUT repos/o/r/pulls/3/merge", "gh api -XPUT repos/o/r/pulls/3/merge",
                         "glab api projects/1/merge_requests/1/merge --method=put",
-                        "gh api repos/o/r/pulls/3/merge -X GET -X PUT", "gh api repos/o/r/merges -f base=a -f head=b",
+                        "gh api repos/o/r/pulls/3/merge -X GET -X PUT", "gh api repos/o/r/merges --input body.json",
                         "gh api repos/o/r/pulls/3/merge?x=1 -fsha=abc", "gh api repos/o/r/pulls/3/merge -Fsha=abc",
                         "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
                         "gh api graphql -F query=@merge.graphql"):
             with self.subTest(command=command):
                 self.assertTrue(self.blocked(command))
+
+    def test_the_hook_entry_point_blocks_glab_too(self):
+        # verifies: SPEC-0016/AC-12
+        adopted = guard.Context(True, {"main", "development"}, "feat/x", "full")
+        for command, code in (("glab mr merge 5", guard.BLOCK), ("glab -R o/r mr accept 5", guard.BLOCK),
+                              ("glab mr list", 0)):
+            with self.subTest(command=command), mock.patch.object(guard, "_context", return_value=adopted):
+                self.assertEqual(guard.main(json.dumps({"tool_input": {"command": command}, "cwd": "."})), code)
 
     def test_reads_and_other_subcommands_still_pass(self):
         # verifies: SPEC-0016/AC-12
