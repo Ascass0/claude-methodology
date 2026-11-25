@@ -82,8 +82,12 @@ def line_limits(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
     for rel in ctx.git.files():
         if globs.match_any(rel, cfg["exclude"]):
             continue
-        with (root / rel).open("rb") as handle:
-            lines = limits.count_lines(iter(lambda: handle.read(limits.CHUNK), b""))
+        try:
+            with (root / rel).open("rb") as handle:
+                lines = limits.count_lines(iter(lambda: handle.read(limits.CHUNK), b""))
+        except OSError as exc:
+            raise MthError(f"No se puede leer {rel} para medir sus líneas: {exc.strerror or exc}.",
+                           hint="Comprueba los permisos del fichero o exclúyelo en limits.exclude.") from exc
         if lines is not None:
             counts[rel] = lines
     binary = ctx.git.binary_by_attributes([p for p, n in counts.items() if n > cfg["max_file_lines"]])
@@ -98,7 +102,8 @@ def _line_base(ctx: Ctx):
     """Function giving a file's lines at the branch base, or None when the branch has no parent."""
     try:
         info = branches.parse(ctx.git.current_branch(), ctx.cfg)
-    except MthError:
+    except MthError as exc:
+        warn(f"Sin rama padre para comparar el tamaño de los ficheros: {exc.message}")
         return None
     if info is None:
         return None

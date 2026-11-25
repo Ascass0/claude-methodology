@@ -1,6 +1,7 @@
 """Tests of the line limit per file (SPEC-0020, ADR-0016)."""
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 from mthlib import limits  # noqa: E402
 from mthlib.config import parse  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
+from mthlib.git import Git  # noqa: E402
 from test_delegation import RepoTestCase  # noqa: E402
 
 BASE = 'version = 1\n[commands]\ntest = ""\n'
@@ -185,6 +187,24 @@ class BranchTests(BranchTestCase):
         out = self.trace(ok=False)
         self.assertIn("No se puede calcular el punto de partida", out)
         self.assertIn("git fetch", out)
+
+    def test_a_blob_that_git_cannot_read_is_an_error_not_an_empty_file(self):
+        # verifies: SPEC-0020/FM-02
+        git = Git(self.work)
+        self.assertEqual(b"".join(git.blob_chunks("HEAD", "src/legacy.py")), text(60).encode())
+        self.assertEqual(list(git.blob_chunks("HEAD", "src/never-existed.py")), [])
+        with self.assertRaises(MthError) as raised:
+            list(git.blob_chunks("0" * 40, "src/legacy.py"))
+        self.assertIn("No se puede leer src/legacy.py", raised.exception.message)
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
+    def test_an_unreadable_file_names_itself(self):
+        # verifies: SPEC-0020/AC-02
+        path = self.write("src/locked.py", "x\n")
+        path.chmod(0)
+        self.addCleanup(lambda: path.exists() and path.chmod(0o644))
+        out = self.trace(ok=False)
+        self.assertIn("No se puede leer src/locked.py para medir sus líneas", out)
 
     def test_exceptions_in_the_configuration_apply_through_the_command(self):
         # verifies: SPEC-0020/AC-09

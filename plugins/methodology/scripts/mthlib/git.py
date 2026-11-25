@@ -194,13 +194,23 @@ class Git:
         return proc.stdout.strip()
 
     def blob_chunks(self, rev: str, path: str, size: int = 1 << 20):
-        """Yield the bytes of ``path`` at ``rev`` in chunks (nothing if the file did not exist there)."""
-        if not self.ok("cat-file", "-e", f"{rev}:{path}"):
+        """Yield the bytes of ``path`` at ``rev`` in chunks (nothing if the file did not exist there).
+
+        Raises:
+            MthError: Git cannot list or read the object, so a missing file is never confused with an unreadable one.
+        """
+        listed = self.try_run("ls-tree", "--name-only", "-z", rev, "--", path)
+        if listed.returncode != 0:
+            raise MthError(f"No se puede leer {path} en {rev[:7]}.", hint=(listed.stderr or "").strip() or None)
+        if not listed.stdout.strip("\0"):
             return
         with subprocess.Popen(["git", "cat-file", "blob", f"{rev}:{path}"], cwd=self.root,
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
             while chunk := proc.stdout.read(size):
                 yield chunk
+            err = proc.stderr.read().decode("utf-8", "replace").strip()
+            if proc.wait() != 0:
+                raise MthError(f"No se puede leer {path} en {rev[:7]}.", hint=err or None)
 
     def renamed_from(self, base: str) -> dict[str, str]:
         """Renames and copies detected between ``base`` and the working tree, as ``{new: old}``."""
