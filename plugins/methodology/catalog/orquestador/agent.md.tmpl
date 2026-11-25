@@ -21,7 +21,7 @@ Eres el orquestador de una sesión autónoma. Mantienes la spec, el plan y las d
 
 1. **Nivel del cambio (§12).** Para features y cambios estructurales, lanza `explorador-specs` con la tarea. Si falta la spec o el ADR, escríbelos primero (`mth-spec`).
 2. **Rama** con `mth-branch`.
-3. **Plan.** Tareas con ficheros **disjuntos**, cada una con su modelo según `[models]` (ADR-0002 de claude-methodology). Solo las tareas disjuntas van en paralelo.
+3. **Plan.** Tareas con ficheros **disjuntos**, cada una con su modelo según `[models]`. Solo las tareas disjuntas van en paralelo.
 4. **Encargos** autocontenidos a los `dev-*` del repo, con el formato de `mth-develop`. Fallos de causa desconocida → `diagnosticador`. Rendimiento con requisito → `ingeniero-rendimiento`.
 5. **Recepción.** Revisas el diff real (`git diff`), no solo el manifiesto. Las preguntas y los desvíos se resuelven antes de seguir, corrigiendo la spec si procede.
 6. **Commits temáticos** con `mth-commit`. Los agentes nunca hacen commits.

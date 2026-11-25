@@ -176,6 +176,7 @@ La entrada de `.claude/settings.json`:
 | FM-29 | Alias que apunta fuera del repositorio, o límites no positivos | `mth db-query` rechaza sin abrir la base | AC-26 |
 | FM-30 | Plugin antiguo con `[agents]` en la configuración | Carga de la configuración (SPEC-0009): rechaza la clave desconocida; no trabaja sin entenderla | AC-19 |
 | FM-31 | Claude Code deja de enviar `agent_id`/`agent_type` | No detectable desde el repo: riesgo aceptado (ADR-0008), prueba de humo al actualizar Claude Code y antes de cada versión (SPEC-0014) | — |
+| FM-32 | Una plantilla, un guard o el shim del catálogo citan un ID de spec o ADR del propio plugin | El repo adoptado no lo define y `mth trace` falla, bloqueando su integración: los ficheros que se instalan NO llevan IDs internos y un test lo comprueba | AC-28 |
 
 ## Criterios de aceptación
 
@@ -206,6 +207,7 @@ La entrada de `.claude/settings.json`:
 - **AC-25**: `[write]` NO DEBE permitir nunca escribir en `.git`, `.claude/hooks/`, `.claude/mth/`, `.claude/agents/`, `.claude/settings*.json` ni `.claude/methodology.toml`.
 - **AC-26**: SI un alias de `mth db-query` apunta fuera del repositorio o un límite no es positivo, ENTONCES DEBE rechazarlo; DEBE recortar las celdas largas.
 - **AC-27**: CUANDO `mth agent-guard` decide sobre un agente del catálogo, DEBE registrar la decisión en `<git-common-dir>/mth/agent-guard.jsonl`, con traceback si es un error interno, sin el comando completo ni credenciales, con permisos 0600 y rotación al superar 1 MiB.
+- **AC-28**: Las plantillas, los guards y el shim del catálogo NO DEBEN contener IDs de specs ni ADR del plugin: lo que `mth agents add` instala NO DEBE hacer fallar `mth trace` en un repo que no los define.
 
 ## Notas
 

@@ -27,7 +27,7 @@ Apartados de `PRINCIPLES.md`: §2 (de «Dependencias explícitas» a «Determini
    - Nombres con intención: sin `data`, `tmp`, `helper` ni `result_new` fuera de ámbitos mínimos; booleanos como predicados.
    - DRY desde la tercera repetición, sin unificar a la fuerza lo que cambia por motivos distintos.
 
-6. **Tamaño de fichero y su `reason` (§5, ADR-0016).** Que un fichero no supere `limits.max_file_lines` sin excepción lo comprueba `mth trace`. Tú valoras cada excepción de `[[limits.exceptions]]` que el diff añade o amplía: su `reason` debe sostenerse frente a la responsabilidad única. «Es más cómodo» o «no hay tiempo» no valen (importante); «partirlo separa cosas que cambian juntas» o «es una tabla o gramática generada que se lee entera» sí. Si el fichero largo mezcla responsabilidades que cambian por motivos distintos, nombra por dónde se partiría.
+6. **Tamaño de fichero y su `reason` (§5).** Que un fichero no supere `limits.max_file_lines` sin excepción lo comprueba `mth trace`. Tú valoras cada excepción de `[[limits.exceptions]]` que el diff añade o amplía: su `reason` debe sostenerse frente a la responsabilidad única. «Es más cómodo» o «no hay tiempo» no valen (importante); «partirlo separa cosas que cambian juntas» o «es una tabla o gramática generada que se lee entera» sí. Si el fichero largo mezcla responsabilidades que cambian por motivos distintos, nombra por dónde se partiría.
 
 **No es tu especialidad:**
 

@@ -3,7 +3,7 @@ name: explorador-specs
 description: "Úsalo antes de planificar o encargar una feature o cambio estructural, para saber qué specs, criterios, modos de fallo y ADR aplican a una tarea o ficheros. Devuelve IDs, rutas y huecos (sin spec, ADR que falta, specs que se contradicen), no el contenido. No lo uses para buscar código: para eso está Explore."
 tools: Read, Grep, Glob
 ---
-<!-- mth:template explorador-specs@1.0.0 sha256=8d9b6256e29caff10e2e6bd741440ad4e263aa6997c24b52799544dfa975ae71 -->
+<!-- mth:template explorador-specs@1.0.1 sha256=8d9b6256e29caff10e2e6bd741440ad4e263aa6997c24b52799544dfa975ae71 -->
 
 Eres el explorador de specs. Tu pregunta: **¿qué ha decidido y exigido ya este repositorio sobre esta tarea, y qué falta por decidir?**
 

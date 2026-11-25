@@ -22,10 +22,12 @@ sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
 import catalog_support as support  # noqa: E402
 import test_mth  # noqa: E402
-from mthlib import agents, compact, lang, setup, update, updating  # noqa: E402
+from mthlib import agents, catalog, compact, lang, setup, update, updating  # noqa: E402
 from mthlib.config import load  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 from mthlib.git import Git  # noqa: E402
+
+FALLOS = catalog.load_meta(catalog.CATALOG_DIR, "revisor-fallos")["version"]
 
 COMPACT = "# SPEC-0001 · T\n\n- Estado: aprobada\n- Formato: compacto\n"
 LEGACY = "# SPEC-0002 · T\n\n- Estado: aprobada\n"
@@ -156,7 +158,7 @@ class PlanTests(UpdateTestCase):
             manager.add(["revisor-fallos", "revisor-seguridad"], None, False)
         self.assertNotIn("agentes-desactualizados", self.ids())
         path = self.root / ".claude/agents/revisor-fallos.md"
-        path.write_text(path.read_text().replace("revisor-fallos@1.1.0", "revisor-fallos@1.0.0"), encoding="utf-8")
+        path.write_text(path.read_text().replace(f"revisor-fallos@{FALLOS}", "revisor-fallos@0.0.1"), encoding="utf-8")
         gaps = self.ids()
         self.assertEqual(gaps["agentes-desactualizados"].evidence, "revisor-fallos")
         self.assertEqual(gaps["agentes-desactualizados"].clase, update.AUTOMATIC)
@@ -257,7 +259,7 @@ class ApplyTests(unittest.TestCase):
         cfg.write_text(text)
         self.mth("agents", "add", "revisor-fallos")
         agent = self.work / ".claude/agents/revisor-fallos.md"
-        agent.write_text(agent.read_text().replace("revisor-fallos@1.1.0", "revisor-fallos@1.0.0"))
+        agent.write_text(agent.read_text().replace(f"revisor-fallos@{FALLOS}", "revisor-fallos@0.0.1"))
         claude = self.work / "CLAUDE.md"
         claude.write_text(claude.read_text().replace("Metodología", "Otra cosa"))
         test_mth._write(self.work / "specs/features/SPEC-0001-a.md", "# SPEC-0001 · A\n\n- Estado: aprobada\n")
@@ -292,7 +294,7 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(data["models"]["review"], "opus")  # a decided value is never touched
         self.assertEqual(data["commands"]["test"], "true")
         self.assertIn("claude-methodology · configuración del repositorio", self.on_branch(".claude/methodology.toml"))
-        self.assertIn("revisor-fallos@1.1.0", self.on_branch(".claude/agents/revisor-fallos.md"))
+        self.assertIn(f"revisor-fallos@{FALLOS}", self.on_branch(".claude/agents/revisor-fallos.md"))
         self.assertIn("Metodología", self.on_branch("CLAUDE.md"))
         self.assertEqual(self.mth("update", "--plan", ok=True).count("[automatica]"), 0)
         files = self.git("show", "--name-only", "--format=", f"origin/{BRANCH}").splitlines()
