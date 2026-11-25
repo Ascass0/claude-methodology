@@ -67,6 +67,21 @@ Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, par
 - Docs actualizadas en la misma rama.
 - Commits temáticos durante el trabajo → skill `mth-commit`.
 
+## 4b. Tests: triangulación y etiqueta (PRINCIPLES §6, ADR-0015)
+
+Ciclo por cada AC con entrada variable, tú o el agente `dev-*`:
+
+1. Primer ejemplo en rojo.
+2. Verde mínimo.
+3. Segundo ejemplo de **otra clase de equivalencia** (otro límite, otro tipo de entrada): si el verde era una solución fija, vuelve a rojo.
+4. Generaliza.
+5. Refactoriza.
+6. Elimina el andamiaje: tests de la misma clase para el mismo AC o que no aportan clase, límite ni modo de fallo propio.
+
+Se impone el estado final, no el orden. Un AC sin entrada variable (`SI falta X, ENTONCES falla`) necesita un solo test.
+
+Cada test lleva una etiqueta en su comentario: `verifies: SPEC-NNNN/AC-NN` o `/FM-NN`, `regression: <referencia>` (bug corregido, falla sin el fix) o `unit: <símbolo público>`. Sin etiqueta `mth trace` falla y `mth integrate` no avanza. `mth trace --single` lista los AC con un único test para que valores si triangular.
+
 ## 5. Cierra la rama
 
 1. **Documentación:** delega en el agente de `roles.documenter` (por defecto `documentador`, incluido en el plugin), con el modelo `models.documenter`, con la rama, el comando del diff y las specs afectadas. Actualiza docs, fragmento de changelog y los registros documentales que exija el repo. Revisa sus cambios y haz el commit `docs`.

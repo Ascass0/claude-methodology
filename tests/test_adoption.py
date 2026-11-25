@@ -251,6 +251,7 @@ class AnswersTests(unittest.TestCase):
         self.assertEqual(cfg["trace"]["legacy_base"], "")
 
     def test_catalog_is_only_for_adoption(self):
+        # unit: adoption.validate
         inventory = survey.Survey(survey.RECONFIGURE, {}, [{"id": "revisores", "evidence": "x"}])
         with self.assertRaises(MthError) as ctx:
             adoption.validate(inventory, {"revisores": {"option": "agentes", "agents": [], "catalog": ["revisor-adr"]}})

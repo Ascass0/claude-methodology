@@ -117,6 +117,7 @@ class ModelFailureModeTests(ModelRepoTestCase):
     """Failure modes of SPEC-0002 not tied to a single acceptance criterion."""
 
     def test_plan_model_on_spec_without_plan(self):
+        # unit: cli plan model
         other = "SPEC-" + "0043"
         self.write(f"specs/features/{other}-plain.md", f"# {other} · Plain\n\n- **AC-01**: x.\n")
         out = self.mth("plan", "model", other, "T-01", ok=False)
@@ -124,11 +125,13 @@ class ModelFailureModeTests(ModelRepoTestCase):
         self.assertNotIn("sonnet\n", out)
 
     def test_trace_reports_model_outside_ladder(self):
+        # unit: trace.check
         self.write(".claude/methodology.toml", self.config + '[models]\nladder = ["sonnet", "opus"]\n')
         out = self.mth("trace", ok=False)
         self.assertIn("T-01: modelo 'haiku' fuera de models.ladder", out)
 
     def test_invalid_models_config_blocks_commands(self):
+        # unit: config.parse
         self.write(".claude/methodology.toml", self.config + '[models]\nladder = ["sonet"]\n')
         for args in (("plan", "check", SPEC_ID), ("models",), ("trace",)):
             with self.subTest(args=args):

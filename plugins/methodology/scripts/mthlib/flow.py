@@ -23,6 +23,7 @@ from .ids import IdRegistry
 from .log import Tracer, say, warn
 from .proc import run_shell
 from .trace import Finding, partition
+from .trace import Tracer as TraceChecker
 from .trace import check as trace_check
 from .work import WORK_DIR
 
@@ -73,6 +74,11 @@ def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
     findings = trace_check(ctx.cfg, ctx.git.files())
     base = ctx.cfg["trace"]["legacy_base"]
     return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
+
+
+def single_test_notes(ctx: Ctx) -> list[Finding]:
+    """Acceptance criteria with a single test (ADR-0015): a warning for `mth trace`, never a gate."""
+    return TraceChecker(ctx.cfg, ctx.git.files()).single_test()
 
 
 def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:

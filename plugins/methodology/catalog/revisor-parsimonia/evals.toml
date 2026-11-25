@@ -33,3 +33,32 @@ diff = '''
 context = "La spec declara el modo de fallo 'dependencia lenta o caída' con reintento acotado."
 expect_blockers = 0
 must_not_find = ["§2 «Parsimonia»"]
+
+[[scope]]
+name = "dos-tests-de-la-misma-clase"
+diff = '''
++def test_total_of_two_items():
++    # verifies: SPEC-0007/AC-01
++    assert total([1, 2]) == 3
++
++def test_total_of_other_two_items():
++    # verifies: SPEC-0007/AC-01
++    assert total([3, 4]) == 7
+'''
+context = "AC-01: el total es la suma de los precios; solo hay listas de precios positivos."
+must_find = { rule = "§6" }
+
+[[scope]]
+name = "conserva-el-test-de-otra-clase"
+diff = '''
++def test_total_of_items():
++    # verifies: SPEC-0007/AC-01
++    assert total([1, 2]) == 3
++
++def test_total_of_no_items():
++    # verifies: SPEC-0007/AC-01
++    assert total([]) == 0
+'''
+context = "AC-01: el total es la suma de los precios. La lista vacía es otra clase de entrada."
+expect_blockers = 0
+must_not_find = ["§6"]

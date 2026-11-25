@@ -93,6 +93,11 @@ exclude = []
 # Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde entonces son avisos
 # (mth trace --legacy los lista); lo que se toca después cumple todas las reglas. "" = desactivado.
 legacy_base = ""
+# Línea que abre un test, por lenguaje (glob = regex). Cada test debe llevar una etiqueta (verifies:,
+# regression: o unit:). Se superpone a los valores por defecto (Python, JS/TS y Go); "" desactiva un
+# glob y su comprobación pasa a ser por fichero. Para otros lenguajes, añade su glob.
+# [trace.test_patterns]
+# "**/*.rs" = '^\s*#\[test\]'
 
 [release]
 github_release = true

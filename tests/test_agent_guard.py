@@ -111,6 +111,7 @@ class FailClosedTests(GuardTestCase):
         self.assertEqual(rc, 2)
 
     def test_invalid_rules_and_unexpected_tools_are_blocked(self):
+        # unit: agent_guard.main
         self.repo.write(".claude/mth/agents/revisor-adr.guard.toml", "[bash\n")
         self.assertEqual(self.repo.guard(self.repo.payload("revisor-adr", command="git log")), 2)
         self.assertEqual(self.repo.guard(self.repo.payload("revisor-diseno", "WebFetch", url="x")), 2)
@@ -130,6 +131,7 @@ class DispatchTests(GuardTestCase):
         self.assertEqual(self.repo.guard(self.repo.payload("orquestador", **push)), 0)  # delegate = "global"
 
     def test_messages_reach_the_model_on_stderr(self):
+        # unit: agent_guard.main
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             agent_guard.main(json.dumps(self.repo.payload("revisor-seguridad", command="git push")),
@@ -156,12 +158,14 @@ class WorktreeWriteTests(GuardTestCase):
         self.assertEqual(self.write_call(other, str(other / "x.py")), 2)
 
     def test_non_worktree_writers_keep_their_globs(self):
+        # unit: agent_guard.main
         evals = lambda path: self.repo.guard(self.repo.payload("analista-evals", "Write", file_path=path, content="x"))
         self.assertEqual(evals(".work/evals/informe.md"), 0)
         self.assertEqual(evals(str(self.repo.root / "src/x.py")), 2)
         self.assertEqual(evals("/etc/passwd"), 2)
 
     def test_bash_from_another_repository_is_blocked(self):
+        # unit: agent_guard.main
         other = self.repo.tmp / "otro"
         other.mkdir()
         _git(other, "init", "-q")
@@ -237,6 +241,7 @@ class AllowlistHardeningTests(GuardTestCase):
 
 class TimeoutTests(GuardTestCase):
     def test_the_alarm_is_skipped_outside_the_main_thread(self):
+        # unit: agent_guard.main
         import threading
         results = []
         thread = threading.Thread(target=lambda: results.append(
@@ -502,12 +507,14 @@ class ShimTests(GuardTestCase):
         return str(bin_dir)
 
     def test_any_failure_of_the_launcher_blocks(self):
+        # unit: mth-agent-guard.sh
         self.fake_launcher("exit 1\n")
         proc = self.run_shim(self.repo.payload("revisor-seguridad", command="git log"))
         self.assertEqual(proc.returncode, 2)
         self.assertIn("código 1", proc.stderr)
 
     def test_outside_a_repository_subagents_are_blocked(self):
+        # unit: mth-agent-guard.sh
         outside = self.repo.tmp / "fuera"
         outside.mkdir()
         self.assertEqual(self.run_shim(self.repo.payload("revisor-adr", command="git log"), project=outside).returncode, 2)
@@ -515,6 +522,7 @@ class ShimTests(GuardTestCase):
 
 class LauncherRecordTests(unittest.TestCase):
     def test_register_is_idempotent(self):
+        # unit: setup.register_launcher
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _git(root, "init", "-q")

@@ -43,6 +43,7 @@ class LanguageConfigTests(unittest.TestCase):
         self.assertIn("'language.docs' = 'fr' no es un idioma admitido (es, en)", ctx.exception.message)
 
     def test_templates_have_the_same_structure(self):
+        # unit: lang.ES
         for name in ("spec.md", "adr.md", "CHANGELOG.md", "claude-block.md"):
             with self.subTest(template=name):
                 es = (lang.ES.templates / name).read_text(encoding="utf-8")

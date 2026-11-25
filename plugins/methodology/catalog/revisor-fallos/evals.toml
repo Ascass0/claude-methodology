@@ -36,6 +36,19 @@ diff = '''
 must_find = { severity = "bloqueante", rule = "§2 «Fail-safe»" }
 
 [[scope]]
+name = "solucion-fija-para-los-valores-del-test"
+diff = '''
++def discount(total):
++    if total == 100:
++        return 10
++    if total == 250:
++        return 25
++    return 0
+'''
+context = "El criterio dice: el descuento es el 10 % del total. Los tests usan 100 y 250."
+must_find = { severity = "bloqueante", rule = "§6" }
+
+[[scope]]
 name = "no-revisa-nombres"
 diff = '''
 +def proc(d, tmp2):
