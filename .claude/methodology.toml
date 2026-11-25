@@ -92,6 +92,7 @@ verifier = "verificador"
 required = true
 
 [trace]
+legacy_base = ''
 links = true          # enlaces markdown relativos válidos y dentro del repo
 acceptance = true     # los AC de specs "implementada" deben tener test
 spec_kind = "SPEC"
