@@ -113,6 +113,11 @@ class PlanCheckTests(unittest.TestCase):
         self.assertTrue(any("AC-02 no está asignado" in m for m in found), found)
         self.assertTrue(any("AC-03 no está asignado" in m for m in found), found)
 
+    def test_complete_plan_with_a_criterion_split_across_tasks_is_accepted(self):
+        # verifies: SPEC-0001/AC-04
+        rows = "| T-01 | 1 | `a` | AC-01, AC-02 |\n| T-02 | 2 | `b` | AC-02, AC-03 |"
+        self.assertEqual(messages(spec_text(rows)), [])
+
 
 class TracePlanTests(unittest.TestCase):
     def setUp(self):
@@ -134,6 +139,15 @@ class TracePlanTests(unittest.TestCase):
         plan_findings = [f for f in findings if "plan de trabajo" in f]
         self.assertTrue(plan_findings)
         self.assertTrue(all(f.startswith(f"specs/features/{SPEC_ID}-demo.md") for f in plan_findings))
+
+    def test_trace_is_silent_about_a_valid_plan(self):
+        # verifies: SPEC-0001/AC-05
+        good = self.tmp / f"specs/features/{SPEC_ID}-demo.md"
+        good.parent.mkdir(parents=True)
+        good.write_text(spec_text(VALID_ROWS), encoding="utf-8")
+        cfg = Config(root=self.tmp, data=_merge(DEFAULTS, {"commands": {"test": ""}}))
+        findings = [str(f) for f in trace.check(cfg, [f"specs/features/{SPEC_ID}-demo.md"])]
+        self.assertEqual([f for f in findings if "plan de trabajo" in f], [])
 
 
 class RepoTestCase(unittest.TestCase):
@@ -235,6 +249,13 @@ class WaveVerifyTests(RepoTestCase):
         out = self.verify(self.wave_one(), ok=True)
         self.assertIn(f"Oleada 1 de {SPEC_ID} verificada", out)
 
+    def test_accepts_a_later_wave_with_a_single_task(self):
+        # verifies: SPEC-0001/AC-06
+        self.write("src/c.py", "c = 1\n")
+        manifest = self.manifest("t3", task="T-03", files=["src/c.py"], criteria=["AC-03"])
+        out = self.verify([manifest], ok=True, wave="2")
+        self.assertIn(f"Oleada 2 de {SPEC_ID} verificada", out)
+
     def test_task_without_manifest_did_not_run(self):
         # verifies: SPEC-0001/AC-07
         manifests = self.wave_one()
@@ -279,6 +300,13 @@ class WaveVerifyTests(RepoTestCase):
                                                           criteria=["AC-02"])], ok=False)
         self.assertIn("manifiesto duplicado de T-02", out)
 
+    def test_a_manifest_that_is_not_a_json_object_is_rejected(self):
+        # verifies: SPEC-0001/AC-08
+        array = self.tmp / "array.json"
+        array.write_text("[]", encoding="utf-8")
+        out = self.verify([*self.wave_one(), str(array)], ok=False)
+        self.assertIn("debe ser un objeto JSON", out)
+
     def test_scope_and_real_changes(self):
         # verifies: SPEC-0001/AC-09
         self.write("src/other.py", "o = 1\n")
@@ -298,6 +326,14 @@ class WaveVerifyTests(RepoTestCase):
         self.git("checkout", "--", "src/a.py")
         out = self.verify(manifests, ok=False)
         self.assertIn("declara 'src/a.py', que no tiene cambios", out)
+
+    def test_a_sibling_directory_of_a_task_glob_is_out_of_scope(self):
+        # verifies: SPEC-0001/AC-09
+        self.write("src/bb/x.py", "x = 1\n")
+        manifests = self.wave_one()
+        t2 = self.manifest("t2", task="T-02", files=["src/b/new.py", "src/bb/x.py"], criteria=["AC-02"])
+        out = self.verify([manifests[0], t2], ok=False)
+        self.assertIn("'src/bb/x.py' está fuera de los ficheros de la tarea", out)
 
     def test_deleted_and_renamed_files_are_changes(self):
         # unit: plan.verify_wave
@@ -329,11 +365,27 @@ class WaveVerifyTests(RepoTestCase):
                 out = self.verify(self.wave_one(**override), ok=False)
                 self.assertIn(expected, out)
 
+    def test_only_the_failing_tests_are_reported_as_red(self):
+        # verifies: SPEC-0001/AC-10
+        tests = [{"name": "good", "result": "pass"}, {"name": "bad", "result": "fail"}]
+        out = self.verify(self.wave_one(tests=tests), ok=False)
+        self.assertIn("tests en rojo: bad", out)
+        self.assertNotIn("tests en rojo: good", out)
+
     def test_deviations_are_warnings(self):
         # verifies: SPEC-0001/AC-11
         out = self.verify(self.wave_one(deviations=["usa una lista en vez de un set"]), ok=True)
         self.assertIn("⚠ T-01 desvío: usa una lista en vez de un set", out)
         self.assertIn("1 desvíos por resolver", out)
+
+    def test_deviations_of_several_tasks_are_all_warnings(self):
+        # verifies: SPEC-0001/AC-11
+        t1, t2 = self.wave_one(deviations=["a"])
+        t2 = self.manifest("t2", task="T-02", files=["src/b/new.py"], criteria=["AC-02"], deviations=["b", "c"])
+        out = self.verify([t1, t2], ok=True)
+        self.assertIn("⚠ T-01 desvío: a", out)
+        self.assertIn("⚠ T-02 desvío: c", out)
+        self.assertIn("3 desvíos por resolver", out)
 
 
 class ReviewReportTests(RepoTestCase):
@@ -384,6 +436,13 @@ class ReviewReportTests(RepoTestCase):
                 self.assertFalse(approved)
                 self.assertIn("fallida (intento", state)
 
+    def test_a_declared_blocker_with_only_other_findings_is_a_failed_review(self):
+        # verifies: SPEC-0013/AC-02
+        body = "HALLAZGOS\n1. [importante] a.py:1 — x.\n2. [sugerencia] b.py:2 — y.\nBLOQUEANTES: 1\n"
+        out = self.record(self.report_file("others.txt", body), ok=False)
+        self.assertIn("declara", out)
+        self.assertEqual(self.recorded()["verificador"]["status"], "failed")
+
     def test_an_unreadable_format_is_a_failed_review(self):
         # verifies: SPEC-0013/AC-03
         cases = {
@@ -414,6 +473,15 @@ class ReviewReportTests(RepoTestCase):
                 self.assertEqual(entry["status"], "failed")
                 self.assertIn(reason, entry["reason"])
                 self.assertNotIn("report_sha256", entry)
+
+    def test_a_report_of_exactly_the_size_limit_is_accepted(self):
+        # verifies: SPEC-0013/AC-04
+        tail = "\nBLOQUEANTES: 0\n"
+        head = "HALLAZGOS\nninguno\nRESUMEN: "
+        body = head + "x" * (256 * 1024 - len(head) - len(tail)) + tail
+        self.assertEqual(len(body.encode()), 256 * 1024)
+        self.record(self.report_file("limit.txt", body), ok=True)
+        self.assertEqual(self.recorded()["verificador"]["status"], "ok")
 
     def test_the_report_is_archived_verbatim_and_never_overwritten(self):
         # verifies: SPEC-0013/AC-05
@@ -574,6 +642,13 @@ class ReviewReportTests(RepoTestCase):
         self.record(self.report_file("leak.txt", "HALLAZGOS\nclave-secreta-123\nBLOQUEANTES: 0\n"), ok=False)
         self.assertNotIn("clave-secreta", json.dumps(self.recorded()["verificador"]["reason"]))
 
+    def test_a_report_with_text_after_the_blocker_line_is_not_approved(self):
+        # verifies: SPEC-0001/AC-12
+        self.record(self.report_file("late.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\nFin del informe\n"), ok=False)
+        entry = self.recorded()["verificador"]
+        self.assertEqual(entry["status"], "failed")
+        self.assertNotIn("blocking", entry)
+
     def test_parallel_records_do_not_lose_updates(self):
         # verifies: SPEC-0013/AC-13
         from concurrent.futures import ThreadPoolExecutor
@@ -586,6 +661,19 @@ class ReviewReportTests(RepoTestCase):
             list(pool.map(lambda a: review.record_report(
                 self.work / ".git", self.work, self.work / ".work" / "reviews", "feat/demo", sha, a, good, "s"), agents))
         self.assertEqual(sorted(review.results(self.work / ".git", "feat/demo", sha)), sorted(agents))
+
+    def test_parallel_cli_processes_do_not_lose_updates(self):
+        # verifies: SPEC-0013/AC-13
+        report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
+        agents = [f"agente-{i}" for i in range(4)]
+        self.write(".claude/methodology.toml", f'version = 1\n[commands]\ntest = ""\n[review]\nagents = {json.dumps(agents)}\n')
+        procs = [subprocess.Popen([sys.executable, str(MTH), "review", "record", a, "--report", report,
+                                   "--summary", "s"], cwd=self.work, env=self.env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT) for a in agents]
+        self.assertEqual([p.wait() for p in procs], [0] * len(agents))
+        for p in procs:
+            p.stdout.close()
+        self.assertEqual(sorted(self.recorded()), sorted(agents))
 
     def test_a_missing_report_option_is_a_clear_error(self):
         # verifies: SPEC-0013/AC-12
@@ -738,6 +826,41 @@ class ReviewReportTests(RepoTestCase):
         report = self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n")
         self.assertIn("No se pudo archivar", self.record(report, ok=False))
         self.assertNotIn("verificador", self.recorded())
+
+    def test_a_copy_that_fails_midway_records_nothing(self):
+        # verifies: SPEC-0013/AC-08
+        from mthlib import review
+        sha = self.git("rev-parse", "HEAD").strip()
+        good = Path(self.report_file("good.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 0\n"))
+        real_open = open
+
+        def failing(path, mode="r", *a, **k):
+            fh = real_open(path, mode, *a, **k)
+            if mode == "xb":
+                fh.write = mock.Mock(side_effect=OSError("disco lleno"))
+            return fh
+
+        with mock.patch("builtins.open", failing), self.assertRaises(review.ReviewError) as caught:
+            review.record_report(self.work / ".git", self.work, self.work / ".work" / "reviews",
+                                 "feat/demo", sha, "verificador", good, "s")
+        self.assertEqual(caught.exception.stage, "archive")
+        self.assertNotIn("verificador", self.recorded())
+
+    def test_an_ok_after_an_unreadable_report_keeps_the_computed_blockers(self):
+        # verifies: SPEC-0013/AC-09
+        self.record(str(self.inbox / "missing.txt"), ok=False)
+        report = self.report_file("one.txt", "HALLAZGOS\n1. [bloqueante] a.py:1 — x.\nBLOQUEANTES: 1\n")
+        self.record(report, ok=True)
+        entry = self.recorded()["verificador"]
+        self.assertEqual((entry["status"], entry["attempts"], entry["blocking"]), ("ok", 2, 1))
+        self.assertEqual(entry["failures"], 0)
+
+    def test_a_blocker_mark_before_the_findings_section_fails_the_review(self):
+        # verifies: SPEC-0013/AC-10
+        body = "CRITERIOS\n- [bloqueante] AC-01: no\nHALLAZGOS\nninguno\nBLOQUEANTES: 0\n"
+        out = self.record(self.report_file("before.txt", body), ok=False)
+        self.assertIn("marcas [bloqueante]", out)
+        self.assertEqual(self.recorded()["verificador"]["status"], "failed")
 
 
 if __name__ == "__main__":
