@@ -111,7 +111,7 @@ class MergeBypassTests(unittest.TestCase):
     def test_a_merge_inside_a_shell_construct_is_blocked(self):
         # verifies: SPEC-0016/AC-12
         for command in ("(gh pr merge 3)", "{ gh pr merge 3; }", "true && if x; then gh pr merge 3; fi", "`gh pr merge 3`",
-                        "gh pr \\\nmerge 3", "sleep 1 & gh pr merge 3"):
+                        "gh pr \\\nmerge 3", "sleep 1 & gh pr merge 3", "$(gh pr merge 3)"):
             with self.subTest(command=command):
                 self.assertTrue(self.blocked(command))
 
