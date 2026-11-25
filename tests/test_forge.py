@@ -97,16 +97,25 @@ class MergeBypassTests(unittest.TestCase):
 
     def test_a_merge_by_hand_is_blocked_however_it_is_spelled(self):
         # verifies: SPEC-0016/AC-12
-        for command in ("gh -R owner/repo pr merge 3", "glab --repo owner/repo mr merge 5", "gh --hostname h pr merge",
-                        "sudo glab mr merge 5", "env GH_TOKEN=x gh pr merge 3",
-                        "gh api -X PUT repos/o/r/pulls/3/merge", "glab api projects/1/merge_requests/1/merge --method PUT"):
+        for command in ("gh -R owner/repo pr merge 3", "glab --repo owner/repo mr merge 5",
+                        "sudo glab mr merge 5", "sudo -u root gh pr merge 3", "env -i GH_TOKEN=x gh pr merge 3",
+                        "timeout 5 gh pr merge 3", "nice -n 5 glab mr accept 5"):
+            with self.subTest(command=command):
+                self.assertIn("mth integrate", guard.violation(command, self.PROTECTED, "feat/x") or "")
+
+    def test_a_merge_through_the_api_is_blocked_unless_it_is_a_plain_read(self):
+        # verifies: SPEC-0016/AC-12
+        for command in ("gh api -X PUT repos/o/r/pulls/3/merge", "gh api -XPUT repos/o/r/pulls/3/merge",
+                        "glab api projects/1/merge_requests/1/merge --method=put", "gh api repos/o/r/pulls/3/merge -X DELETE",
+                        "gh api repos/o/r/merges -f base=a -f head=b", "gh api repos/o/r/pulls/3/merge?x=1 -f sha=abc",
+                        "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'"):
             with self.subTest(command=command):
                 self.assertIn("mth integrate", guard.violation(command, self.PROTECTED, "feat/x") or "")
 
     def test_reads_and_other_subcommands_still_pass(self):
         # verifies: SPEC-0016/AC-12
-        for command in ("gh -R owner/repo pr view 3", "glab -R owner/repo mr list", "sudo ls", "gh api repos/o/r/pulls",
-                        "gh api repos/o/r/pulls/3/merge"):
+        for command in ("gh -R owner/repo pr view 3", "glab -R owner/repo mr list", "sudo -u x ls", "command -v gh",
+                        "gh api repos/o/r/pulls", "gh api repos/o/r/pulls/3/merge", "gh api repos/o/r/pulls/3/merge -X GET"):
             with self.subTest(command=command):
                 self.assertIsNone(guard.violation(command, self.PROTECTED, "feat/x"))
 

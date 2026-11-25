@@ -83,7 +83,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 ### Guard, doctor y plantilla
 
 - El guard bloquea `glab mr merge …` y su alias `glab mr accept …` con el mismo mensaje que `gh pr merge`; otros subcomandos de `glab` pasan.
-- El bloqueo no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo (`sudo`, `env`, `command`…) ni con `gh api` / `glab api` de escritura sobre un endpoint `…/merge`.
+- El bloqueo no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo con o sin opciones (`sudo -u root`, `env -i`, `nice -n 5`…) ni con `gh api` / `glab api` que no sea una lectura simple de un endpoint `…/merge` o `…/merges`, o una mutación GraphQL de merge. Es una barrera contra errores, no un sandbox: `bash -c "…"`, `eval` o un alias siguen fuera de su alcance.
 - `mth doctor` con `gitlab` o `none` no comprueba `gh` ni avisa de `ci.required`; con `github`, igual que antes.
 - La plantilla `methodology.toml` documenta `forge`.
 
@@ -99,7 +99,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 | FM-06 | Etiqueta ya existente al retomar | El paso 2 se marca hecho y no se vuelve a crear, solo si la etiqueta está en el remoto y apunta a un commit de `main`; una solo local o en otro commit no cuenta y no se borra la rama | AC-07 |
 | FM-07 | `main` trae una versión anterior a la última etiqueta, o sin etiqueta histórica | Es historia, no una publicación pendiente: no retiene una release nueva | AC-07 |
 | FM-08 | La forja borra la rama de release al fusionar el MR | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development` y retoma esa publicación sin calcular otra versión; mientras `main` no haya vuelto a `development` (o la etiqueta no exista) no se calcula versión nueva: la salida es hacer los pasos que lista | AC-07 |
-| FM-09 | Un merge a mano con una opción global, un prefijo o la API de la forja | El guard lo bloquea igual que `gh pr merge` | AC-12 |
+| FM-09 | Un merge a mano con una opción global, un prefijo o la API de la forja | El guard lo bloquea igual que `gh pr merge`; ante la duda (método no GET, cuerpo, mutación de merge) bloquea. Un intérprete (`bash -c`) o un alias queda fuera: riesgo aceptado, el guard no es un sandbox | AC-12 |
 
 ## Criterios de aceptación
 
@@ -114,7 +114,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 - **AC-09**: El guard DEBE bloquear `glab mr merge` y dejar pasar otros subcomandos de `glab`; `gh pr merge` DEBE seguir bloqueado.
 - **AC-10**: MIENTRAS `forge` sea `gitlab` o `none`, `mth doctor` NO DEBE comprobar `gh` ni avisar de `ci.required`; con `github` DEBE conservar ambas comprobaciones.
 - **AC-11**: MIENTRAS `forge` sea `github`, el flujo de integración, publicación y hotfix NO DEBE cambiar (el test de extremo a extremo existente sigue pasando); con un remoto GitLab, `mth release` DEBE generar el `CHANGELOG.md` y la rama de release sin llamar a `gh` y terminar con los pasos manuales.
-- **AC-12**: El guard DEBE bloquear el merge a mano aunque lleve opciones globales de `gh`/`glab` (`-R`, `--repo`, `--hostname`), un prefijo de ejecución (`sudo`, `env`, `command`) o una petición de escritura de `gh api` / `glab api` a un endpoint `…/merge`; las lecturas y los demás subcomandos DEBEN pasar.
+- **AC-12**: El guard DEBE bloquear el merge a mano aunque lleve opciones globales de `gh`/`glab` (`-R`, `--repo`, `--hostname`), un prefijo de ejecución (`sudo`, `env`, `command`) o una petición de `gh api` / `glab api` a un endpoint `…/merge` o `…/merges` que no sea una lectura simple (o una mutación GraphQL de merge); las lecturas y los demás subcomandos DEBEN pasar.
 
 ## Notas
 

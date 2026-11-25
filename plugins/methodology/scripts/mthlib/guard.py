@@ -23,7 +23,9 @@ from .errors import MthError
 from .git import Git
 from .work import WORK_DIR
 
-_WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "nice"}  # run another command: judge that one
+_WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "nice", "timeout", "xargs"}  # run another command
+_JUDGED = {"git", "gh", "glab"}  # the programs whose subcommands the guard inspects
+_GRAPHQL_MERGES = ("mergePullRequest", "enablePullRequestAutoMerge", "mergeBranch")  # GraphQL mutations that merge
 _FORGE_VALUE_OPTIONS = {"-R", "--repo", "--hostname"}  # gh/glab global options that take a value
 _MERGE_BY_HAND = "los merges se hacen con `mth integrate`, `mth release` o `mth hotfix finish`"
 _SPLIT = re.compile(r"\|\||&&|;|\||\n")
@@ -119,26 +121,50 @@ def _forces_work_dir(args: list[str]) -> bool:
     return any(p in _WHOLE_TREE or p.rstrip("/") == WORK_DIR or p.startswith(f"{WORK_DIR}/") for p in paths)
 
 
+def _api_method(args: list[str]) -> str | None:
+    """The HTTP method a ``gh api`` / ``glab api`` call asks for (``-X PUT``, ``-XPUT``, ``--method=put``)."""
+    for n, a in enumerate(args):
+        if a in ("-X", "--method"):
+            return args[n + 1].upper() if n + 1 < len(args) else ""
+        if a.startswith("--method="):
+            return a.split("=", 1)[1].upper()
+        if a.startswith("-X") and len(a) > 2:
+            return a[2:].upper()
+    return None
+
+
 def _merges_through_api(args: list[str]) -> bool:
-    """A write request to a ``.../merge`` endpoint of ``gh api`` / ``glab api``."""
-    endpoint = any(a.rstrip("/").endswith("/merge") for a in args if not a.startswith("-"))
-    writes = any(a in ("-f", "-F", "--field", "--raw-field", "--input") for a in args) or any(
-        a.upper() in ("PUT", "POST", "PATCH") for a in args)
-    return endpoint and writes
+    """A request to a merge endpoint (or a merging GraphQL mutation) that is not an explicit read.
+
+    Fail-safe: anything but a plain GET without a body may write, so it counts.
+    """
+    if any(m in a for a in args for m in _GRAPHQL_MERGES):
+        return True
+    if not any(a.split("?", 1)[0].rstrip("/").endswith(("/merge", "/merges")) for a in args if not a.startswith("-")):
+        return False
+    sends_data = any(a in ("-f", "-F", "--field", "--raw-field", "--input")
+                     or a.startswith(("--field=", "--raw-field=", "--input=")) for a in args)
+    return sends_data or _api_method(args) not in (None, "GET")
+
+
+def _command_tokens(segment: str) -> tuple[str, list[str]]:
+    """Program and arguments of ``segment``, past ``VAR=value`` assignments and execution prefixes.
+
+    A prefix (``sudo -u root``, ``nice -n 5``, ``env -i``) is skipped up to the first program the guard
+    judges, so its own options and their values cannot hide the command that follows.
+    """
+    tok = _tokens(segment.strip())
+    while tok and "=" in tok[0] and not tok[0].startswith("-"):
+        tok = tok[1:]  # leading VAR=value assignments
+    if tok and tok[0].rsplit("/", 1)[-1] in _WRAPPERS:
+        tok = next((tok[n:] for n, t in enumerate(tok[1:], 1) if t.rsplit("/", 1)[-1] in _JUDGED), [])
+    return (tok[0].rsplit("/", 1)[-1] if tok else ""), tok[1:]
 
 
 def violation(command: str, protected: set[str], current: str | None) -> str | None:
     """Reason why ``command`` must be blocked, or None."""
     for segment in _SPLIT.split(command):
-        tok = _tokens(segment.strip())
-        while tok and "=" in tok[0] and not tok[0].startswith("-"):
-            tok = tok[1:]  # leading VAR=value assignments
-        while tok and tok[0].rsplit("/", 1)[-1] in _WRAPPERS:
-            tok = tok[1:]  # sudo, env, command ...: judge the command they run
-            while tok and "=" in tok[0] and not tok[0].startswith("-"):
-                tok = tok[1:]
-        prog = tok[0].rsplit("/", 1)[-1] if tok else ""
-        rest = tok[1:]
+        prog, rest = _command_tokens(segment)
         if prog == "git":  # skip global options: git -C dir -c k=v --no-pager push ...
             while rest and rest[0].startswith("-"):
                 rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
