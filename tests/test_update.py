@@ -367,5 +367,32 @@ class AdrTextTests(unittest.TestCase):
         self.assertIn("max_file_lines = 500  # mío", out)
 
 
+class SkillTests(unittest.TestCase):
+    plugin = HERE.parent / "plugins" / "methodology"
+    skill = (plugin / "skills" / "mth-update" / "SKILL.md").read_text(encoding="utf-8")
+
+    def frontmatter(self) -> dict[str, str]:
+        head = self.skill.split("---")[1]
+        return {k.strip(): v.strip() for k, v in (line.split(":", 1) for line in head.strip().splitlines())}
+
+    def test_only_the_person_launches_it_with_opus(self):
+        # verifies: SPEC-0021/AC-12
+        meta = self.frontmatter()
+        self.assertEqual(meta["name"], "mth-update")
+        self.assertEqual(meta["model"], "opus")
+        self.assertEqual(meta["disable-model-invocation"], "true")
+
+    def test_session_context_never_proposes_it(self):
+        # verifies: SPEC-0021/AC-12
+        for path in ("context/core.md", "context/unadopted.md", "hooks/hooks.json"):
+            self.assertNotIn("mth-update", (self.plugin / path).read_text(encoding="utf-8"), path)
+
+    def test_documents_the_flow_and_the_three_closing_lists(self):
+        # verifies: SPEC-0021/AC-12
+        for needle in ("mth update --plan", "`mth update`", "AskUserQuestion", "mth doctor", "mth trace",
+                       "mth-integrate", "**aplicado**", "**decidido**", "**pendiente**"):
+            self.assertIn(needle, self.skill)
+
+
 if __name__ == "__main__":
     unittest.main()
