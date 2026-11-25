@@ -83,7 +83,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 ### Guard, doctor y plantilla
 
 - El guard bloquea `glab mr merge …` y su alias `glab mr accept …` con el mismo mensaje que `gh pr merge`; otros subcomandos de `glab` pasan.
-- El bloqueo no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo con o sin opciones (`sudo -u root`, `env -i`, `nice -n 5`…) ni con `gh api` / `glab api` que no sea una lectura simple de un endpoint `…/merge` o `…/merges`, o una mutación GraphQL de merge. Es una barrera contra errores, no un sandbox: `bash -c "…"`, `eval` o un alias siguen fuera de su alcance.
+- El bloqueo no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo con o sin opciones (`sudo -u root`, `env -i`, `nice -n 5`…) ni con `gh api` / `glab api` que no sea una lectura simple de un endpoint `…/merge` o `…/merges`, o una mutación GraphQL de merge. Es una barrera contra errores, no un sandbox: `bash -c "…"`, `eval`, un alias, una sustitución `$(…)` dentro de los argumentos de otro comando o un prefijo que no esté en su lista siguen fuera de su alcance.
 - `mth doctor` con `gitlab` o `none` no comprueba `gh` ni avisa de `ci.required`; con `github`, igual que antes.
 - La plantilla `methodology.toml` documenta `forge`.
 
@@ -99,7 +99,7 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 | FM-06 | Etiqueta ya existente al retomar | El paso 2 se marca hecho y no se vuelve a crear, solo si la etiqueta está en el remoto y apunta a un commit de `main`; una solo local o en otro commit no cuenta y no se borra la rama | AC-07 |
 | FM-07 | `main` trae una versión anterior a la última etiqueta, o sin etiqueta histórica | Es historia, no una publicación pendiente: no retiene una release nueva | AC-07 |
 | FM-08 | La forja borra la rama de release al fusionar el MR | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development` y retoma esa publicación sin calcular otra versión; mientras `main` no haya vuelto a `development` (o la etiqueta no exista) no se calcula versión nueva: la salida es hacer los pasos que lista | AC-07 |
-| FM-09 | Un merge a mano con una opción global, un prefijo o la API de la forja | El guard lo bloquea igual que `gh pr merge`; ante la duda (método no GET, cuerpo, mutación de merge) bloquea. Un intérprete (`bash -c`) o un alias queda fuera: riesgo aceptado, el guard no es un sandbox | AC-12 |
+| FM-09 | Un merge a mano con una opción global, un prefijo o la API de la forja | El guard lo bloquea igual que `gh pr merge`; ante la duda (método no GET, cuerpo, mutación de merge) bloquea. Un intérprete (`bash -c`), un alias, una sustitución `$(…)` dentro de otro comando o un prefijo desconocido quedan fuera: riesgo aceptado, el guard no es un sandbox | AC-12 |
 
 ## Criterios de aceptación
 
