@@ -26,6 +26,7 @@ BLOCK_START = "<!-- claude-methodology:start -->"
 BLOCK_END = "<!-- claude-methodology:end -->"
 ADOPT_BRANCH = "chore/adopt-methodology"
 RECONFIGURE_BRANCH = "chore/reconfigure-methodology"  # SPEC-0011
+ADR_SUBDIR = "methodology"  # generated adoption, reconfiguration and update ADRs live under <paths.adr>/
 RECONFIGURED_HEADER = "# claude-methodology · regenerado por `mth reconfigure` (ver el ADR de reestructuración).\n"
 METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration|actualizacion|update)-(de|of)-claude-methodology\.md$")
 MARKETPLACE = "claude-methodology"
@@ -148,7 +149,10 @@ def _claude_block(paths: dict, vocab: lang.Vocabulary) -> str:
 def claude_block_state(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> str:
     """Read-only state of the methodology block in ``paths.claude_md``: ``current``, ``stale`` or ``absent``."""
     path = root / paths["claude_md"]
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    try:
+        current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MthError(f"No se puede leer {path.name}: {exc}.", hint="Corrige el fichero o su codificación (UTF-8).") from exc
     if BLOCK_START not in current or BLOCK_END not in current:
         return "absent"
     block = BLOCK_START + current.split(BLOCK_START, 1)[1].split(BLOCK_END, 1)[0] + BLOCK_END
@@ -333,7 +337,7 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
 # -- GitHub settings ------------------------------------------------------------
 def _write_adoption_adr(root: Path, cfg, git: Git, inventory: survey.Survey, plan: adoption.Plan) -> None:
     ident = IdRegistry(cfg, git.files()).next_id(cfg["trace"]["adr_kind"])
-    folder = root / cfg["paths"]["adr"] / "methodology"
+    folder = root / cfg["paths"]["adr"] / ADR_SUBDIR
     folder.mkdir(parents=True, exist_ok=True)
     slug = "adopcion-de-claude-methodology" if cfg.vocab.code == "es" else "adoption-of-claude-methodology"
     (folder / f"{ident}-{slug}.md").write_text(adoption.adr_text(ident, inventory, plan, cfg.vocab), encoding="utf-8")
@@ -394,10 +398,10 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     git.checkout_synced(cfg.development)
     git.out("checkout", "-b", RECONFIGURE_BRANCH)
     (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
-    previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / "methodology").glob("*.md")
+    previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / ADR_SUBDIR).glob("*.md")
                       if (m := METHODOLOGY_ADR.search(p.name)))
     ident = IdRegistry(new_cfg, git.files()).next_id(new_cfg["trace"]["adr_kind"])
-    folder = root / new_cfg["paths"]["adr"] / "methodology"
+    folder = root / new_cfg["paths"]["adr"] / ADR_SUBDIR
     folder.mkdir(parents=True, exist_ok=True)
     slug = "reestructuracion-de-claude-methodology" if new_cfg.vocab.code == "es" else "reconfiguration-of-claude-methodology"
     adr = folder / f"{ident}-{slug}.md"

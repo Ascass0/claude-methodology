@@ -26,7 +26,7 @@ CLASSES = (AUTOMATIC, DECISION, INFORMATIVE)
 TEMPLATE = setup.TEMPLATES / "methodology.toml"
 # Tables the person owns: a missing key there is a choice, not a gap.
 OWNED = {("ids",), ("review", "paths"), ("release", "version_files"), ("branches", "extra")}
-ADR_SUBDIR = "methodology"  # adoption, reconfiguration and update records are generated, not authored
+PATH_KEYS = ("docs", "specs", "adr", "changes", "changelog", "claude_md")
 
 
 @dataclass(frozen=True)
@@ -90,8 +90,13 @@ def _outdated(repo: Repo) -> str | None:
     return ", ".join(outdated_agents(repo)) or None
 
 
+def edited_agents(repo: Repo) -> list[str]:
+    """Installed catalog agents whose generated part was edited by hand: the person decides about them."""
+    return _agents_with(repo, lambda s: s == "editado a mano")
+
+
 def _edited(repo: Repo) -> str | None:
-    return ", ".join(_agents_with(repo, lambda s: s == "editado a mano")) or None
+    return ", ".join(edited_agents(repo)) or None
 
 
 def _profile(repo: Repo) -> str | None:
@@ -119,7 +124,7 @@ def _read(path: Path) -> str:
 
 def _format(repo: Repo) -> str | None:
     cfg, vocab = repo.cfg, repo.cfg.vocab
-    generated = f"{cfg['paths']['adr']}/{ADR_SUBDIR}/"
+    generated = f"{cfg['paths']['adr']}/{setup.ADR_SUBDIR}/"
     roots = (f"{cfg['paths']['specs']}/", f"{cfg['paths']['adr']}/")
     docs = [f for f in repo.git.files() if f.endswith(".md") and f.startswith(roots) and not f.startswith(generated)]
     old = [f for f in docs if not compact.is_compact(_read(cfg.root / f), vocab)]
@@ -173,16 +178,27 @@ def to_json(gaps: list[Gap]) -> str:
     return json.dumps({"plugin": __version__, "gaps": [asdict(g) for g in gaps]}, ensure_ascii=False, indent=2)
 
 
+def _confine(cfg: Config) -> None:
+    """Every configured path must stay inside the repository: ``mth update`` writes through them."""
+    root = cfg.root.resolve()
+    for key in PATH_KEYS:
+        rel = cfg["paths"][key]
+        if Path(rel).is_absolute() or not (root / rel).resolve().is_relative_to(root):
+            raise MthError(f"paths.{key} = '{rel}' sale del repositorio.",
+                           hint="Usa una ruta relativa que quede dentro del repo.")
+
+
 def open_repo(start: Path) -> Repo:
     """The adopted repository at ``start``.
 
     Raises:
-        MthError: The repository has not adopted the methodology.
+        MthError: The repository has not adopted the methodology, or a configured path leaves it.
     """
     git = Git.discover(start)
     if not (git.root / CONFIG_PATH).is_file():
         raise MthError("El repositorio no ha adoptado la metodología.", hint="Usa la skill mth-init.")
     cfg = load(git.root)
+    _confine(cfg)
     git.remote = cfg.remote
     return Repo(git, cfg)
 

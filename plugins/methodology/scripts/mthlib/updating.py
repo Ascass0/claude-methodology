@@ -164,7 +164,7 @@ def _ident(adr: Path) -> str:
 def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update.Gap]) -> Path:
     """Write (or extend) the update ADR before anything else changes, so a crash never loses what was planned."""
     git, cfg = repo.git, repo.cfg
-    folder = git.root / cfg["paths"]["adr"] / update.ADR_SUBDIR
+    folder = git.root / cfg["paths"]["adr"] / setup.ADR_SUBDIR
     folder.mkdir(parents=True, exist_ok=True)
     adr = _existing_adr(git, folder, cfg.development)
     previous_text = adr.read_text(encoding="utf-8") if adr else ""
@@ -205,11 +205,22 @@ def _owned_paths(repo: update.Repo, adr: Path) -> list[str]:
 def _finish(repo: update.Repo, adr: Path) -> None:
     git = repo.git
     git.out("add", "--", *_owned_paths(repo, adr))
+    for name in update.edited_agents(repo):  # a hand-edited agent is the person's decision, never committed here
+        git.out("reset", "-q", "--", f".claude/agents/{name}.md", f".claude/mth/agents/{name}.guard.toml")
     if not git.ok("diff", "--cached", "--quiet"):  # staged changes; otherwise a previous run committed them
         git.commit_message(commits.build("chore", "methodology", "update claude-methodology",
                                          "Bring the repository up to date with the installed plugin: apply the "
                                          "automatic gaps and record them.", [_ident(adr)]))
     git.push(BRANCH)
+
+
+def _report(adr: Path, automatic: list[update.Gap], pending: list[update.Gap]) -> None:
+    say(f"· ADR de actualización: {adr}")
+    for gap in automatic:
+        say(f"· aplicado {gap.id}: {gap.evidence}")
+    for gap in pending:
+        warn(f"Pendiente ({gap.clase}) {gap.id}: {gap.evidence}")
+    say(f"✓ Actualización en {BRANCH}. Haz lo pendiente con la skill mth-update y después mth integrate.")
 
 
 def apply(start: Path) -> None:
@@ -240,9 +251,4 @@ def apply(start: Path) -> None:
     adr = _record(repo, automatic, pending)
     _apply(repo, automatic, text)
     _finish(repo, adr)
-    say(f"· ADR de actualización: {adr.relative_to(cfg.root)}")
-    for gap in automatic:
-        say(f"· aplicado {gap.id}: {gap.evidence}")
-    for gap in pending:
-        warn(f"Pendiente ({gap.clase}) {gap.id}: {gap.evidence}")
-    say(f"✓ Actualización en {BRANCH}. Haz lo pendiente con la skill mth-update y después mth integrate.")
+    _report(adr.relative_to(cfg.root), automatic, pending)

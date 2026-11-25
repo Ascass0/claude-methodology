@@ -78,6 +78,23 @@ class UpdateTestCase(unittest.TestCase):
         return out.getvalue()
 
 
+class ConfinementTests(UpdateTestCase):
+    def test_a_configured_path_outside_the_repo_is_refused(self):
+        # verifies: SPEC-0021/AC-07
+        for key, value in (("claude_md", "../x.md"), ("adr", "../../adr"), ("specs", "/etc")):
+            with self.subTest(key=key):
+                text = self.config_text.replace(f'{key} = ', f'{key} = "{value}"\n# was ', 1)
+                self.write(".claude/methodology.toml", text)
+                with self.assertRaises(MthError) as ctx:
+                    update.open_repo(self.root)
+                self.assertIn(f"paths.{key}", ctx.exception.message)
+
+    def test_paths_inside_the_repo_are_accepted(self):
+        # verifies: SPEC-0021/AC-07
+        self.write(".claude/methodology.toml", self.config_text.replace('claude_md = "CLAUDE.md"', 'claude_md = ".claude/CLAUDE.md"'))
+        self.assertEqual(update.open_repo(self.root).cfg["paths"]["claude_md"], ".claude/CLAUDE.md")
+
+
 class PlanTests(UpdateTestCase):
     def test_only_adopted_repos_are_updated(self):
         # verifies: SPEC-0021/AC-01

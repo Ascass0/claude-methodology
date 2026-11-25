@@ -67,9 +67,10 @@ class Git:
 
     def commit_message(self, message: str) -> None:
         """Commit the staged changes with ``message`` (written to a file so any text is safe)."""
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as fh:
-            fh.write(message)
+        fh = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
         try:
+            with fh:
+                fh.write(message)
             self.out("commit", "-F", fh.name)
         finally:
             Path(fh.name).unlink(missing_ok=True)
