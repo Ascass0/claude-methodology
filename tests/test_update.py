@@ -323,6 +323,36 @@ class ApplyTests(unittest.TestCase):
         for gap in ("`config`", "`bloque`", "`hook`"):
             self.assertIn(gap, text)
 
+    def test_resume_extends_the_adr_with_a_new_gap(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        self.mth("agents", "add", "revisor-seguridad")  # a second agent, outdated after the first run
+        agent = self.work / ".claude/agents/revisor-seguridad.md"
+        agent.write_text(agent.read_text().replace("revisor-seguridad@1.0.0", "revisor-seguridad@0.9.0"))
+        self.mth("update")
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "2")
+        adrs = [f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines() if f.endswith(UPDATE_ADR)]
+        self.assertEqual(len(adrs), 1)
+        text = (self.work / adrs[0]).read_text()
+        for gap in ("`config`", "`bloque`", "`hook`", "`agentes-desactualizados`: revisor-fallos",
+                    "`agentes-desactualizados`: revisor-seguridad"):
+            self.assertIn(gap, text)
+        self.assertEqual(text.count("`config`"), 1)  # earlier gaps are kept once, not repeated
+
+    def test_resume_finishes_an_interrupted_run_with_only_its_own_paths(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        self.git("push", "-q", "origin", f":{BRANCH}")
+        self.git("reset", "-q", "--soft", "HEAD~1")  # everything applied, nothing committed or pushed
+        (self.work / ".env").write_text("SECRETO=1\n")
+        self.mth("update")
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")
+        self.git("fetch", "-q")
+        files = self.git("ls-tree", "-r", "--name-only", f"origin/{BRANCH}")
+        self.assertNotIn(".env", files)
+        self.assertTrue(any(f.endswith(UPDATE_ADR) for f in files.splitlines()))
+        self.assertIn(".env", self.git("status", "--porcelain"))
+
     def test_resume_pushes_a_commit_that_was_never_pushed(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")

@@ -171,7 +171,8 @@ def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update
     ident = _ident(adr) if adr else IdRegistry(cfg, git.files()).next_id(cfg["trace"]["adr_kind"])
     adr = adr or folder / f"{ident}-{SLUG[cfg.vocab.code]}.md"
     earlier = _read_applied(previous_text)
-    applied = earlier + [g for g in automatic if g.id not in {e.id for e in earlier}]
+    seen = {(g.id, g.evidence) for g in earlier}
+    applied = earlier + [g for g in automatic if (g.id, g.evidence) not in seen]
     others = sorted(p.name[:m.start()] for p in folder.glob("*.md")
                     if (m := setup.METHODOLOGY_ADR.search(p.name)) and p != adr)
     adr.write_text(adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab), encoding="utf-8")
