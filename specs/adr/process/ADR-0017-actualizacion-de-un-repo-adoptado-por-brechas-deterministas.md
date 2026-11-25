@@ -1,6 +1,6 @@
 # ADR-0017 · Actualización de un repo adoptado por brechas deterministas
 
-- Estado: propuesto
+- Estado: aceptado
 - Fecha: 2026-11-25
 - Categoría: process
 - Formato: compacto
