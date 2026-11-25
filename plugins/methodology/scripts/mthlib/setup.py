@@ -108,6 +108,17 @@ def install_hook(git: Git, mode: str = "own") -> str:
     return status
 
 
+def hook_state(git: Git, mode: str = "own") -> str:
+    """Read-only state of the commit-msg hook: ``current``, ``stale`` (ours, outdated), ``foreign`` or ``absent``."""
+    path = git.hooks_dir() / "commit-msg"
+    if not path.exists():
+        return "absent"
+    current = path.read_text(encoding="utf-8", errors="replace")
+    if HOOK_MARK not in current:
+        return "foreign"
+    return "current" if current == hook_script(chain=mode == "chain") else "stale"
+
+
 LAUNCHER = Path("mth") / "launcher"
 MTH_PY = MTH.parent / "mth.py"
 
@@ -132,6 +143,16 @@ def _claude_block(paths: dict, vocab: lang.Vocabulary) -> str:
     for key, value in paths.items():
         text = text.replace("{{" + key.upper() + "}}", str(value))
     return text.strip()
+
+
+def claude_block_state(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> str:
+    """Read-only state of the methodology block in ``paths.claude_md``: ``current``, ``stale`` or ``absent``."""
+    path = root / paths["claude_md"]
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if BLOCK_START not in current or BLOCK_END not in current:
+        return "absent"
+    block = BLOCK_START + current.split(BLOCK_START, 1)[1].split(BLOCK_END, 1)[0] + BLOCK_END
+    return "current" if block == _claude_block(paths, vocab) else "stale"
 
 
 def upsert_claude_md(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> None:
