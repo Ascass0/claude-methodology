@@ -6,6 +6,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.14.0] - 2026-11-25
+
+### Añadido
+- Sección `[limits]` en la configuración: `max_file_lines` (1000 por defecto), `exclude` y `[[limits.exceptions]]`, donde `max_lines` (techo mayor que el límite) y `reason` son obligatorios; una excepción incompleta falla al cargar la configuración. (SPEC-0020, ADR-0016)
+- `mth trace` aplica un trinquete sobre la diferencia con la rama padre: es error que la rama cree un fichero por encima del límite, lo haga cruzarlo o lo haga crecer estando ya por encima; también superar el techo de una excepción y una excepción caducada. Un fichero largo heredado que la rama no hace crecer solo avisa (`mth trace --limits` los lista). Se excluyen los binarios (los que `git` marca como tales o con un byte NUL) y los renombrados que git detecta se comparan con su origen. (SPEC-0020, ADR-0016)
+- `revisor-diseno` (1.1.0) valora si el `reason` de cada excepción se sostiene frente a la responsabilidad única, con evals nuevas. (SPEC-0020, ADR-0016)
+
 ## [0.13.0] - 2026-11-25
 
 ### Añadido
