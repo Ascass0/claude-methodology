@@ -498,9 +498,7 @@ def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, tod
     rows = [f"| `{d.question}` | `{d.outcome}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |"
             for d in plan.decisions]
     return "\n".join([
-        f"# {ident} · {t['title']}", "",
-        f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
-        f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
+        *adr_header(ident, t, vocab, today),
         f"## {context}", "", t["intro"].format(profile=survey.profile), "",
         t["signals"].format(signals=", ".join(f"`{s}`" for s in present) or "—"), "",
         f"## {decision}", "", t["body"], "", t["table"], "|---|---|---|---|---|", *rows, "",
@@ -509,6 +507,13 @@ def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, tod
         t["legacy"].format(base=legacy[:7]) if legacy else t["strict"], t["change"], "",
         f"## {imposes}", "", t["imposes"], "",
     ])
+
+
+def adr_header(ident: str, t: dict[str, str], vocab: lang.Vocabulary, today: date | None = None) -> list[str]:
+    """Title and header lines of a generated compact ADR (ADR-0014); ``t`` holds its translated labels."""
+    return [f"# {ident} · {t['title']}", "",
+            f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
+            f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", ""]
 
 
 def _cell(text: str) -> str:
@@ -557,9 +562,7 @@ def reconfigure_adr_text(ident: str, previous: str | None, plan: Plan, changes: 
     change_rows = [f"| `{c.key}` | {_cell(_shown(c.before))} | {_cell(_shown(c.after))} |" for c in changes]
     pending = [f"- `{d.question}: {d.option}` — {d.effect}" for d in plan.decisions if d.migration]
     return "\n".join([
-        f"# {ident} · {t['title']}", "",
-        f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
-        f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
+        *adr_header(ident, t, vocab, today),
         f"## {context}", "", t["intro"].format(questions=questions),
         *(["", t["previous"].format(previous=previous)] if previous else []), "",
         f"## {decision}", "", t["body"], "", t["table"], "|---|---|---|---|", *rows, "",
