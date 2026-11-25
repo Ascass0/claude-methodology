@@ -23,6 +23,11 @@ def fx(text: str) -> str:
     return text.replace("@@", "SPEC-" + "9001")
 
 
+def no_limits(root: Path) -> dict:
+    """The git surface that the line limit uses, for a fake repository with no long files."""
+    return {"root": root, "binary_by_attributes": lambda paths: set(), "current_branch": lambda: "development"}
+
+
 def lines(*rows: str) -> str:
     return fx("\n".join(rows) + "\n")
 
@@ -129,7 +134,7 @@ class LabelTests(unittest.TestCase):
         test_mth._write(root / "tests/test_new.py", lines("def test_b():", "    pass"))
         cfg = parse(root, CONFIG + f'[trace]\nlegacy_base = "{"a" * 40}"\n')
         ctx = SimpleNamespace(cfg=cfg, git=SimpleNamespace(files=lambda: ["tests/test_old.py", "tests/test_new.py"],
-                                                          unchanged_since=lambda base: {"tests/test_old.py"}))
+                                                          unchanged_since=lambda base: {"tests/test_old.py"}, **no_limits(root)))
         errors, legacy = flow.run_trace(ctx)
         self.assertEqual([f.path for f in errors], ["tests/test_new.py"])
         self.assertEqual([f.path for f in legacy], ["tests/test_old.py"])
@@ -140,7 +145,7 @@ class LabelTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, root)
         test_mth._write(root / "tests/test_new.py", lines("def test_b():", "    pass"))
         ctx = SimpleNamespace(cfg=parse(root, CONFIG), git=SimpleNamespace(files=lambda: ["tests/test_new.py"],
-                                                                         unchanged_since=lambda base: set()))
+                                                                         unchanged_since=lambda base: set(), **no_limits(root)))
         with self.assertRaises(MthError) as raised:
             flow._gate_trace(ctx)
         self.assertIn("Trazabilidad rota", raised.exception.message)

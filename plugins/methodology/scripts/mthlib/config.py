@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, catalog, forge, lang, versions, work
+from . import __version__, catalog, forge, lang, limits, versions, work
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -49,6 +49,9 @@ DEFAULTS: dict[str, Any] = {
                   **{f"**/*.{ext}": r"^\s*(?:it|test)(?:\.\w+)*\s*\(" for ext in ("js", "jsx", "mjs", "cjs", "ts", "tsx")},
                   "**/*.go": r"^func\s+Test\w*\s*\(",
               }},
+    "limits": {"max_file_lines": 1000,
+               "exclude": ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generated/**"],
+               "exceptions": []},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
@@ -83,6 +86,7 @@ _SCHEMA: dict[str, Any] = {
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
               "adr_kind": str, "include": list, "exclude": list, "legacy_base": str,
               "test_patterns": dict},
+    "limits": {"max_file_lines": int, "exclude": list, "exceptions": list},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
     "language": {"docs": str},
@@ -205,6 +209,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
     legacy = data["trace"]["legacy_base"]
     if legacy and not _COMMIT.match(legacy):
         raise MthError(f"'trace.legacy_base' = '{legacy}' debe ser el hash completo de un commit (40 caracteres hexadecimales).")
+    limits.validate(data["limits"])
     for glob, regex in data["trace"]["test_patterns"].items():
         if not isinstance(regex, str):
             raise MthError(f"'trace.test_patterns.\"{glob}\"' debe ser una expresión regular (texto) o \"\" para desactivarla.")
