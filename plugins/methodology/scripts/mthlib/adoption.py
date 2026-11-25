@@ -465,8 +465,7 @@ def summary_text(survey: Survey, plan: Plan) -> str:
 # -- adoption ADR -------------------------------------------------------------
 _ADR_TEXT = {
     "es": {"title": "Adopción de claude-methodology", "status": "Estado", "accepted": "aceptado", "date": "Fecha",
-           "category": "Categoría", "context": "Contexto", "decision": "Decisión",
-           "alternatives": "Alternativas consideradas", "consequences": "Consecuencias",
+           "category": "Categoría",
            "intro": "Este repositorio adopta claude-methodology. `mth survey` lo clasificó con el perfil **{profile}**.",
            "signals": "Señales detectadas: {signals}.",
            "body": "Se adopta la metodología con estas decisiones, tomadas en la entrevista de adopción:",
@@ -474,10 +473,10 @@ _ADR_TEXT = {
            "others": "Las demás opciones de cada pregunta, descritas en la skill `mth-init` de claude-methodology.",
            "legacy": "- El contenido anterior a `{base}` queda como legado: sus hallazgos de trazabilidad son avisos hasta que se modifica.",
            "strict": "- Todo el contenido del repo cumple las reglas de la metodología desde la adopción.",
-           "change": "- Cambiar una decisión exige un ADR que sustituya a este."},
+           "change": "- Cambiar una decisión exige un ADR que sustituya a este.",
+           "imposes": "- [script] `mth doctor` y `mth trace` comprueban la configuración y el contenido adoptados."},
     "en": {"title": "Adoption of claude-methodology", "status": "Status", "accepted": "accepted", "date": "Date",
-           "category": "Category", "context": "Context", "decision": "Decision",
-           "alternatives": "Alternatives considered", "consequences": "Consequences",
+           "category": "Category",
            "intro": "This repository adopts claude-methodology. `mth survey` classified it with the **{profile}** profile.",
            "signals": "Detected signals: {signals}.",
            "body": "The methodology is adopted with these decisions, taken in the adoption interview:",
@@ -485,13 +484,15 @@ _ADR_TEXT = {
            "others": "The other options of each question, described in the `mth-init` skill of claude-methodology.",
            "legacy": "- Content older than `{base}` is legacy: its traceability findings are warnings until it is modified.",
            "strict": "- All the repository content follows the methodology rules from adoption on.",
-           "change": "- Changing a decision requires an ADR that supersedes this one."},
+           "change": "- Changing a decision requires an ADR that supersedes this one.",
+           "imposes": "- [script] `mth doctor` and `mth trace` check the adopted configuration and content."},
 }
 
 
 def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, today: date | None = None) -> str:
     """Adoption ADR of the target repository, in its documentation language."""
     t = _ADR_TEXT[vocab.code]
+    context, decision, rejected, consequences, imposes = vocab.adr_fields
     present = [k for k, v in survey.signals.items() if v and k not in ("files", "language", "branches", "forge", "forge_host", "integration")]
     legacy = plan.data["trace"].get("legacy_base", "")
     rows = [f"| `{d.question}` | `{d.outcome}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |"
@@ -499,13 +500,14 @@ def adr_text(ident: str, survey: Survey, plan: Plan, vocab: lang.Vocabulary, tod
     return "\n".join([
         f"# {ident} · {t['title']}", "",
         f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
-        f"- {t['category']}: methodology", "",
-        f"## {t['context']}", "", t["intro"].format(profile=survey.profile), "",
+        f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
+        f"## {context}", "", t["intro"].format(profile=survey.profile), "",
         t["signals"].format(signals=", ".join(f"`{s}`" for s in present) or "—"), "",
-        f"## {t['decision']}", "", t["body"], "", t["table"], "|---|---|---|---|---|", *rows, "",
-        f"## {t['alternatives']}", "", t["others"], "",
-        f"## {t['consequences']}", "",
+        f"## {decision}", "", t["body"], "", t["table"], "|---|---|---|---|---|", *rows, "",
+        f"## {rejected}", "", t["others"], "",
+        f"## {consequences}", "",
         t["legacy"].format(base=legacy[:7]) if legacy else t["strict"], t["change"], "",
+        f"## {imposes}", "", t["imposes"], "",
     ])
 
 
@@ -515,8 +517,7 @@ def _cell(text: str) -> str:
 
 _RECONFIGURE_TEXT = {
     "es": {"title": "Reestructuración de claude-methodology", "status": "Estado", "accepted": "aceptado",
-           "date": "Fecha", "category": "Categoría", "context": "Contexto", "decision": "Decisión",
-           "alternatives": "Alternativas consideradas", "consequences": "Consecuencias",
+           "date": "Fecha", "category": "Categoría",
            "intro": "Se revisa la configuración de la metodología con la skill `mth-reconfigure` "
                     "(preguntas: {questions}).",
            "previous": "Modifica las decisiones registradas en {previous}.",
@@ -527,10 +528,10 @@ _RECONFIGURE_TEXT = {
            "pending": "Migraciones que se hacen en la rama de la reestructuración:",
            "others": "Las demás opciones de cada pregunta, descritas en la skill `mth-init` de claude-methodology.",
            "keep": "- Lo que no se preguntó conserva su valor.",
-           "change": "- Cambiar una decisión exige un ADR que sustituya a este."},
+           "change": "- Cambiar una decisión exige un ADR que sustituya a este.",
+           "imposes": "- [script] `mth doctor` y `mth trace` comprueban la configuración reestructurada."},
     "en": {"title": "Reconfiguration of claude-methodology", "status": "Status", "accepted": "accepted",
-           "date": "Date", "category": "Category", "context": "Context", "decision": "Decision",
-           "alternatives": "Alternatives considered", "consequences": "Consequences",
+           "date": "Date", "category": "Category",
            "intro": "The methodology configuration is reviewed with the `mth-reconfigure` skill "
                     "(questions: {questions}).",
            "previous": "It modifies the decisions recorded in {previous}.",
@@ -541,7 +542,8 @@ _RECONFIGURE_TEXT = {
            "pending": "Migrations done in the reconfiguration branch:",
            "others": "The other options of each question, described in the `mth-init` skill of claude-methodology.",
            "keep": "- Whatever was not asked keeps its value.",
-           "change": "- Changing a decision requires an ADR that supersedes this one."},
+           "change": "- Changing a decision requires an ADR that supersedes this one.",
+           "imposes": "- [script] `mth doctor` and `mth trace` check the reconfigured setup."},
 }
 
 
@@ -549,6 +551,7 @@ def reconfigure_adr_text(ident: str, previous: str | None, plan: Plan, changes: 
                          vocab: lang.Vocabulary, today: date | None = None) -> str:
     """Reconfiguration ADR of the target repository, in its documentation language (SPEC-0011)."""
     t = _RECONFIGURE_TEXT[vocab.code]
+    context, decision, rejected, consequences, imposes = vocab.adr_fields
     questions = ", ".join(f"`{d.question}`" for d in plan.decisions)
     rows = [f"| `{d.question}` | `{d.option}` | {_cell(d.effect)} | {_cell(d.note)} |" for d in plan.decisions]
     change_rows = [f"| `{c.key}` | {_cell(_shown(c.before))} | {_cell(_shown(c.after))} |" for c in changes]
@@ -556,14 +559,15 @@ def reconfigure_adr_text(ident: str, previous: str | None, plan: Plan, changes: 
     return "\n".join([
         f"# {ident} · {t['title']}", "",
         f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
-        f"- {t['category']}: methodology", "",
-        f"## {t['context']}", "", t["intro"].format(questions=questions),
+        f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
+        f"## {context}", "", t["intro"].format(questions=questions),
         *(["", t["previous"].format(previous=previous)] if previous else []), "",
-        f"## {t['decision']}", "", t["body"], "", t["table"], "|---|---|---|---|", *rows, "",
+        f"## {decision}", "", t["body"], "", t["table"], "|---|---|---|---|", *rows, "",
         *([t["changes"], "", t["changes_table"], "|---|---|---|", *change_rows] if changes else [t["no_changes"]]), "",
         *([t["pending"], "", *pending, ""] if pending else []),
-        f"## {t['alternatives']}", "", t["others"], "",
-        f"## {t['consequences']}", "", t["keep"], t["change"], "",
+        f"## {rejected}", "", t["others"], "",
+        f"## {consequences}", "", t["keep"], t["change"], "",
+        f"## {imposes}", "", t["imposes"], "",
     ])
 
 

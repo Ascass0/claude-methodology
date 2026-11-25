@@ -13,7 +13,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
 import test_mth  # noqa: E402
-from mthlib import adoption, cli, lang, review, survey  # noqa: E402
+from mthlib import adoption, cli, compact, lang, review, survey  # noqa: E402
 from mthlib.config import DEFAULTS, parse  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 from mthlib.git import Git  # noqa: E402
@@ -198,6 +198,21 @@ class AnswersTests(unittest.TestCase):
                     row = next(line for line in text.splitlines() if line.startswith(f"| `{question['id']}` |"))
                     self.assertIn(f"| `{question['outcome']}` |", row)
         self.assertIn("| `commits` | `deducida` | `encadenar` | hooks.commit_msg = chain |", text)
+
+    def test_generated_adrs_are_compact_in_both_languages(self):
+        # verifies: SPEC-0004/AC-12
+        inv = inventory("methodology", language="en", forge="gitlab", commit_hook=True, tests=["make test"])
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []}}
+        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
+        plan = adoption.build(template, inv, answers, "main", "a" * 40)
+        for code in ("es", "en"):
+            vocab = lang.vocabulary(code)
+            texts = {"adopcion": adoption.adr_text("ADR-0001", inv, plan, vocab),
+                     "reestructuracion": adoption.reconfigure_adr_text("ADR-0002", "ADR-0001", plan, [], vocab)}
+            for kind, text in texts.items():
+                with self.subTest(code=code, kind=kind):
+                    self.assertTrue(compact.is_compact(text, vocab))
+                    self.assertEqual(compact.adr_problems(text, vocab), [])
 
 
 class OfferedOptionsTests(unittest.TestCase):
