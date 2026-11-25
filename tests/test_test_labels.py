@@ -16,6 +16,7 @@ import test_mth  # noqa: E402
 from mthlib import flow, testlabels, trace  # noqa: E402
 from mthlib.config import parse  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
+from test_delegation import SPEC_ID, RepoTestCase  # noqa: E402
 
 def fx(text: str) -> str:
     """Fixture IDs are written as @@ and built here, so this file holds no ID of its own to trace."""
@@ -161,6 +162,35 @@ class SingleTestTests(unittest.TestCase):
         warned = trace.Tracer(cfg, names).single_test()
         self.assertEqual([str(f) for f in warned], [fx("specs/features/a.md:4: @@/AC-02 tiene un único test")])
         self.assertEqual(trace.check(cfg, names), [])  # a warning, not a finding
+
+
+class SingleTestCliTests(RepoTestCase):
+    def test_the_command_warns_lists_on_request_and_exits_zero(self):
+        # verifies: SPEC-0019/AC-08
+        self.write("tests/test_one.py", lines("def test_a():", f"    # verifies: {SPEC_ID}/AC-01", "    pass"))
+        self.write("tests/test_two.py", lines("def test_b():", f"    # verifies: {SPEC_ID}/AC-02", "    pass", "",
+                                              "def test_c():", f"    # verifies: {SPEC_ID}/AC-02", "    pass"))
+        self.git("add", "-A")
+        quiet = self.mth("trace")
+        self.assertIn("criterios con un único test: mth trace --single los lista", quiet)
+        self.assertNotIn("tiene un único test", quiet)
+        listed = self.mth("trace", "--single")
+        self.assertIn(f"{SPEC_ID}/AC-01 tiene un único test", listed)
+        self.assertNotIn(f"{SPEC_ID}/AC-02 tiene un único test", listed)
+
+
+class DanglingAndSkippedTests(unittest.TestCase):
+    def test_a_label_naming_a_missing_failure_mode_is_reported(self):
+        # verifies: SPEC-0019/FM-05
+        # verifies: SPEC-0019/AC-03
+        text = lines("def test_a():", "    # verifies: @@/FM-99", "    pass")
+        found = [str(f) for f in findings({"tests/test_x.py": text, "specs/features/a.md": SPEC})]
+        self.assertTrue(any(fx("referencia a @@/FM-99, que la spec no define") in f for f in found), found)
+
+    def test_an_oversized_test_file_is_not_checked(self):
+        # verifies: SPEC-0019/FM-07
+        text = lines("def test_a():", "    pass") + "#" * (1_000_001)
+        self.assertEqual(label_findings({"tests/test_big.py": text}), [])
 
 
 class DocumentationTests(unittest.TestCase):
