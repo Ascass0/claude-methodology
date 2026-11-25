@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from .errors import MthError
@@ -179,6 +180,48 @@ class Git:
         """Tracked and untracked-but-not-ignored files (POSIX relative paths)."""
         raw = run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=self.root).stdout
         return sorted({f for f in raw.split("\0") if f and (self.root / f).is_file()})
+
+    def merge_base(self, ref: str) -> str:
+        """Common ancestor of HEAD and ``ref``.
+
+        Raises:
+            MthError: ``ref`` does not exist or shares no history with HEAD.
+        """
+        proc = self.try_run("merge-base", "HEAD", ref)
+        if proc.returncode != 0 or not proc.stdout.strip():
+            raise MthError(f"No se puede calcular el punto de partida de la rama respecto a {ref}.",
+                           hint=f"Trae la rama (`git fetch {self.remote}`) y vuelve a intentarlo.")
+        return proc.stdout.strip()
+
+    def blob_chunks(self, rev: str, path: str, size: int = 1 << 20):
+        """Yield the bytes of ``path`` at ``rev`` in chunks (nothing if the file did not exist there)."""
+        if not self.ok("cat-file", "-e", f"{rev}:{path}"):
+            return
+        with subprocess.Popen(["git", "cat-file", "blob", f"{rev}:{path}"], cwd=self.root,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as proc:
+            while chunk := proc.stdout.read(size):
+                yield chunk
+
+    def renamed_from(self, base: str) -> dict[str, str]:
+        """Renames and copies detected between ``base`` and the working tree, as ``{new: old}``."""
+        tokens = self.out("diff", "-M", "--name-status", "-z", base).split("\0")
+        out, i = {}, 0
+        while i < len(tokens) and tokens[i]:
+            status = tokens[i]
+            if status[0] in "RC" and i + 2 < len(tokens):
+                out[tokens[i + 2]] = tokens[i + 1]
+                i += 3
+            else:
+                i += 2
+        return out
+
+    def binary_by_attributes(self, paths: list[str]) -> set[str]:
+        """Paths that ``.gitattributes`` marks as binary for diffs (``-diff`` or ``binary``)."""
+        if not paths:
+            return set()
+        raw = run(["git", "check-attr", "-z", "--stdin", "diff"], cwd=self.root,
+                  input_text="\0".join(paths) + "\0").stdout.split("\0")
+        return {raw[i] for i in range(0, len(raw) - 2, 3) if raw[i + 2] == "unset"}
 
     # -- mutations ----------------------------------------------------------
     def fetch(self) -> None:

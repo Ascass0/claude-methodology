@@ -99,6 +99,19 @@ legacy_base = ""
 # [trace.test_patterns]
 # "**/*.rs" = '^\s*#\[test\]'
 
+[limits]
+# Líneas máximas por fichero versionado. Hacer crecer uno por encima del límite es error en mth trace;
+# los ficheros largos heredados que la rama no hace crecer solo avisan (mth trace --limits los lista).
+max_file_lines = 1000
+# Globs que no se miden (una lista propia sustituye a esta).
+exclude = ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generated/**"]
+# Un fichero que debe ser grande se declara con su techo y su motivo (max_lines > max_file_lines):
+# [[limits.exceptions]]
+# path = "src/parser/grammar.py"
+# max_lines = 1400
+# reason = "tabla de transiciones que se lee entera"
+# refs = "ADR-NNNN"    # opcional
+
 [release]
 github_release = true
 sign_tags = false

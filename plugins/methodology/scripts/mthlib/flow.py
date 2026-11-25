@@ -12,8 +12,9 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Any
 
-from . import branches, changelog, commits, forge, releaseplan, review, versions
+from . import branches, changelog, commits, forge, globs, limits, releaseplan, review, versions
 from .config import Config
 from .errors import MthError
 from .files import atomic_write
@@ -69,11 +70,61 @@ class Ctx:
 
 
 # -- shared gates -------------------------------------------------------------
+def line_limits(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
+    """Errors and warnings of the line limit per file (ADR-0016, SPEC-0020).
+
+    Raises:
+        MthError: A file is over the limit, the branch has a parent and the parent cannot be read.
+    """
+    cfg = ctx.cfg["limits"]
+    root = ctx.git.root
+    counts: dict[str, int] = {}
+    for rel in ctx.git.files():
+        if globs.match_any(rel, cfg["exclude"]):
+            continue
+        with (root / rel).open("rb") as handle:
+            lines = limits.count_lines(iter(lambda: handle.read(limits.CHUNK), b""))
+        if lines is not None:
+            counts[rel] = lines
+    binary = ctx.git.binary_by_attributes([p for p, n in counts.items() if n > cfg["max_file_lines"]])
+    counts = {p: n for p, n in counts.items() if p not in binary}
+    base = _line_base(ctx)
+    errors, warnings = limits.evaluate(counts, cfg["max_file_lines"], limits.validate(cfg), base,
+                                       ".claude/methodology.toml")
+    return [Finding(p.path, 1, p.message) for p in errors], [Finding(p.path, 1, p.message) for p in warnings]
+
+
+def _line_base(ctx: Ctx):
+    """Function giving a file's lines at the branch base, or None when the branch has no parent."""
+    try:
+        info = branches.parse(ctx.git.current_branch(), ctx.cfg)
+    except MthError:
+        return None
+    if info is None:
+        return None
+    target = branches.target_of(info, ctx.cfg)
+    ref = ctx.git.remote_ref(target) if ctx.git.remote_has(target) else target
+    state: dict[str, Any] = {}
+
+    def lines_at_base(path: str) -> int:
+        if "base" not in state:  # computed on first use: repos without long files never need it
+            state["base"] = ctx.git.merge_base(ref)
+            state["renamed"] = ctx.git.renamed_from(state["base"])
+        origin = state["renamed"].get(path, path)
+        return limits.count_lines(ctx.git.blob_chunks(state["base"], origin)) or 0
+    return lines_at_base
+
+
 def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
     """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base)."""
-    findings = trace_check(ctx.cfg, ctx.git.files())
+    findings = trace_check(ctx.cfg, ctx.git.files()) + line_limits(ctx)[0]
     base = ctx.cfg["trace"]["legacy_base"]
     return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
+
+
+def limit_notes(ctx: Ctx) -> list[Finding]:
+    """Files over the line limit that the branch does not make grow: a warning for `mth trace`."""
+    return line_limits(ctx)[1]
 
 
 def single_test_notes(ctx: Ctx) -> list[Finding]:

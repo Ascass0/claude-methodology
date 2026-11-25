@@ -68,6 +68,11 @@ def _cmd_trace(args: argparse.Namespace) -> int:
         say(f"⚠ {len(single)} criterios con un único test: mth trace --single los lista")
         for f in single if args.single else []:
             print(f"⚠ {f}")
+    long_files = flow.limit_notes(ctx)
+    if long_files:
+        say(f"⚠ {len(long_files)} ficheros por encima del límite de líneas: mth trace --limits los lista")
+        for f in long_files if args.limits else []:
+            print(f"⚠ {f}")
     return EXIT_ERROR if findings else 0
 
 
@@ -395,6 +400,7 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("trace", help="comprueba referencias, enlaces y criterios de aceptación")
     s.add_argument("--legacy", action="store_true", help="lista también los hallazgos en contenido legado")
     s.add_argument("--single", action="store_true", help="lista los criterios de aceptación con un único test")
+    s.add_argument("--limits", action="store_true", help="lista los ficheros por encima del límite de líneas")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
