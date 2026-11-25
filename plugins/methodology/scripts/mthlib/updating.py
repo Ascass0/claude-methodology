@@ -101,9 +101,7 @@ def adr_text(ident: str, previous: str | None, applied: list[update.Gap], pendin
     items = [f"   - `{g.id}`: {g.evidence}" for g in applied]
     rest = [f"   - `{g.id}` ({g.clase}): {g.evidence}" for g in pending]
     return "\n".join([
-        f"# {ident} · {t['title']}", "",
-        f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
-        f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
+        *adoption.adr_header(ident, t, vocab, today),
         f"## {context}", "", t["context"].format(version=__version__),
         *([t["previous"].format(previous=previous)] if previous else []), "",
         f"## {decision}", "", f"1. {t['applied']}", *items,

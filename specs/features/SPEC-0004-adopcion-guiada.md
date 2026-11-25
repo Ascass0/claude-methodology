@@ -159,6 +159,7 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 - **AC-09**: CUANDO se ejecuta `mth init --answers`, `mth` DEBE generar la configuración con el efecto de cada opción de la tabla, los valores del inventario para lo no preguntado, los ajustes del perfil `fork` y las claves de `otro` fusionadas.
 - **AC-10**: CUANDO se ejecuta `mth init --answers`, `mth` DEBE crear la rama de adopción con un único commit con la configuración y el ADR de adopción (perfil, cada pregunta, su opción y las notas).
 - **AC-11**: El catálogo de la skill DEBE tener una sección por cada ID de pregunta del inventario con opciones que coincidan con las que acepta `mth init --answers`, y la skill DEBE declarar `model: opus`.
+- **AC-12**: Los ADR que genera `mth` (adopción y reestructuración, SPEC-0011) DEBEN estar en formato compacto: `- Formato: compacto` y los campos fijos de [ADR-0014](../adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) en el idioma de `language.docs`.
 
 ## Notas
 
