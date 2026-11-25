@@ -1,5 +1,5 @@
 name = "explorador-specs"
-version = "1.0.0"
+version = "1.0.1"
 kind = "trabajador"
 profiles = ["base"]
 summary = "Antes de un encargo: localiza specs, AC, modos de fallo y ADR aplicables y devuelve IDs y rutas, no contenido."

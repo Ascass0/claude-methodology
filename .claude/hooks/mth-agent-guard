@@ -1,5 +1,5 @@
 #!/bin/sh
-# claude-methodology · guard por agente (SPEC-0012, ADR-0008). `mth agents add` lo instala,
+# claude-methodology · guard por agente (catálogo de agentes). `mth agents add` lo instala,
 # versionado, en .claude/hooks/mth-agent-guard. Lo invoca la entrada PreToolUse de
 # .claude/settings.json en cada llamada a Bash, Write o Edit de la sesión.
 #

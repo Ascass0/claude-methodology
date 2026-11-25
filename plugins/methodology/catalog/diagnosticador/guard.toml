@@ -2,7 +2,7 @@ extends = "_shared/guard-trabajador.toml"
 
 [write]
 # Write y Edit solo dentro del worktree vinculado desde el que trabaja el agente (isolation:
-# worktree), nunca en el árbol principal, aunque Claude Code dejara de aplicar el aislamiento
-# (ADR-0008, decisión 6). Los globs son relativos a la raíz de ese worktree.
+# worktree), nunca en el árbol principal, aunque Claude Code dejara de aplicar el aislamiento.
+# Los globs son relativos a la raíz de ese worktree.
 allow = ["**"]
 in_worktree = true

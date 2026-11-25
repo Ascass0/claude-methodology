@@ -1,5 +1,5 @@
 name = "ingeniero-rendimiento"
-version = "1.0.0"
+version = "1.0.1"
 kind = "trabajador"
 profiles = ["opcional"]
 summary = "Mide con el benchmark del repo, propone una optimización y la vuelve a medir. Sin medición no hay propuesta."

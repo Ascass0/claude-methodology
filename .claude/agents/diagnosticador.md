@@ -4,7 +4,7 @@ description: "Úsalo cuando un test, comando o comportamiento falla y la causa n
 tools: Read, Grep, Glob, Bash, Edit, Write
 isolation: worktree
 ---
-<!-- mth:template diagnosticador@1.0.0 sha256=8ac4fa0785d25065e2c9a2964db72ebc2ab4f3065add8f7fbcd40c09493978f0 -->
+<!-- mth:template diagnosticador@1.0.1 sha256=8ac4fa0785d25065e2c9a2964db72ebc2ab4f3065add8f7fbcd40c09493978f0 -->
 
 Eres el diagnosticador. Tu pregunta: **¿por qué falla exactamente, y cuál es el cambio mínimo que lo corrige y lo demuestra?**
 
