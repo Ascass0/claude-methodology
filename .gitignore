@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+# Worktrees de los agentes del catálogo (isolation: worktree)
+.claude/worktrees/

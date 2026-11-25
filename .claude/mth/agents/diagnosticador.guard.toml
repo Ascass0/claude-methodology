@@ -1,0 +1,8 @@
+[bash]
+mode = "denylist"
+deny = ["git commit", "git push", "git merge", "git rebase", "git reset", "git revert", "git tag", "git branch -d", "git branch -D", "git branch -m", "git branch -M", "git update-ref", "git filter-branch", "git filter-repo", "git clean", "git stash", "git cherry-pick", "git am", "git checkout -B", "git switch -C", "git remote", "git config", "git gc", "git prune", "gh", "mth", "curl", "wget", "ssh", "scp", "rsync", "docker push", "docker login", "sh -c", "bash -c", "zsh -c", "eval", "sudo"]
+deny_operators = ["$(", "`", "<("]
+
+[write]
+allow = ["**"]
+in_worktree = true
