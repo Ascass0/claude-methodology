@@ -42,5 +42,5 @@
 ## Impone
 
 - [script] `mthlib/update.py` (registro de brechas, `mth update --plan`, `mth update`) y su test del registro.
-- [criterio] `revisor-adr`: toda spec que añada una exigencia a repos adoptados registra su brecha.
+- [criterio] `revisor-adr` (sección local de este repo): toda spec que añada una exigencia a repos adoptados registra su brecha.
 - [criterio] Skill `mth-update`: sin disparo automático; el hook de sesión no la propone.

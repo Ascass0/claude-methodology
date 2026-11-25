@@ -16,7 +16,7 @@ from . import __version__, agents, catalog, compact, setup, smoke
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
-from .trace import Tracer as TraceChecker
+from .trace import Tracer
 
 AUTOMATIC = "automatica"
 DECISION = "decision"
@@ -26,7 +26,7 @@ CLASSES = (AUTOMATIC, DECISION, INFORMATIVE)
 TEMPLATE = setup.TEMPLATES / "methodology.toml"
 # Tables the person owns: a missing key there is a choice, not a gap.
 OWNED = {("ids",), ("review", "paths"), ("release", "version_files"), ("branches", "extra")}
-METHODOLOGY_ADRS = "methodology"  # adoption, reconfiguration and update records are generated, not authored
+ADR_SUBDIR = "methodology"  # adoption, reconfiguration and update records are generated, not authored
 
 
 @dataclass(frozen=True)
@@ -109,12 +109,20 @@ def _hook(repo: Repo) -> str | None:
     return f"hook commit-msg {state}" if state in ("stale", "absent") else None
 
 
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MthError(f"No se puede leer {path.name} para el diagnóstico: {exc}.",
+                       hint="Corrige el fichero o su codificación (UTF-8) y repite.") from exc
+
+
 def _format(repo: Repo) -> str | None:
     cfg, vocab = repo.cfg, repo.cfg.vocab
-    generated = f"{cfg['paths']['adr']}/{METHODOLOGY_ADRS}/"
+    generated = f"{cfg['paths']['adr']}/{ADR_SUBDIR}/"
     roots = (f"{cfg['paths']['specs']}/", f"{cfg['paths']['adr']}/")
     docs = [f for f in repo.git.files() if f.endswith(".md") and f.startswith(roots) and not f.startswith(generated)]
-    old = [f for f in docs if not compact.is_compact((cfg.root / f).read_text(encoding="utf-8"), vocab)]
+    old = [f for f in docs if not compact.is_compact(_read(cfg.root / f), vocab)]
     return f"{len(old)} de {len(docs)} documentos sin «{vocab.format_label}: {vocab.compact}»" if old else None
 
 
@@ -124,7 +132,7 @@ def _smoke(repo: Repo) -> str | None:
 
 
 def _single(repo: Repo) -> str | None:
-    found = TraceChecker(repo.cfg, repo.git.files()).single_test()
+    found = Tracer(repo.cfg, repo.git.files()).single_test()
     return f"{len(found)} criterios con un único test" if found else None
 
 
@@ -141,10 +149,10 @@ REGISTRY: tuple[GapKind, ...] = (
 )
 
 
-def diagnose(repo: Repo, registry: tuple[GapKind, ...] = REGISTRY) -> list[Gap]:
+def diagnose(repo: Repo) -> list[Gap]:
     """Gaps between the repository and what the installed plugin requires, in registry order."""
     return [Gap(kind.id, kind.clase, evidence, kind.action)
-            for kind in registry if (evidence := kind.detect(repo))]
+            for kind in REGISTRY if (evidence := kind.detect(repo))]
 
 
 def render(gaps: list[Gap]) -> str:
@@ -161,6 +169,7 @@ def render(gaps: list[Gap]) -> str:
 
 
 def to_json(gaps: list[Gap]) -> str:
+    """The diagnosis as JSON: the plugin version and each gap with its id, class, evidence and action."""
     return json.dumps({"plugin": __version__, "gaps": [asdict(g) for g in gaps]}, ensure_ascii=False, indent=2)
 
 

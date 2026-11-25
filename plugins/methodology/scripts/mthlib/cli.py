@@ -482,7 +482,10 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "update":
         if args.json and not args.plan:
             raise MthError("--json solo se usa con --plan.")
-        update.plan(Path.cwd(), args.json) if args.plan else updating.apply(Path.cwd())
+        if args.plan:
+            update.plan(Path.cwd(), args.json)
+        else:
+            updating.apply(Path.cwd())
         return 0
     if c == "reconfigure":
         setup.reconfigure(Path.cwd(), args.answers, args.only)

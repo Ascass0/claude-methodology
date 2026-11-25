@@ -194,6 +194,11 @@ class RegistryTests(unittest.TestCase):
             self.assertTrue(kind.action.strip(), kind.id)
             self.assertTrue(callable(kind.detect), kind.id)
 
+    def test_smoke_and_triangulation_never_block(self):
+        # verifies: SPEC-0021/AC-10
+        classes = {k.id: k.clase for k in update.REGISTRY}
+        self.assertEqual((classes["humo"], classes["triangulacion"]), (update.INFORMATIVE, update.INFORMATIVE))
+
     def test_registry_matches_the_spec(self):
         # verifies: SPEC-0021/AC-11
         spec = next((HERE.parent / "specs" / "features").glob("SPEC-0021-*.md")).read_text(encoding="utf-8")
@@ -304,10 +309,27 @@ class ApplyTests(unittest.TestCase):
         self.mth("update")
         hook = self.work / ".git/hooks/commit-msg"
         hook.write_text(hook.read_text() + "# otra vez\n")
+        (self.work / ".env").write_text("SECRETO=1\n")  # not owned by mth update: it must never be committed
         self.mth("update")  # on chore/update-methodology: applies only what is left, no second branch
         self.assertEqual(self.git("branch", "--show-current"), BRANCH)
         self.assertNotIn("# otra vez", hook.read_text())
-        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "2")
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")  # the hook is not versioned
+        self.assertNotIn(".env", self.git("ls-tree", "-r", "--name-only", "HEAD"))
+        self.assertIn(".env", self.git("status", "--porcelain"))
+        self.git("fetch", "-q")
+        adrs = [f for f in self.git("ls-tree", "-r", "--name-only", f"origin/{BRANCH}").splitlines() if f.endswith(UPDATE_ADR)]
+        self.assertEqual(len(adrs), 1)  # the resumed run extends the ADR of the branch
+        text = self.on_branch(adrs[0])
+        for gap in ("`config`", "`bloque`", "`hook`"):
+            self.assertIn(gap, text)
+
+    def test_resume_pushes_a_commit_that_was_never_pushed(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        self.git("push", "-q", "origin", f":{BRANCH}")  # the push of the first run is lost
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", BRANCH), "")
+        self.mth("update")
+        self.assertNotEqual(self.git("ls-remote", "--heads", "origin", BRANCH), "")
 
     def test_refuses_without_creating_anything(self):
         # verifies: SPEC-0021/AC-07

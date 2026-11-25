@@ -11,9 +11,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import adoption, agents, commits, config, lang, setup, update
+from . import __version__, adoption, agents, commits, config, lang, setup, update
 from .config import CONFIG_PATH, load, parse
 from .errors import MthError
+from .git import Git
 from .ids import IdRegistry
 from .log import say, warn
 
@@ -102,7 +103,7 @@ def adr_text(ident: str, previous: str | None, applied: list[update.Gap], pendin
         f"# {ident} · {t['title']}", "",
         f"- {t['status']}: {t['accepted']}", f"- {t['date']}: {(today or date.today()).isoformat()}",
         f"- {t['category']}: methodology", f"- {vocab.format_label}: {vocab.compact}", "",
-        f"## {context}", "", t["context"].format(version=update.__version__),
+        f"## {context}", "", t["context"].format(version=__version__),
         *([t["previous"].format(previous=previous)] if previous else []), "",
         f"## {decision}", "", f"1. {t['applied']}", *items,
         f"2. {t['pending'] if pending else t['none']}", *rest, "",
@@ -112,58 +113,134 @@ def adr_text(ident: str, previous: str | None, applied: list[update.Gap], pendin
     ])
 
 
+def _begin(git: Git) -> bool:
+    """Check the preconditions; returns whether the run resumes on the update branch itself."""
+    if git.current_branch() == BRANCH:
+        return True
+    git.require_clean()
+    git.fetch()
+    if git.remote_has(BRANCH) or git.local_has(BRANCH):
+        raise MthError(f"La rama {BRANCH} ya existe.", hint="Intégrala o bórrala antes de actualizar.")
+    return False
+
+
+def _unpushed(git: Git, development: str) -> bool:
+    base = git.remote_ref(BRANCH) if git.remote_has(BRANCH) else git.remote_ref(development)
+    return int(git.out("rev-list", "--count", f"{base}..HEAD").strip() or 0) > 0
+
+
+def _unfinished(git: Git, development: str) -> bool:
+    """Work a previous run left on the branch: uncommitted changes or a commit that was never pushed."""
+    return not git.is_clean() or _unpushed(git, development)
+
+
+def _existing_adr(git: Git, folder: Path, development: str) -> Path | None:
+    """The update ADR this branch already wrote (not in ``development`` yet), so a resumed run reuses it."""
+    dev = git.remote_ref(development)
+    for path in sorted(folder.glob(f"*-{SLUG['es']}.md")) + sorted(folder.glob(f"*-{SLUG['en']}.md")):
+        if not git.ok("cat-file", "-e", f"{dev}:{path.relative_to(git.root).as_posix()}"):
+            return path
+    return None
+
+
+def _read_applied(text: str) -> list[update.Gap]:
+    """Gaps an earlier run of this branch recorded in its ADR (the list under the first decision)."""
+    found, inside = [], False
+    for line in text.splitlines():
+        if line.startswith("1. "):
+            inside = True
+        elif line.startswith("2. "):
+            break
+        elif inside and (m := re.match(r"   - `([^`]+)`: (.*)$", line)):
+            found.append(update.Gap(m.group(1), update.AUTOMATIC, m.group(2), ""))
+    return found
+
+
+def _ident(adr: Path) -> str:
+    """``ADR-0007`` from ``ADR-0007-actualizacion-de-claude-methodology.md``."""
+    return "-".join(adr.name.split("-")[:2])
+
+
+def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update.Gap]) -> Path:
+    """Write (or extend) the update ADR before anything else changes, so a crash never loses what was planned."""
+    git, cfg = repo.git, repo.cfg
+    folder = git.root / cfg["paths"]["adr"] / update.ADR_SUBDIR
+    folder.mkdir(parents=True, exist_ok=True)
+    adr = _existing_adr(git, folder, cfg.development)
+    previous_text = adr.read_text(encoding="utf-8") if adr else ""
+    ident = _ident(adr) if adr else IdRegistry(cfg, git.files()).next_id(cfg["trace"]["adr_kind"])
+    adr = adr or folder / f"{ident}-{SLUG[cfg.vocab.code]}.md"
+    earlier = _read_applied(previous_text)
+    applied = earlier + [g for g in automatic if g.id not in {e.id for e in earlier}]
+    others = sorted(p.name[:m.start()] for p in folder.glob("*.md")
+                    if (m := setup.METHODOLOGY_ADR.search(p.name)) and p != adr)
+    adr.write_text(adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab), encoding="utf-8")
+    return adr
+
+
+def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> None:
+    """Run every automatic gap (SPEC-0021): config keys, outdated agents, the CLAUDE.md block and the hook."""
+    git, root = repo.git, repo.cfg.root
+    ids = {g.id for g in automatic}
+    outdated = update.outdated_agents(repo) if "agentes-desactualizados" in ids else []
+    (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
+    cfg = load(root)
+    if outdated:
+        agents.Manager(cfg).sync(outdated, False)
+    if "bloque" in ids:
+        setup.upsert_claude_md(root, cfg["paths"], cfg.vocab)
+    if "hook" in ids:
+        setup.install_hook(git, cfg["hooks"]["commit_msg"])
+
+
+def _owned_paths(repo: update.Repo, adr: Path) -> list[str]:
+    """Only what ``mth update`` writes: a resumed run must not commit anything else in the tree."""
+    root, cfg = repo.git.root, repo.cfg
+    candidates = [CONFIG_PATH.as_posix(), cfg["paths"]["claude_md"], ".claude/agents", ".claude/mth", ".claude/hooks",
+                  ".claude/settings.json", ".gitignore", adr.relative_to(root).as_posix()]
+    return [c for c in candidates if (root / c).exists()]
+
+
+def _finish(repo: update.Repo, adr: Path) -> None:
+    git = repo.git
+    git.out("add", "--", *_owned_paths(repo, adr))
+    if not git.ok("diff", "--cached", "--quiet"):  # staged changes; otherwise a previous run committed them
+        git.commit_message(commits.build("chore", "methodology", "update claude-methodology",
+                                         "Bring the repository up to date with the installed plugin: apply the "
+                                         "automatic gaps and record them.", [_ident(adr)]))
+    git.push(BRANCH)
+
+
 def apply(start: Path) -> None:
     """Apply the automatic gaps of the repository at ``start`` on ``chore/update-methodology``.
 
+    Running it again on that branch resumes: it applies what is left, commits only the paths it owns,
+    pushes a commit that was never pushed and extends the ADR it already wrote.
+
     Raises:
         MthError: Not adopted, dirty tree or the branch already exists (outside it), invalid
-            configuration, or no automatic gap to apply.
+            configuration, or nothing to apply or finish.
     """
     repo = update.open_repo(start)
     git, cfg = repo.git, repo.cfg
-    root = git.root
-    resuming = git.current_branch() == BRANCH
-    if not resuming:
-        git.require_clean()
-        git.fetch()
-        if git.remote_has(BRANCH) or git.local_has(BRANCH):
-            raise MthError(f"La rama {BRANCH} ya existe.", hint="Intégrala o bórrala antes de actualizar.")
-    gaps = {g.id: g for g in update.diagnose(repo) if g.clase == update.AUTOMATIC}
-    if not gaps:
+    resuming = _begin(git)
+    gaps = update.diagnose(repo)
+    automatic = [g for g in gaps if g.clase == update.AUTOMATIC]
+    pending = [g for g in gaps if g.clase != update.AUTOMATIC]
+    if not automatic and not (resuming and _unfinished(git, cfg.development)):
         raise MthError("Nada que aplicar: no hay brechas automáticas.", hint="mth update --plan muestra lo pendiente.")
-    text = (root / CONFIG_PATH).read_text(encoding="utf-8")
-    if "config" in gaps:
+    text = (cfg.root / CONFIG_PATH).read_text(encoding="utf-8")
+    if any(g.id == "config" for g in automatic):
         text = with_keys(text, tomllib.loads(update.TEMPLATE.read_text(encoding="utf-8")), update.missing_keys(repo))
-        parse(root, text)  # validate before any mutation
-    outdated = update.outdated_agents(repo) if "agentes-desactualizados" in gaps else []
-
+        parse(cfg.root, text)  # validate before any mutation
     if not resuming:
         git.checkout_synced(cfg.development)
         git.out("checkout", "-b", BRANCH)
-    (root / CONFIG_PATH).write_text(text, encoding="utf-8")
-    new_cfg = load(root)
-    if outdated:
-        agents.Manager(new_cfg).sync(outdated, False)
-    if "bloque" in gaps:
-        setup.upsert_claude_md(root, new_cfg["paths"], new_cfg.vocab)
-    if "hook" in gaps:
-        setup.install_hook(git, new_cfg["hooks"]["commit_msg"])
-
-    pending = [g for g in update.diagnose(update.Repo(git, new_cfg)) if g.clase != update.AUTOMATIC]
-    folder = root / new_cfg["paths"]["adr"] / update.METHODOLOGY_ADRS
-    previous = sorted(p.name[:m.start()] for p in folder.glob("*.md") if (m := setup.METHODOLOGY_ADR.search(p.name)))
-    ident = IdRegistry(new_cfg, git.files()).next_id(new_cfg["trace"]["adr_kind"])
-    folder.mkdir(parents=True, exist_ok=True)
-    adr = folder / f"{ident}-{SLUG[new_cfg.vocab.code]}.md"
-    adr.write_text(adr_text(ident, previous[-1] if previous else None, list(gaps.values()), pending, new_cfg.vocab),
-                   encoding="utf-8")
-    git.out("add", "-A")
-    git.commit_message(commits.build("chore", "methodology", "update claude-methodology",
-                                     "Bring the repository up to date with the installed plugin: apply the "
-                                     "automatic gaps and record them.", [ident]))
-    git.push(BRANCH)
-    say(f"· ADR de actualización: {adr.relative_to(root)}")
-    for gap in gaps.values():
+    adr = _record(repo, automatic, pending)
+    _apply(repo, automatic, text)
+    _finish(repo, adr)
+    say(f"· ADR de actualización: {adr.relative_to(cfg.root)}")
+    for gap in automatic:
         say(f"· aplicado {gap.id}: {gap.evidence}")
     for gap in pending:
         warn(f"Pendiente ({gap.clase}) {gap.id}: {gap.evidence}")

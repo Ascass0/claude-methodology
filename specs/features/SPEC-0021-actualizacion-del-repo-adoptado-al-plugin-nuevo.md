@@ -80,7 +80,7 @@ Registro inicial:
 ### Mantenimiento del registro
 
 - Una spec que añada una exigencia a los repos adoptados DEBE añadir su brecha al registro en la misma rama.
-- `revisor-adr` lo comprueba en el diff.
+- `revisor-adr` lo comprueba en el diff (en este repo, desde su sección local).
 
 ## Modos de fallo
 
@@ -90,7 +90,7 @@ Registro inicial:
 | FM-02 | Árbol sucio o rama de actualización ya existente (fuera de ella) | Error; nada cambia | AC-07 |
 | FM-03 | Configuración ilegible o inválida | Error de configuración con su pista; nada cambia | AC-07 |
 | FM-04 | Agente editado a mano | No se sobrescribe: pasa a `decision` | AC-04 |
-| FM-05 | Fallo a mitad de la aplicación | La operación es reanudable: re-ejecutar en la rama aplica solo lo que falta | AC-09 |
+| FM-05 | Fallo a mitad (sync, escritura, commit o push) | Reanudable: re-ejecutar en la rama aplica lo que falta, hace commit solo de las rutas que `mth update` escribe, sube un commit no subido y amplía el ADR de la rama; la rama y la configuración pueden quedar a medias hasta entonces | AC-09 |
 | FM-06 | Nada que aplicar | Error «nada que aplicar»; no se crea rama | AC-08 |
 | FM-07 | Claude Code no tiene `claude` para el humo | La brecha `humo` es informativa; nunca bloquea | AC-10 |
 
@@ -112,4 +112,6 @@ Registro inicial:
 ## Notas
 
 - La clave de frontmatter que impide el disparo automático es `disable-model-invocation: true` (documentación de Claude Code); hay un informe de usuario de que, combinada con el slash command, Claude puede negarse a invocarla: si pasa, se revisa.
+- El «único commit» de AC-08 vale para la primera ejecución: reanudar puede añadir otro commit con lo que faltaba, y el ADR de la rama lo recoge.
+- Mantenimiento del registro: en este repo lo comprueba la sección local de `.claude/agents/revisor-adr.md`; el catálogo no lo incluye porque solo aplica al repo que desarrolla el plugin.
 - Orden de ramas hijas previsto: registro de brechas y `mth update --plan`, después `mth update`, después la skill.
