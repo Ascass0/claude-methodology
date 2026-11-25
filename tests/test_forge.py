@@ -34,6 +34,23 @@ class ForgeConfigTests(unittest.TestCase):
         self.assertIn("'forge' = 'bitbucket'", ctx.exception.message)
         self.assertIsNotNone(_merge)  # the defaults merge is what makes the key optional
 
+    def test_forge_rejects_other_spellings_and_types(self):
+        # verifies: SPEC-0016/AC-01
+        for literal in ('"GitHub"', '"gitlab "', '""', "1", "true"):
+            with self.subTest(value=literal), self.assertRaises(MthError) as ctx:
+                parse(Path("."), f'version = 1\nforge = {literal}\n[commands]\ntest = ""\n')
+            self.assertIn("forge", ctx.exception.message)
+
+    def test_forge_deduction_ignores_case_ports_and_bare_scp_hosts(self):
+        # verifies: SPEC-0016/AC-02
+        cases = {"https://GitLab.COM/a/b.git": "gitlab", "ssh://git@gitlab.empresa.com:2222/a/b.git": "gitlab",
+                 "gitlab.com:a/b.git": "gitlab", "https://tok:x@GITHUB.com/a/b": "github",
+                 "ssh://git@bitbucket.org:7999/a/b.git": "none", "gitlab:a/b.git": "gitlab"}
+        for url, expected in cases.items():
+            with self.subTest(url=url):
+                self.assertEqual(forge.forge_of(url), expected)
+        self.assertEqual(forge.host_of("ssh://git@gitlab.empresa.com:2222/a/b.git"), "gitlab.empresa.com")
+
     def test_forge_is_deduced_from_the_host_only(self):
         # verifies: SPEC-0016/AC-02
         cases = {
@@ -60,6 +77,17 @@ class GuardTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn("mth integrate", guard.violation(command, protected, "feat/x") or "")
         for command in ("glab mr list", "glab mr view 5", "gh pr view 3", "glab ci status"):
+            with self.subTest(command=command):
+                self.assertIsNone(guard.violation(command, protected, "feat/x"))
+
+
+    def test_glab_merge_is_blocked_after_any_separator_and_other_glab_commands_pass(self):
+        # verifies: SPEC-0016/AC-09
+        protected = {"main", "development"}
+        for command in ("glab mr merge", "cd repo; glab mr merge 5", "make test || glab mr merge 5", "true | glab mr accept 5"):
+            with self.subTest(command=command):
+                self.assertIn("mth integrate", guard.violation(command, protected, "feat/x") or "")
+        for command in ("glab mr create --fill", "glab mr approve 5", "glab auth status", "echo glab mr merge"):
             with self.subTest(command=command):
                 self.assertIsNone(guard.violation(command, protected, "feat/x"))
 
@@ -241,6 +269,50 @@ class ManualForgeTests(unittest.TestCase):
         status, head = self.git("status", "--porcelain"), self.git("rev-parse", "HEAD")
         out = self.mth("hotfix", "finish", ok=False)
         self.assertIn("forge = gitlab", out)
+        self.assertEqual((self.git("status", "--porcelain"), self.git("rev-parse", "HEAD")), (status, head))
+        self.assert_no_gh()
+
+    def use_forge_none(self) -> None:
+        cfg_path = self.work / ".claude/methodology.toml"
+        cfg_path.write_text(cfg_path.read_text().replace('forge = "gitlab"', 'forge = "none"'))
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "use no forge")
+        self.git("push", "-q", "origin", "development")
+
+    def test_integrate_without_a_forge_prepares_the_request_and_never_merges(self):
+        # verifies: SPEC-0016/AC-05
+        self.use_forge_none()
+        self.mth("branch", "chore", "tidy")
+        (self.work / "tidy.txt").write_text("t")
+        self.git("add", "-A")
+        self.mth("commit", "--type", "chore", "--summary", "tidy up", "--body", "Tidy.", "--refs", "n/a")
+        before = self.git("rev-parse", "origin/development")
+        out = self.mth("integrate", "--title", "chore: tidy up", "--summary", "Orden.")
+        self.assert_no_gh()
+        self.assertIn("forge = none", out)
+        self.assertIn("Orden.", (self.work / ".work/merge-request/chore-tidy.md").read_text())
+        self.assertEqual(self.git("rev-parse", "origin/development"), before)
+        self.person_merges("chore/tidy", "development")
+        self.mth("integrate", "--title", "chore: tidy up", "--summary", "Orden.")
+        self.assertEqual(self.git("branch", "--list", "chore/tidy"), "")
+
+    def test_release_without_a_forge_lists_the_manual_steps(self):
+        # verifies: SPEC-0016/AC-06
+        self.use_forge_none()
+        out = self.prepare_release()
+        self.assert_no_gh()
+        self.assertIn("release/v0.1.0 preparada", out)
+        self.assertIn("forge = none", out)
+        self.assertIn("## [0.1.0]", self.git("show", "origin/release/v0.1.0:CHANGELOG.md"))
+        self.assertIn("Widget.", (self.work / ".work/merge-request/release-v0.1.0.md").read_text())
+        self.assertNotIn("v0.1.0", self.git("ls-remote", "--tags", "origin"))
+
+    def test_hotfix_finish_without_a_forge_refuses_before_touching_anything(self):
+        # verifies: SPEC-0016/AC-08
+        self.use_forge_none()
+        self.git("checkout", "-q", "-b", "hotfix/leak")
+        status, head = self.git("status", "--porcelain"), self.git("rev-parse", "HEAD")
+        self.assertIn("forge = none", self.mth("hotfix", "finish", ok=False))
         self.assertEqual((self.git("status", "--porcelain"), self.git("rev-parse", "HEAD")), (status, head))
         self.assert_no_gh()
 

@@ -84,6 +84,12 @@ class ClassificationTests(unittest.TestCase):
                     adoption.validate(inv, {**self.decisions(inv), "commits": {"option": "sustituir"}})
                 self.assertIn("opción desconocida 'sustituir'", ctx.exception.message)
 
+    def test_without_a_foreign_commit_hook_nothing_is_asked_about_commits(self):
+        # verifies: SPEC-0015/AC-03
+        for profile in ("existing", "new", "fork"):
+            with self.subTest(profile=profile):
+                self.assertIsNone(inventory(profile).question("commits"))
+
     def decisions(self, inv: survey.Survey) -> dict:
         defaults = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
                     "instrucciones": {"option": "metodologia"}, "tests": {"option": "ninguno"},
@@ -143,6 +149,12 @@ class ClassificationTests(unittest.TestCase):
                 scope = inventory(profile).question("alcance")
                 self.assertEqual((scope["outcome"], scope["answer"]), (survey.DEDUCED, {"option": "gradual"}))
 
+    def test_unknown_language_in_an_existing_repo_defaults_to_spanish(self):
+        # verifies: SPEC-0015/AC-06
+        question = inventory("existing", language="unknown").question("idioma")
+        self.assertEqual((question["outcome"], question["answer"]), (survey.DEFAULT, {"option": "es"}))
+        self.assertEqual(inventory("existing", language="unknown").question("modelos")["outcome"], survey.DEFAULT)
+
 
 class AnswersTests(unittest.TestCase):
     def test_only_decisions_are_required_and_anything_can_be_overridden(self):
@@ -185,6 +197,37 @@ class AnswersTests(unittest.TestCase):
             adoption.validate(inv, {"revisores": answers["revisores"]})
         self.assertIn("autonomia: falta la respuesta", ctx.exception.message)
 
+    def test_a_default_question_can_be_overridden_and_becomes_a_decision(self):
+        # verifies: SPEC-0015/AC-07
+        inv = inventory("existing", tests=["make test"])
+        self.assertEqual(inv.question("modelos")["outcome"], survey.DEFAULT)
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
+                   "ci": {"option": "sin-ci"}, "modelos": {"option": "ahorro"}}
+        adoption.validate(inv, answers)
+        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
+        plan = adoption.build(template, inv, answers, "main", "a" * 40)
+        by_question = {d.question: d for d in plan.decisions}
+        self.assertEqual((by_question["modelos"].option, by_question["modelos"].outcome), ("ahorro", survey.DECISION))
+        self.assertEqual(plan.data["models"]["ladder"], ["haiku", "sonnet"])
+        with self.assertRaises(MthError) as ctx:
+            adoption.validate(inv, {**answers, "modelos": {"option": "gratis"}})
+        self.assertIn("opción desconocida 'gratis'", ctx.exception.message)
+
+    def test_plan_of_a_github_repo_has_no_disabled_forge_capability(self):
+        # verifies: SPEC-0015/AC-08
+        inv = inventory("existing", tests=["make test"])
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
+                   "ci": {"option": "crear"}}
+        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
+        plan = adoption.build(template, inv, answers, "main", "a" * 40)
+        out = adoption.summary_text(inv, plan)
+        positions = [out.index(text) for text in ("Deducido del repo (", "Por defecto (", "Decidido (", "Capacidades")]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("✓ mth integrate (PR con merge commit) — forge = github", out)
+        self.assertIn("✓ mth release (versión, etiqueta y CHANGELOG) — forge = github", out)
+        self.assertIn("✓ CI exigida para integrar — ci.required = true", out)
+        self.assertNotIn("solo la parte local", out)
+
     def test_adoption_adr_records_the_outcome_of_every_question(self):
         # verifies: SPEC-0015/AC-09
         inv = inventory("methodology", language="en", forge="gitlab", commit_hook=True, tests=["make test"])
@@ -213,6 +256,31 @@ class AnswersTests(unittest.TestCase):
                 with self.subTest(code=code, kind=kind):
                     self.assertTrue(compact.is_compact(text, vocab))
                     self.assertEqual(compact.adr_problems(text, vocab), [])
+
+    def test_adoption_adr_of_a_new_repo_records_default_outcomes(self):
+        # verifies: SPEC-0015/AC-09
+        inv = inventory("new", language="unknown", files=0)
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
+                   "ci": {"option": "sin-ci"}}
+        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
+        plan = adoption.build(template, inv, answers, "main", "a" * 40)
+        text = adoption.adr_text("ADR-0001", inv, plan, lang.vocabulary("es"))
+        for question in inv.questions:
+            row = next(line for line in text.splitlines() if line.startswith(f"| `{question['id']}` |"))
+            self.assertIn(f"| `{question['outcome']}` |", row)
+        self.assertIn("| `idioma` | `por_defecto` | `es` |", text)
+
+    def test_generated_adrs_are_compact_for_a_fork_without_signals(self):
+        # verifies: SPEC-0004/AC-12
+        inv = inventory("fork", forge="none")
+        answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []},
+                   "tests": {"option": "ninguno"}, "versiones": {"option": "continuar"}}
+        template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
+        plan = adoption.build(template, inv, {q: a for q, a in answers.items() if q in inv.asked()}, "main", "a" * 40)
+        vocab = lang.vocabulary("es")
+        text = adoption.adr_text("ADR-0001", inv, plan, vocab)
+        self.assertIn("- Formato: compacto", text)
+        self.assertEqual(compact.adr_problems(text, vocab), [])
 
 
 class OfferedOptionsTests(unittest.TestCase):

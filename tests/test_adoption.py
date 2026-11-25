@@ -82,6 +82,32 @@ class BeforeAdoptionTests(RepoCase):
         self.write(".claude/methodology.toml", CONFIG)
         self.assertEqual(run("git rebase main"), guard.BLOCK)
 
+    def test_session_with_an_unreadable_configuration_keeps_the_rules(self):
+        # verifies: SPEC-0004/AC-01
+        self.write(".claude/methodology.toml", "version = 99\n")
+        out = session.context(self.root, "mth")
+        self.assertIn("reglas base", out)
+        self.assertNotIn("repositorio sin adoptar", out)
+
+    def test_guard_blocks_pushing_to_main_once_adopted(self):
+        # verifies: SPEC-0004/AC-02
+        self.commit()
+        self.write(".claude/methodology.toml", CONFIG)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = guard.main(json.dumps({"tool_input": {"command": "git push origin main"}, "cwd": str(self.root)}))
+        self.assertEqual(code, guard.BLOCK)
+
+    def test_decline_creates_the_settings_file_or_refuses_a_non_object(self):
+        # verifies: SPEC-0004/AC-03
+        settings = self.root / ".claude/settings.local.json"
+        with contextlib.redirect_stderr(io.StringIO()):
+            setup.decline(self.root)
+        self.assertEqual(json.loads(settings.read_text()), {"enabledPlugins": {"methodology@claude-methodology": False}})
+        settings.write_text("[]", encoding="utf-8")  # valid JSON, but not an object
+        with self.assertRaises(MthError):
+            setup.decline(self.root)
+        self.assertEqual(settings.read_text(), "[]")
+
     def test_decline_disables_the_plugin_locally(self):
         # verifies: SPEC-0004/AC-03
         settings = self.root / ".claude/settings.local.json"
@@ -117,6 +143,24 @@ class SurveyTests(RepoCase):
         hook.unlink()
         self.git("remote", "add", "upstream", "https://example.invalid/upstream.git")
         self.assertEqual(self.inventory().profile, "fork")
+
+    def test_empty_repo_is_new_and_a_plain_origin_is_not_a_fork(self):
+        # verifies: SPEC-0004/AC-04
+        self.assertEqual(self.inventory().profile, "new")
+        self.write("src/app.py", "print('x')\n")
+        self.commit()
+        self.git("remote", "add", "origin", "https://example.invalid/origin.git")
+        self.assertEqual(self.inventory().profile, "existing")
+
+    def test_fork_questions_start_from_the_fork_base(self):
+        # verifies: SPEC-0004/AC-05
+        self.write("src/app.py")
+        self.commit()
+        self.git("remote", "add", "upstream", "https://example.invalid/upstream.git")
+        inventory = self.inventory()
+        self.assertEqual(inventory.profile, "fork")
+        self.assertEqual([q["id"] for q in inventory.questions], ["autonomia", "forja", "alcance", "ramas", "versiones",
+                                                                  "tests", "revisores", "idioma", "ci", "modelos"])
 
     def test_questions_follow_profile_and_signals(self):
         # verifies: SPEC-0004/AC-05
@@ -163,6 +207,25 @@ class SurveyTests(RepoCase):
         self.assertEqual(found["tags"], {"prefix": "v", "count": 1})
         self.assertEqual(found["language"], "en")
         self.assertEqual(self.git("status", "--porcelain"), before)
+
+    def test_signals_of_a_plain_spanish_repo(self):
+        # verifies: SPEC-0004/AC-06
+        self.write("README.md", "El proyecto es para la gente que trabaja con el código de la casa y que lo usa cada día. " * 6)
+        self.write("src/app.py")
+        self.commit()
+        found = self.inventory().signals
+        for key in ("specs", "adrs", "agents", "agent_collisions", "hook_managers", "release_tools", "version_files", "tests"):
+            self.assertEqual(found[key], [], key)
+        self.assertIsNone(found["tags"])
+        self.assertEqual(found["language"], "es")
+
+    def test_a_huge_file_does_not_stop_the_inventory(self):
+        # verifies: SPEC-0004/AC-07
+        self.write("README.md", "El proyecto es para la gente que trabaja con el código de la casa y que lo usa cada día. " * 6000)
+        self.commit()
+        result = self.inventory()
+        self.assertEqual(result.signals["language"], "es")
+        self.assertTrue(result.questions)
 
     def test_adopted_repo_and_unreadable_files(self):
         # verifies: SPEC-0004/AC-07
@@ -353,6 +416,16 @@ class AdoptionFlowTests(unittest.TestCase):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
         self.assertIn("no tiene rama main", self.mth("init", "--answers", str(path), ok=False))
         self.assertFalse((self.work / ".claude/methodology.toml").exists())
+
+    def test_adoption_of_a_new_repo_records_its_profile(self):
+        # verifies: SPEC-0004/AC-10
+        self.mth("init", "--answers", str(self.answers()))
+        self.assertEqual(self.git("branch", "--show-current"), "chore/adopt-methodology")
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")
+        adr = next((self.work / "specs/adr/methodology").glob("*.md")).read_text()
+        self.assertIn("perfil **new**", adr)
+        self.assertIn("| `autonomia` | `decision` | `until-pr` |", adr)
+        self.assertNotIn("| `instrucciones` |", adr)
 
     def test_adoption_branch_with_config_and_adr(self):
         # verifies: SPEC-0004/AC-10
