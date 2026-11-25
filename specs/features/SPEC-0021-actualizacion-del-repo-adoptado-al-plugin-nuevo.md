@@ -72,7 +72,7 @@ Registro inicial:
 
 ### Skill `mth-update`
 
-- Frontmatter con `model: opus` y sin disparo automático: solo la lanza la persona. El hook de sesión NO la propone.
+- Frontmatter con `model: opus` y `disable-model-invocation: true`: solo la lanza la persona. El hook de sesión NO la propone.
 - Flujo: `mth update --plan`; presentar las brechas; `mth update`; preguntar en una sola ronda las `decision` (agentes del perfil, conversión de documentos, agentes editados); plan de migración aprobado antes de convertir documentos; ejecutar en la misma rama con commits `chore` o `docs`; `mth doctor` sin ✗ y `mth trace` sin errores; integrar con `mth-integrate`.
 - Cierra con tres listas: aplicado, decidido y pendiente (informativas).
 - Si se detiene una migración tras tres rondas de ajuste sin acuerdo, resume lo pendiente y no integra.
@@ -107,9 +107,9 @@ Registro inicial:
 - **AC-09**: CUANDO se vuelve a ejecutar `mth update` en `chore/update-methodology` o tras aplicar, `mth` DEBE aplicar solo lo que falta y `--plan` NO DEBE listar las brechas `automatica` ya aplicadas.
 - **AC-10**: Las brechas `informativa` (`humo`, `triangulacion`) NO DEBEN aplicarse ni bloquear nunca `mth update`.
 - **AC-11**: El registro de brechas DEBE definir, para cada brecha, `id`, clase, evidencia y acción, con IDs únicos y una clase válida.
-- **AC-12**: La skill `mth-update` DEBE existir con `model: opus` y sin disparo automático, el hook de sesión NO DEBE proponerla y DEBE documentar el flujo y las tres listas de cierre.
+- **AC-12**: La skill `mth-update` DEBE existir con `model: opus` y `disable-model-invocation: true`, el hook de sesión NO DEBE proponerla y DEBE documentar el flujo y las tres listas de cierre.
 
 ## Notas
 
-- Al implementar, comprobar en la documentación de Claude Code la clave de frontmatter que impide el disparo automático de una skill (AC-12).
+- La clave de frontmatter que impide el disparo automático es `disable-model-invocation: true` (documentación de Claude Code); hay un informe de usuario de que, combinada con el slash command, Claude puede negarse a invocarla: si pasa, se revisa.
 - Orden de ramas hijas previsto: registro de brechas y `mth update --plan`, después `mth update`, después la skill.
