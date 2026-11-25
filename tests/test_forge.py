@@ -92,6 +92,25 @@ class GuardTests(unittest.TestCase):
                 self.assertIsNone(guard.violation(command, protected, "feat/x"))
 
 
+class MergeBypassTests(unittest.TestCase):
+    PROTECTED = {"main", "development"}
+
+    def test_a_merge_by_hand_is_blocked_however_it_is_spelled(self):
+        # verifies: SPEC-0016/AC-12
+        for command in ("gh -R owner/repo pr merge 3", "glab --repo owner/repo mr merge 5", "gh --hostname h pr merge",
+                        "sudo glab mr merge 5", "env GH_TOKEN=x gh pr merge 3",
+                        "gh api -X PUT repos/o/r/pulls/3/merge", "glab api projects/1/merge_requests/1/merge --method PUT"):
+            with self.subTest(command=command):
+                self.assertIn("mth integrate", guard.violation(command, self.PROTECTED, "feat/x") or "")
+
+    def test_reads_and_other_subcommands_still_pass(self):
+        # verifies: SPEC-0016/AC-12
+        for command in ("gh -R owner/repo pr view 3", "glab -R owner/repo mr list", "sudo ls", "gh api repos/o/r/pulls",
+                        "gh api repos/o/r/pulls/3/merge"):
+            with self.subTest(command=command):
+                self.assertIsNone(guard.violation(command, self.PROTECTED, "feat/x"))
+
+
 class ManualForgeTests(unittest.TestCase):
     """An adopted repository whose remote is on GitLab: mth does the local part and never calls gh."""
 

@@ -23,6 +23,9 @@ from .errors import MthError
 from .git import Git
 from .work import WORK_DIR
 
+_WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "nice"}  # run another command: judge that one
+_FORGE_VALUE_OPTIONS = {"-R", "--repo", "--hostname"}  # gh/glab global options that take a value
+_MERGE_BY_HAND = "los merges se hacen con `mth integrate`, `mth release` o `mth hotfix finish`"
 _SPLIT = re.compile(r"\|\||&&|;|\||\n")
 BLOCK = 2  # Claude Code: exit code 2 blocks the tool call and shows stderr to the model.
 _MTH_SPELLINGS = ("$MTH", "${MTH}")
@@ -116,22 +119,39 @@ def _forces_work_dir(args: list[str]) -> bool:
     return any(p in _WHOLE_TREE or p.rstrip("/") == WORK_DIR or p.startswith(f"{WORK_DIR}/") for p in paths)
 
 
+def _merges_through_api(args: list[str]) -> bool:
+    """A write request to a ``.../merge`` endpoint of ``gh api`` / ``glab api``."""
+    endpoint = any(a.rstrip("/").endswith("/merge") for a in args if not a.startswith("-"))
+    writes = any(a in ("-f", "-F", "--field", "--raw-field", "--input") for a in args) or any(
+        a.upper() in ("PUT", "POST", "PATCH") for a in args)
+    return endpoint and writes
+
+
 def violation(command: str, protected: set[str], current: str | None) -> str | None:
     """Reason why ``command`` must be blocked, or None."""
     for segment in _SPLIT.split(command):
         tok = _tokens(segment.strip())
         while tok and "=" in tok[0] and not tok[0].startswith("-"):
             tok = tok[1:]  # leading VAR=value assignments
+        while tok and tok[0].rsplit("/", 1)[-1] in _WRAPPERS:
+            tok = tok[1:]  # sudo, env, command ...: judge the command they run
+            while tok and "=" in tok[0] and not tok[0].startswith("-"):
+                tok = tok[1:]
         prog = tok[0].rsplit("/", 1)[-1] if tok else ""
         rest = tok[1:]
         if prog == "git":  # skip global options: git -C dir -c k=v --no-pager push ...
             while rest and rest[0].startswith("-"):
                 rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
+        elif prog in ("gh", "glab"):  # skip global options: gh -R owner/repo pr merge ...
+            while rest and rest[0].startswith("-"):
+                rest = rest[2:] if rest[0] in _FORGE_VALUE_OPTIONS else rest[1:]
         if not rest:
             continue
         sub, args = rest[0], rest[1:]
         if (prog, sub) in (("gh", "pr"), ("glab", "mr")) and args[:1] in (["merge"], ["accept"]):  # glab mr accept: alias
-            return "los merges se hacen con `mth integrate`, `mth release` o `mth hotfix finish`"
+            return _MERGE_BY_HAND
+        if prog in ("gh", "glab") and sub == "api" and _merges_through_api(args):
+            return _MERGE_BY_HAND
         if prog != "git":
             continue
         on_protected = current in protected
