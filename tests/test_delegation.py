@@ -214,6 +214,7 @@ class PlanCommandTests(RepoTestCase):
 
 class WaveVerifyTests(RepoTestCase):
     def test_nothing_to_verify(self):
+        # unit: plan.check
         # Failure mode of SPEC-0001: spec without plan, undefined ID or missing wave.
         self.write("specs/features/" + OTHER_ID + "-plain.md", f"# {OTHER_ID} · Plain\n\n- **AC-01**: x.\n")
         self.write("specs/adr/ADR-" + "0007-x.md", "# ADR-" + "0007 · X\n")
@@ -299,6 +300,7 @@ class WaveVerifyTests(RepoTestCase):
         self.assertIn("declara 'src/a.py', que no tiene cambios", out)
 
     def test_deleted_and_renamed_files_are_changes(self):
+        # unit: plan.verify_wave
         self.write("src/b/old.py", "o = 1\n")
         self.write("src/b/gone.py", "g = 1\n")
         self.git("add", "-A")

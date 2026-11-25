@@ -29,6 +29,7 @@ class CatalogStructureTests(unittest.TestCase):
         self.names = catalog.names(CATALOG)
 
     def test_profiles_match_directories(self):
+        # unit: catalog.profiles
         profiles = catalog.profiles(CATALOG)
         listed = [a for p in profiles.values() for a in p["agents"]]
         self.assertEqual(sorted(listed), self.names)
@@ -38,6 +39,7 @@ class CatalogStructureTests(unittest.TestCase):
                 self.assertIn(name, profiles[prof]["agents"], name)
 
     def test_meta_is_complete_and_review_orders_are_unique(self):
+        # unit: catalog.load_meta
         orders = {}
         for name in self.names:
             meta = catalog.load_meta(CATALOG, name)
@@ -76,6 +78,7 @@ class CatalogStructureTests(unittest.TestCase):
                     self.assertNotIn("delegate", guard)
 
     def test_tools_and_guard_are_coherent(self):
+        # unit: catalog.render
         for name in self.names:
             meta = catalog.load_meta(CATALOG, name)
             if meta["kind"] == "principal":
@@ -93,6 +96,7 @@ class CatalogStructureTests(unittest.TestCase):
                 self.assertEqual(bool(write.get("in_worktree")), worktree and bool(tools & WRITE_TOOLS))
 
     def test_evals_meet_the_minimums(self):
+        # unit: catalog.load_meta
         for name in self.names:
             meta, evals = catalog.load_meta(CATALOG, name), _evals(name)
             with self.subTest(agent=name):
@@ -107,6 +111,7 @@ class CatalogStructureTests(unittest.TestCase):
                     self.assertIn(case.get("expect") or case.get("expect_not"), self.names)
 
     def test_shim_has_valid_syntax(self):
+        # unit: mth-agent-guard.sh
         import subprocess
         shim = CATALOG / "_shared" / "mth-agent-guard.sh"
         self.assertEqual(subprocess.run(["sh", "-n", str(shim)]).returncode, 0)
@@ -126,6 +131,7 @@ class RenderTests(unittest.TestCase):
                 tomllib.loads(first.guard_toml)
 
     def test_header_and_reviewer_output(self):
+        # unit: catalog.render
         for name in catalog.names(CATALOG):
             r = catalog.render(CATALOG, name, self.config)
             with self.subTest(agent=name):
@@ -180,9 +186,11 @@ class RenderTests(unittest.TestCase):
                 self.assertTrue(catalog.installed(r.agent_md, r.guard_toml + "\n# x\n").edited)
 
     def test_agent_without_header_is_not_from_the_catalog(self):
+        # unit: catalog.installed
         self.assertIsNone(catalog.installed("---\nname: x\n---\nhola\n", None))
 
     def test_unknown_agent_is_rejected(self):
+        # unit: catalog.load_meta
         for name in ("no-existe", "../revisor-adr", "_shared"):
             with self.subTest(name=name), self.assertRaises(MthError):
                 catalog.load_meta(CATALOG, name)
@@ -193,10 +201,12 @@ class AgentsConfigTests(unittest.TestCase):
         return parse(Path("/nonexistent"), 'version = 1\n[commands]\ntest = ""\n' + extra)
 
     def test_template_example_block_is_valid(self):
+        # unit: config.parse
         cfg = support.fixture_config()
         self.assertEqual(cfg["agents"]["lector-estado"]["databases"], {"estado": "data/state.db"})
 
     def test_agents_table_is_optional(self):
+        # unit: config.parse
         self.assertEqual(self.parse("")["agents"], {})
 
     def test_unknown_variable_is_an_error_naming_the_key(self):
@@ -206,6 +216,7 @@ class AgentsConfigTests(unittest.TestCase):
         self.assertIn("agents.lector-estado.database", ctx.exception.message)
 
     def test_unknown_agent_and_wrong_type_are_errors(self):
+        # unit: config.parse
         with self.assertRaises(MthError):
             self.parse('[agents.no-existe]\nx = 1\n')
         with self.assertRaises(MthError) as ctx:

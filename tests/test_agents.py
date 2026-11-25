@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -82,6 +83,7 @@ class AddTests(AgentsTestCase):
         self.assertEqual(self.snapshot(), before)
 
     def test_profile_skips_agents_with_unmet_requirements(self):
+        # unit: agents.Manager.add
         self.write(".claude/methodology.toml", self.config_text.replace('test = "pytest -q"', 'test = ""'))
         self.assertEqual(self.add(profile="base"), 0)
         self.assertIn("diagnosticador: no se instala; requisitos sin configurar: commands.test", self.output)
@@ -113,6 +115,7 @@ class AddTests(AgentsTestCase):
         self.assertEqual(paths["revisor-contratos"], ["schemas/**"])
 
     def test_ordering_rule(self):
+        # unit: agents.ordered_reviewers
         orders = {"revisor-seguridad": 10, "revisor-fallos": 20, "revisor-adr": 25}
         self.assertEqual(agents.ordered_reviewers([], "revisor-fallos", 20, orders), ["revisor-fallos"])
         self.assertEqual(agents.ordered_reviewers(["revisor-adr", "verificador"], "revisor-seguridad", 10, orders),
@@ -121,6 +124,7 @@ class AddTests(AgentsTestCase):
                          ["verificador", "propio", "revisor-fallos", "revisor-adr"])
 
     def test_widened_review_paths_are_kept(self):
+        # unit: agents.Manager.sync
         self.add("revisor-adr")
         text = self.read(".claude/methodology.toml").replace('revisor-adr = [', 'revisor-adr = ["contracts/**", ', 1)
         self.write(".claude/methodology.toml", text)
@@ -156,6 +160,7 @@ class AddTests(AgentsTestCase):
         self.assertTrue((self.root / ".claude/mth/agents/revisor-fallos.guard.toml").is_file())
 
     def test_hook_command_blocks_subagents_when_the_shim_is_missing(self):
+        # unit: agents.HOOK_COMMAND
         env = {**os.environ, "CLAUDE_PROJECT_DIR": str(self.root)}
         run = lambda payload: subprocess.run(["sh", "-c", agents.HOOK_COMMAND], input=json.dumps(payload),
                                              env=env, capture_output=True, text=True)
@@ -166,6 +171,7 @@ class AddTests(AgentsTestCase):
         self.assertIn("mth agents sync", proc.stderr)
 
     def test_hook_entry_has_a_timeout_and_removal_keeps_foreign_hooks_in_a_shared_entry(self):
+        # unit: agents.Manager.remove
         self.add("revisor-fallos")
         settings = json.loads(self.read(".claude/settings.json"))
         ours = settings["hooks"]["PreToolUse"][-1]
@@ -177,6 +183,7 @@ class AddTests(AgentsTestCase):
         self.assertEqual(left, [{"matcher": agents.HOOK_MATCHER, "hooks": [{"type": "command", "command": "echo propio"}]}])
 
     def test_write_errors_are_reported_as_resumable_environment_errors(self):
+        # unit: files.atomic_write
         from mthlib import files
         target = self.root / "bloqueado" / "x.json"
         (self.root / "bloqueado").write_text("no es un directorio", encoding="utf-8")
@@ -191,6 +198,7 @@ class AddTests(AgentsTestCase):
         self.assertEqual((self.root / "ok.txt").stat().st_mode & 0o777, 0o640)
 
     def test_the_decision_log_tolerates_a_concurrent_rotation(self):
+        # unit: log.Tracer.event
         from mthlib.log import Tracer
         tracer = Tracer(self.root / ".git", "x", "t.jsonl", max_bytes=1)
         (self.root / ".git/mth").mkdir(exist_ok=True)
@@ -205,12 +213,14 @@ class AddTests(AgentsTestCase):
         self.assertIn('"event": "a"', (self.root / ".git/mth/t.jsonl").read_text(encoding="utf-8"))
 
     def test_settings_with_an_unexpected_shape_are_rejected(self):
+        # unit: agents.read_settings
         self.write(".claude/settings.json", json.dumps({"hooks": {"PreToolUse": {"x": 1}}}))
         with self.assertRaises(MthError) as ctx:
             self.add("revisor-fallos")
         self.assertIn("forma esperada", ctx.exception.message)
 
     def test_a_failure_halfway_never_leaves_an_agent_without_its_hook(self):
+        # unit: agents.Manager.add
         real = agents.atomic_write
 
         def failing(path, text, mode=None):
@@ -245,6 +255,7 @@ class AddTests(AgentsTestCase):
         self.assertEqual(self.snapshot(), before)
 
     def test_worktree_agents_ignore_claude_worktrees(self):
+        # unit: agents.Manager.add
         self.write(".gitignore", "__pycache__/")
         self.add("diagnosticador")
         self.add("ingeniero-rendimiento")
@@ -252,6 +263,7 @@ class AddTests(AgentsTestCase):
         self.assertTrue(self.read(".gitignore").startswith("__pycache__/\n"))
 
     def test_english_docs_get_a_notice(self):
+        # unit: agents.Manager.add
         self.write(".claude/methodology.toml", self.config_text.replace('docs = "es"', 'docs = "en"'))
         self.add("revisor-fallos")
         self.assertIn("en español", self.output)
@@ -289,6 +301,7 @@ class SyncTests(AgentsTestCase):
         self.assertNotIn("## Editado", path.read_text(encoding="utf-8"))
 
     def test_diff_and_list(self):
+        # unit: agents.Manager.diff
         self.add("revisor-diseno")
         self.assertEqual(self.mth("agents", "diff", "revisor-diseno"), 0)
         self.assertEqual(self.output, "")
@@ -298,6 +311,7 @@ class SyncTests(AgentsTestCase):
         self.assertIn("modelo sugerido: opus", self.output)
 
     def test_sync_rejects_agents_not_from_the_catalog(self):
+        # unit: agents.Manager.sync
         self.write(".claude/agents/propio.md", "---\nname: propio\n---\n")
         with self.assertRaises(MthError):
             self.quiet(self.manager().sync, ["propio"], False)
@@ -323,6 +337,7 @@ class RemoveTests(AgentsTestCase):
         self.assertEqual(self.review(), (["verificador"], {}))
 
     def test_foreign_agents_are_not_removed(self):
+        # unit: agents.Manager.remove
         self.write(".claude/agents/propio.md", "---\nname: propio\n---\n")
         self.assertEqual(self.mth("agents", "remove", "propio"), 1)
         self.assertTrue((self.root / ".claude/agents/propio.md").exists())
@@ -344,19 +359,20 @@ class DoctorTests(AgentsTestCase):
         self.addCleanup(shutil.rmtree, newer.parent)
         shutil.copytree(CATALOG, newer)
         meta = newer / "revisor-fallos" / "meta.toml"
-        meta.write_text(meta.read_text(encoding="utf-8").replace('version = "1.0.0"', 'version = "1.2.0"'),
+        meta.write_text(re.sub(r'^version = ".*"', 'version = "9.0.0"', meta.read_text(encoding="utf-8"), count=1, flags=re.M),
                         encoding="utf-8")
         diseno = self.root / ".claude/agents/revisor-diseno.md"
         diseno.write_text(diseno.read_text(encoding="utf-8").replace("## ", "## X", 1), encoding="utf-8")
         path.write_text(path.read_text(encoding="utf-8").replace("\nAtacante: usuario anónimo.\n", ""), encoding="utf-8")
         self.write(".claude/settings.json", "{}")
         found = "\n".join(self.findings(newer))
-        self.assertIn("revisor-fallos: desactualizado (catálogo v1.2.0)", found)
+        self.assertIn("revisor-fallos: desactualizado (catálogo v9.0.0)", found)
         self.assertIn("revisor-diseno: editado a mano", found)
         self.assertIn("revisor-seguridad: su sección local obligatoria está vacía", found)
         self.assertIn("Falta la entrada PreToolUse", found)
 
     def test_warns_about_missing_guard_shim_launcher_and_disabled_hooks(self):
+        # unit: agents.doctor_findings
         self.add("revisor-fallos")
         (self.root / ".claude/mth/agents/revisor-fallos.guard.toml").unlink()
         (self.root / agents.SHIM).unlink()
@@ -370,6 +386,7 @@ class DoctorTests(AgentsTestCase):
         self.assertIn("No hay lanzador registrado", found)
 
     def test_doctor_reports_them_as_warnings(self):
+        # unit: setup.doctor
         self.add("revisor-fallos")
         self.write(".claude/settings.json", "{}")
         cwd = os.getcwd()
@@ -397,11 +414,13 @@ class DoctorTests(AgentsTestCase):
         self.assertFalse((self.root / ".claude/mth/agents/revisor-diseno.guard.toml").exists())
 
     def test_unreadable_settings_files_are_reported(self):
+        # unit: agents.doctor_findings
         self.add("revisor-fallos")
         self.write(".claude/settings.local.json", "{roto")
         self.assertIn("No se puede leer .claude/settings.local.json", "\n".join(self.findings()))
 
     def test_no_catalog_agents_no_findings(self):
+        # unit: agents.doctor_findings
         self.assertEqual(self.findings(), [])
 
 
