@@ -61,6 +61,21 @@ class InventoryTests(unittest.TestCase):
         test_mth._write(self.root / ".claude/agents/verificador.md", "---\nname: verificador\n---\n")
         self.assertIn("colision", survey.reconfigure(self.repo, cfg).asked())
 
+    def test_current_values_of_a_configuration_with_other_choices(self):
+        # verifies: SPEC-0011/AC-02
+        cfg = self.adopt(CONFIG + '[language]\ndocs = "en"\n[autonomy]\nlevel = "supervised"\n')
+        inventory = survey.reconfigure(self.repo, cfg)
+        current = {q["id"]: q["current"] for q in inventory.questions}
+        self.assertEqual(current["autonomia"], "autonomy.level = supervised")
+        self.assertEqual(current["idioma"], "language.docs = en")
+        self.assertNotIn("colision", inventory.asked())
+
+    def test_only_accepts_a_single_question_and_ignores_repeats(self):
+        # verifies: SPEC-0011/AC-03
+        cfg = self.adopt()
+        self.assertEqual(survey.reconfigure(self.repo, cfg, "ci").asked(), ["ci"])
+        self.assertEqual(survey.reconfigure(self.repo, cfg, "ci,ci").asked(), ["ci"])
+
     def test_only_selects_blocks_and_questions(self):
         # verifies: SPEC-0011/AC-03
         cfg = self.adopt()
@@ -139,6 +154,20 @@ class ReconfigureTests(unittest.TestCase):
         self.assertIn('| `autonomy.level` | `"full"` | `"supervised"` |', text)
         self.assertIn("Refs: " + adr.rsplit("/", 1)[1].split("-reest")[0],
                       self.git("log", "-1", "--format=%B", f"origin/{BRANCH}"))
+
+    def test_a_single_question_changes_only_its_key(self):
+        # verifies: SPEC-0011/AC-04
+        self.mth("reconfigure", "--answers", self.answers({"tests": {"option": "comando", "command": "make check"}}),
+                 "--only", "tests")
+        self.assertEqual(self.git("branch", "--show-current"), BRANCH)
+        self.git("fetch", "-q")
+        self.assertEqual(self.git("rev-list", "--count", f"origin/development..origin/{BRANCH}"), "1")
+        data = tomllib.loads(self.config_text(f"origin/{BRANCH}"))
+        self.assertEqual(data["commands"]["test"], "make check")
+        self.assertEqual(data["autonomy"]["level"], "full")
+        self.assertEqual(data["work"]["dirs"], ["bench"])
+        self.assertEqual(data["review"]["paths"], {"verificador": ["src/**"]})
+        self.assertEqual(data["ids"]["RFC"], {"pattern": r"RFC-\d{3}", "defined_in": ["rfcs/**/*.md"]})
 
     def test_invalid_requests_change_nothing(self):
         # verifies: SPEC-0011/AC-05
@@ -228,12 +257,31 @@ class ReconfigureTests(unittest.TestCase):
         self.assertEqual(tomllib.loads(self.config_text())["hooks"]["commit_msg"], "chain")
 
 
+    def test_hook_replace_mode_keeps_the_foreign_hook_as_a_backup(self):
+        # verifies: SPEC-0011/AC-08
+        hooks = self.work / ".git/hooks"
+        (hooks / "commit-msg").write_text("#!/bin/sh\nexit 0\n")
+        (hooks / "commit-msg").chmod(0o755)
+        replace = {"commits": {"option": "otro", "config": {"hooks": {"commit_msg": "replace"}}}}
+        self.mth("reconfigure", "--answers", self.answers(replace), "--only", "commits")
+        self.assertEqual((hooks / "commit-msg.pre-mth").read_text(), "#!/bin/sh\nexit 0\n")
+        self.assertNotIn("commit-msg.local", " ".join(p.name for p in hooks.iterdir()))
+        self.assertEqual(tomllib.loads(self.config_text())["hooks"]["commit_msg"], "replace")
+
+
 class GuardAndSkillTests(unittest.TestCase):
     def test_supervised_asks_before_reconfiguring(self):
         # verifies: SPEC-0011/AC-09
         self.assertIn("`mth reconfigure` requiere confirmación",
                       guard.confirmation('sh "/x/scripts/mth" reconfigure --answers a.json', "supervised") or "")
         self.assertIsNone(guard.confirmation("mth reconfigure --answers a.json", "until-pr"))
+
+    def test_supervised_asks_for_a_chained_reconfigure_and_not_for_a_survey(self):
+        # verifies: SPEC-0011/AC-09
+        self.assertIn("`mth reconfigure` requiere confirmación",
+                      guard.confirmation("cd repo && mth reconfigure --answers a.json --only ci", "supervised") or "")
+        self.assertIsNone(guard.confirmation("mth survey --reconfigure", "supervised"))
+        self.assertIsNone(guard.confirmation("mth reconfigure --answers a.json", "full"))
 
     def test_skill_documents_the_blocks_and_commands(self):
         # verifies: SPEC-0011/AC-10

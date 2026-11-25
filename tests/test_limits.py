@@ -172,6 +172,13 @@ class BranchTests(BranchTestCase):
             self.assertNotIn(name, self.trace("--limits"))
         self.assertIn("1 ficheros por encima", out)  # only the legacy file is listed
 
+    def test_no_long_files_means_no_summary(self):
+        # verifies: SPEC-0020/AC-11
+        self.write("src/legacy.py", text(10))
+        self.write("src/short.py", text(5))
+        self.assertNotIn("por encima del límite", self.trace())
+        self.assertNotIn("src/short.py", self.trace("--limits"))
+
     def test_a_branch_without_a_parent_never_fails_for_size(self):
         # verifies: SPEC-0020/AC-07
         self.git("checkout", "-q", "development")

@@ -139,6 +139,11 @@ class ConfigTests(unittest.TestCase):
                 parse(Path("."), CONFIG + f"[work]\ndirs = {value}\n")
             self.assertIn(expected, ctx.exception.message)
 
+    def test_valid_names_are_accepted(self):
+        # verifies: SPEC-0010/AC-03
+        dirs = parse(Path("."), CONFIG + '[work]\ndirs = ["a-b", "x1", "v1.2_c"]\n')["work"]["dirs"]
+        self.assertEqual(dirs, ["a-b", "x1", "v1.2_c"])
+
 
 class SessionAndDoctorTests(WorkCase):
     def test_session_prepares_work_only_in_an_adopted_repo(self):
@@ -165,6 +170,23 @@ class SessionAndDoctorTests(WorkCase):
             self.assertIn(f"`{name}/`", out)
         self.assertIn("`.work/` (local, excluido de git", out)
         self.assertIn("los propios del repo: `benchmarks/`", out)
+
+    def test_doctor_warns_about_a_missing_subdirectory_of_an_excluded_work(self):
+        # verifies: SPEC-0010/AC-07
+        test_mth._write(self.root / ".claude/methodology.toml", CONFIG)
+        work.ensure(self.repo, [])
+        shutil.rmtree(self.root / ".work/plans")
+        out = self.doctor()
+        self.assertIn("⚠ Directorio de trabajo .work/: faltan plans", out)
+        self.assertNotIn("sin excluir", out)
+
+    def test_session_rules_without_extra_dirs(self):
+        # verifies: SPEC-0010/AC-09
+        test_mth._write(self.root / ".claude/methodology.toml", CONFIG)
+        out = session.context(self.root, "mth")
+        for name in work.DEFAULT_DIRS:
+            self.assertIn(f"`{name}/`", out)
+        self.assertNotIn("los propios del repo", out)
 
     def test_doctor_reports_each_state(self):
         # verifies: SPEC-0010/AC-07
@@ -195,6 +217,12 @@ class InitTests(unittest.TestCase):
         self.assertTrue(work.inspect(Git.discover(self.work), []).ready)
         self.assertNotIn(".work", self.git("show", "--name-only", "--format=", "HEAD"))
 
+    def test_init_completes_a_partial_work(self):
+        # verifies: SPEC-0010/AC-06
+        (self.work / ".work/plans").mkdir(parents=True)
+        self.mth("init")
+        self.assertTrue(work.inspect(Git.discover(self.work), []).ready)
+
 
 class GuardTests(unittest.TestCase):
     def test_forced_adds_that_reach_work_are_blocked(self):
@@ -207,6 +235,13 @@ class GuardTests(unittest.TestCase):
         for command in ("git add .", "git add -A", "git add -f build/x", "git add src/.work.md"):
             with self.subTest(command=command):
                 self.assertIsNone(guard.violation(command, protected, "feat/x"))
+
+    def test_forced_adds_chained_after_another_command_are_blocked(self):
+        # verifies: SPEC-0010/AC-08
+        protected = {"main", "development"}
+        for command in ("git status && git add -f .work/x", "git add -f -- .work/plans/p.md"):
+            with self.subTest(command=command):
+                self.assertIn(".work/ es local", guard.violation(command, protected, "feat/x") or "")
 
 
 if __name__ == "__main__":

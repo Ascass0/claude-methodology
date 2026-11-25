@@ -42,6 +42,17 @@ class LanguageConfigTests(unittest.TestCase):
             parse(Path("."), BASE_CONFIG + '[language]\ndocs = "fr"\n')
         self.assertIn("'language.docs' = 'fr' no es un idioma admitido (es, en)", ctx.exception.message)
 
+    def test_an_empty_language_table_is_spanish(self):
+        # verifies: SPEC-0008/AC-01
+        self.assertIs(parse(Path("."), BASE_CONFIG + "[language]\n").vocab, lang.ES)
+
+    def test_language_codes_are_exact(self):
+        # verifies: SPEC-0008/AC-02
+        for value in ('"EN"', '""', "1"):
+            with self.subTest(value=value), self.assertRaises(MthError) as ctx:
+                parse(Path("."), BASE_CONFIG + f"[language]\ndocs = {value}\n")
+            self.assertIn("language.docs", ctx.exception.message)
+
     def test_templates_have_the_same_structure(self):
         # unit: lang.ES
         for name in ("spec.md", "adr.md", "CHANGELOG.md", "claude-block.md"):

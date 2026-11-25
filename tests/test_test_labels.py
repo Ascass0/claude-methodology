@@ -88,6 +88,13 @@ class LabelTests(unittest.TestCase):
         self.assertRegex(found[0], r"^tests/test_x\.py:2: test sin etiqueta")
         self.assertRegex(found[1], r"^tests/test_x\.py:5: ")
 
+    def test_an_unlabelled_javascript_test_is_an_error_with_file_and_line(self):
+        # verifies: SPEC-0019/AC-02
+        text = lines("describe('x', () => {", "  it('does', () => {", "  });", "});")
+        found = label_findings({"tests/x.test.ts": text})
+        self.assertEqual(len(found), 1)
+        self.assertRegex(found[0], r"^tests/x\.test\.ts:2: test sin etiqueta")
+
     def test_each_label_kind_is_accepted_in_the_region(self):
         # verifies: SPEC-0019/AC-03
         text = lines(
@@ -108,6 +115,13 @@ class LabelTests(unittest.TestCase):
         self.assertEqual(len(found), 2)
         self.assertIn("etiqueta mal formada «verifies: pendiente»", found[0])
         self.assertIn("etiqueta mal formada «regression:»", found[1])
+
+    def test_a_label_with_a_malformed_reference_is_named(self):
+        # verifies: SPEC-0019/AC-04
+        text = lines("def test_a():", "    # verifies: @@/AC-1", "    pass")
+        found = label_findings({"tests/test_x.py": text})
+        self.assertEqual(len(found), 1)
+        self.assertIn(fx("etiqueta mal formada «verifies: @@/AC-1»"), found[0])
 
     def test_a_file_without_a_pattern_needs_one_label(self):
         # verifies: SPEC-0019/AC-05
@@ -138,6 +152,27 @@ class LabelTests(unittest.TestCase):
         errors, legacy = flow.run_trace(ctx)
         self.assertEqual([f.path for f in errors], ["tests/test_new.py"])
         self.assertEqual([f.path for f in legacy], ["tests/test_old.py"])
+
+    def test_a_legacy_file_without_a_pattern_only_warns(self):
+        # verifies: SPEC-0019/AC-06
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        test_mth._write(root / "tests/lib_test.rs", lines("#[test]", "fn works() {}"))
+        cfg = parse(root, CONFIG + f'[trace]\nlegacy_base = "{"a" * 40}"\n')
+        ctx = SimpleNamespace(cfg=cfg, git=SimpleNamespace(files=lambda: ["tests/lib_test.rs"],
+                                                          unchanged_since=lambda base: {"tests/lib_test.rs"}, **no_limits(root)))
+        errors, legacy = flow.run_trace(ctx)
+        self.assertEqual(errors, [])
+        self.assertEqual([f.path for f in legacy], ["tests/lib_test.rs"])
+
+    def test_integrate_accepts_a_labelled_new_test(self):
+        # verifies: SPEC-0019/AC-07
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        test_mth._write(root / "tests/test_new.py", lines("def test_b():", "    # unit: parse", "    pass"))
+        ctx = SimpleNamespace(cfg=parse(root, CONFIG), git=SimpleNamespace(files=lambda: ["tests/test_new.py"],
+                                                                         unchanged_since=lambda base: set(), **no_limits(root)))
+        self.assertIsNone(flow._gate_trace(ctx))  # no MthError: the gate lets a labelled test through
 
     def test_integrate_rejects_an_unlabelled_test_before_touching_the_remote(self):
         # verifies: SPEC-0019/AC-07

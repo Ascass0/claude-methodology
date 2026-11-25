@@ -47,6 +47,14 @@ class UnknownKeyTests(unittest.TestCase):
             self.assertIn("actualízalo con /plugin", ctx.exception.hint)
             self.assertIn("sesión nueva", ctx.exception.hint)
 
+    def test_an_unknown_top_level_scalar_is_named(self):
+        # verifies: SPEC-0009/AC-01
+        with self.assertRaises(MthError) as ctx:
+            parse(Path("."), 'newer_option = 1\n' + CONFIG)
+        self.assertIn("Clave desconocida en la configuración: 'newer_option'", ctx.exception.message)
+        self.assertIn(f"claude-methodology {__version__} no la reconoce", ctx.exception.message)
+        self.assertIn("sesión nueva", ctx.exception.hint)
+
     def test_a_05_configuration_keeps_its_behaviour(self):
         # verifies: SPEC-0009/AC-02
         cfg = parse(Path("."), CONFIG_05)
@@ -74,6 +82,16 @@ class DoctorHintTests(unittest.TestCase):
         self.assertEqual(problems, 1)
         self.assertIn("✗ Configuración: Clave desconocida en la configuración: 'autonomy.newer'", out.getvalue())
         self.assertIn("→ Si no es una errata", out.getvalue())
+
+    def test_doctor_shows_the_message_of_a_syntax_error(self):
+        # verifies: SPEC-0009/AC-03
+        test_mth._write(self.root / ".claude/methodology.toml", CONFIG + "[autonomy\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            problems = setup.doctor(self.root)
+        self.assertEqual(problems, 1)
+        self.assertIn("✗ Configuración:", out.getvalue())
+        self.assertNotIn("Clave desconocida", out.getvalue())
 
 
 if __name__ == "__main__":
