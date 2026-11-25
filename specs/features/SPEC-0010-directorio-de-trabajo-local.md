@@ -2,15 +2,15 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: [ADR-0006](../adr/process/ADR-0006-directorio-de-trabajo-local-excluido-de-git.md)
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0010/AC-NN`. -->
 
 ## Contexto
 
-Claude deja sus artefactos de trabajo (planes, manifiestos, cuerpos de PR, informes de revisión y de seguridad, notas) en el scratchpad de la sesión, que no persiste ni tiene estructura. Hace falta un directorio local, estándar en todos los repos adoptados, que nunca se suba a git ([ADR-0006](../adr/process/ADR-0006-directorio-de-trabajo-local-excluido-de-git.md)).
+- Claude deja sus artefactos de trabajo (planes, manifiestos, cuerpos de PR, informes de revisión y de seguridad, notas) en el scratchpad de la sesión: no persiste ni tiene estructura.
+- Hace falta un directorio local, estándar en todos los repos adoptados, que nunca se suba a git ([ADR-0006](../adr/process/ADR-0006-directorio-de-trabajo-local-excluido-de-git.md)).
 
 ## Objetivo
 
@@ -62,25 +62,25 @@ Las reglas base de la sesión describen `.work/` y sus subdirectorios. `mth-revi
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| `work.dirs` inválido (nombre con `/`, mayúsculas, repetido o de serie) | Carga de la configuración | Fail-fast: ningún comando se ejecuta |
-| Git ya versiona ficheros bajo `.work/` | `work.ensure`, `mth doctor` | No se crea nada ni se toca el exclude; aviso en la sesión y ✗ en doctor con los ficheros |
-| `.work` existe pero no es un directorio | `work.ensure`, `mth doctor` | No se toca; aviso en la sesión y ✗ en doctor |
-| No se puede escribir `.git/info/exclude` o crear un directorio | `work.ensure` | Error con la causa; la sesión lo muestra como aviso y sigue |
-| `git add` forzado que incluiría `.work/` | Guard | Bloqueado, con el motivo |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | `work.dirs` inválido (nombre con `/`, mayúsculas, repetido o de serie) | Fail-fast al cargar la configuración | AC-03 |
+| FM-02 | Git ya versiona ficheros bajo `.work/` | `work.ensure` y `mth doctor`: no se crea nada ni se toca el exclude; aviso en la sesión y ✗ en doctor con los ficheros | AC-04 |
+| FM-03 | `.work` existe pero no es un directorio | No se toca; aviso en la sesión y ✗ en doctor | AC-04 |
+| FM-04 | No se puede escribir `.git/info/exclude` o crear un directorio | `work.ensure`: error con la causa; la sesión lo muestra como aviso y sigue | AC-05 |
+| FM-05 | `git add` forzado que incluiría `.work/` | El guard lo bloquea con el motivo | AC-08 |
 
 ## Criterios de aceptación
 
-- **AC-01**: `work.ensure` crea `.work/` con los seis subdirectorios de serie y los de `work.dirs`, y añade `/.work/` a `.git/info/exclude`; después, `git status` no muestra nada de `.work/` aunque contenga ficheros.
-- **AC-02**: Ejecutar `work.ensure` dos veces no duplica la línea del exclude ni modifica ficheros existentes en `.work/`.
-- **AC-03**: La carga de la configuración rechaza en `work.dirs` un nombre con `/`, con mayúsculas, vacío, repetido o igual a uno de serie.
-- **AC-04**: Si git versiona ficheros bajo `.work/` o `.work` no es un directorio, `work.ensure` falla sin crear nada ni tocar el exclude, y `mth doctor` lo marca con ✗.
-- **AC-05**: El hook de sesión de un repo adoptado prepara `.work/`; si falla, muestra un aviso y la sesión continúa. En un repo sin adoptar no crea nada.
-- **AC-06**: `mth init` deja `.work/` preparado al adoptar.
-- **AC-07**: `mth doctor` marca con ✓ un `.work/` completo y excluido, y con ⚠ uno incompleto o sin excluir.
-- **AC-08**: El guard bloquea `git add -f .work/x`, `git add --force .`, `git add -f -A` y `git add -f :/`, y deja pasar `git add .` y `git add -f build/x`.
-- **AC-09**: Las reglas base de la sesión describen `.work/` y sus subdirectorios.
+- **AC-01**: CUANDO se ejecuta `work.ensure`, `mth` DEBE crear `.work/` con los seis subdirectorios de serie y los de `work.dirs` y añadir `/.work/` a `.git/info/exclude`, de modo que `git status` no muestre nada de `.work/` aunque contenga ficheros.
+- **AC-02**: CUANDO se ejecuta `work.ensure` dos veces, `mth` NO DEBE duplicar la línea del exclude ni modificar ficheros existentes en `.work/`.
+- **AC-03**: SI un nombre de `work.dirs` tiene `/`, mayúsculas, está vacío, repetido o es uno de serie, ENTONCES la carga de la configuración DEBE rechazarlo.
+- **AC-04**: SI git versiona ficheros bajo `.work/` o `.work` no es un directorio, ENTONCES `work.ensure` DEBE fallar sin crear nada ni tocar el exclude y `mth doctor` DEBE marcarlo con ✗.
+- **AC-05**: CUANDO empieza una sesión en un repo adoptado, el hook DEBE preparar `.work/`; SI falla, ENTONCES DEBE avisar y la sesión DEBE continuar; en un repo sin adoptar NO DEBE crear nada.
+- **AC-06**: CUANDO se ejecuta `mth init`, `mth` DEBE dejar `.work/` preparado.
+- **AC-07**: CUANDO se ejecuta `mth doctor`, `mth` DEBE marcar con ✓ un `.work/` completo y excluido y con ⚠ uno incompleto o sin excluir.
+- **AC-08**: El guard DEBE bloquear `git add -f .work/x`, `git add --force .`, `git add -f -A` y `git add -f :/`, y DEBE dejar pasar `git add .` y `git add -f build/x`.
+- **AC-09**: Las reglas base de la sesión DEBEN describir `.work/` y sus subdirectorios.
 
 ## Notas
 
