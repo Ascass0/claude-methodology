@@ -30,6 +30,11 @@ class LegacyConfigTests(unittest.TestCase):
             self.assertIn("hash completo de un commit", ctx.exception.message)
         self.assertEqual(parse(Path("."), CONFIG)["trace"]["legacy_base"], "")
 
+    def test_a_lowercase_full_hash_is_accepted(self):
+        # verifies: SPEC-0005/AC-02
+        value = "0123456789abcdef" * 2 + "01234567"
+        self.assertEqual(parse(Path("."), CONFIG + f'[trace]\nlegacy_base = "{value}"\n')["trace"]["legacy_base"], value)
+
 
 class LegacyTraceTests(unittest.TestCase):
     def setUp(self):
@@ -62,6 +67,15 @@ class LegacyTraceTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("✗ docs/old.md:3: enlace roto: nada.md", out)
 
+    def test_without_legacy_base_a_dangling_reference_is_an_error_too(self):
+        # verifies: SPEC-0005/AC-01
+        missing = "SPEC-" + "9999"
+        test_mth._write(self.root / "docs/old.md", f"# Guía\n\nVer {missing}.\n")
+        self.git("commit", "-q", "-a", "-m", "dangling reference")
+        code, out = self.trace()
+        self.assertEqual(code, 1)
+        self.assertIn(f"✗ docs/old.md:3: referencia a {missing}, que no está definido", out)
+
     def test_unchanged_files_are_warnings_and_touched_or_new_ones_errors(self):
         # verifies: SPEC-0005/AC-03
         # verifies: SPEC-0005/AC-04
@@ -77,6 +91,15 @@ class LegacyTraceTests(unittest.TestCase):
         self.assertNotIn("✗ docs/old.md", out)
         self.assertIn("⚠ 1 hallazgos en contenido legado", out)
 
+    def test_a_file_changed_in_a_later_commit_is_an_error(self):
+        # verifies: SPEC-0005/AC-04
+        (self.root / "docs/touched.md").write_text(BROKEN + "\nUna línea más.\n", encoding="utf-8")
+        self.git("commit", "-q", "-a", "-m", "touch after the base")
+        code, out = self.trace(legacy_base=self.base)
+        self.assertEqual(code, 1)
+        self.assertIn("✗ docs/touched.md:3: enlace roto", out)
+        self.assertNotIn("✗ docs/old.md", out)
+
     def test_legacy_listing(self):
         # verifies: SPEC-0005/AC-05
         _, out = self.trace(legacy_base=self.base)
@@ -84,6 +107,14 @@ class LegacyTraceTests(unittest.TestCase):
         _, out = self.trace("--legacy", legacy_base=self.base)
         self.assertIn("⚠ docs/old.md:3: enlace roto: nada.md", out)
         self.assertIn("⚠ docs/touched.md:3: enlace roto: nada.md", out)
+
+    def test_legacy_listing_leaves_out_errors(self):
+        # verifies: SPEC-0005/AC-05
+        test_mth._write(self.root / "docs/new.md", BROKEN)
+        _, out = self.trace("--legacy", legacy_base=self.base)
+        self.assertIn("⚠ docs/old.md:3: enlace roto: nada.md", out)
+        self.assertNotIn("⚠ docs/new.md", out)
+        self.assertIn("✗ docs/new.md:3: enlace roto", out)
 
     def test_gates_ignore_legacy_findings_and_refuse_an_unknown_base(self):
         # verifies: SPEC-0005/AC-03
