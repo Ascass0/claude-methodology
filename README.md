@@ -90,6 +90,8 @@ El soporte completo de GitLab (`glab`, estado de los pipelines, releases) queda 
 
 En un repo ya adoptado, la skill `mth-reconfigure` vuelve a pasar la entrevista de la adopción: el formulario completo, los bloques que se elijan (`flujo`, `documentacion`, `calidad`, `agente`) o solo el cambio que se describa ([SPEC-0011](specs/features/SPEC-0011-reestructuracion-guiada-de-la-metodologia.md), [ADR-0007](specs/adr/process/ADR-0007-reestructuracion-reutilizando-la-entrevista-de-adopcion.md)).
 
+Cuando el plugin se actualiza, la skill `mth-update` (que solo lanza la persona) pone el repo al día: `mth update --plan` lista las brechas (configuración, agentes del catálogo, bloque de CLAUDE.md, hook, formato de specs y ADR), `mth update` aplica las deterministas en `chore/update-methodology` sin cambiar ninguna decisión ya tomada, y la skill conduce lo que exige criterio ([SPEC-0021](specs/features/SPEC-0021-actualizacion-del-repo-adoptado-al-plugin-nuevo.md), [ADR-0017](specs/adr/process/ADR-0017-actualizacion-de-un-repo-adoptado-por-brechas-deterministas.md)).
+
 1. `mth survey --reconfigure [--only <bloques o preguntas>]` ofrece las preguntas aplicables con su valor actual (solo lee).
 2. Opus pregunta con los textos del catálogo de `mth-init`, marcando la opción actual.
 3. `mth reconfigure --answers <json> [--only …]` valida las respuestas y las aplica **sobre la configuración actual**, así que lo que no se pregunta se conserva. Abre `chore/reconfigure-methodology` con la configuración y un ADR de reestructuración en un único commit, que cita el ADR de adopción y lista cada clave que cambia. Si nada cambia, no crea nada.

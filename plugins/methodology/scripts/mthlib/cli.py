@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 
 from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan,
-               review, session, setup, survey)
+               review, session, setup, survey, update, updating)
 from .config import load
 from .errors import MthError
 from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
@@ -365,6 +365,9 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="salida en JSON para la skill mth-init")
     s.add_argument("--reconfigure", action="store_true", help="inventario de un repo adoptado (skill mth-reconfigure)")
     s.add_argument("--only", help="preguntas o bloques separados por comas (con --reconfigure)")
+    s = sub.add_parser("update", help="aplica en una rama las brechas automáticas con el plugin instalado (skill mth-update)")
+    s.add_argument("--plan", action="store_true", help="lista las brechas sin escribir nada")
+    s.add_argument("--json", action="store_true", help="con --plan: salida JSON")
     s = sub.add_parser("reconfigure", help="aplica las respuestas de una reestructuración en una rama")
     s.add_argument("--answers", required=True, help="respuestas de la reestructuración (JSON, skill mth-reconfigure)")
     s.add_argument("--only", help="las mismas preguntas o bloques que en mth survey --reconfigure")
@@ -476,6 +479,14 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.only and not args.reconfigure:
             raise MthError("--only solo se usa con --reconfigure.")
         return _cmd_survey(args)
+    if c == "update":
+        if args.json and not args.plan:
+            raise MthError("--json solo se usa con --plan.")
+        if args.plan:
+            update.plan(Path.cwd(), args.json)
+        else:
+            updating.apply(Path.cwd())
+        return 0
     if c == "reconfigure":
         setup.reconfigure(Path.cwd(), args.answers, args.only)
         return 0

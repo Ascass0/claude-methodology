@@ -39,7 +39,7 @@ Apartados de `PRINCIPLES.md`: §1, §5 «Referencias a decisiones», §7 «Estil
 ## Fronteras estructurales del repositorio
 
 <!-- mth:local:begin -->
-Fronteras estructurales de este repo (cambiarlas exige ADR previo): el esquema de `.claude/methodology.toml` (`mthlib/config.py`: claves, defaults, validación), el formato de las plantillas del catálogo (`plugins/methodology/catalog/`: `meta.toml`, `agent.md.tmpl`, `guard.toml`), el contrato de la CLI `mth` (subcomandos y códigos de salida), los hooks y el guard de agentes, y el formato de specs, ADR y fragmentos de changelog. Los ADR viven en `specs/adr/process/` (única categoría hasta ahora). El repo desarrolla el plugin y se aplica su propia metodología: un cambio en el plugin que altere lo que exige a otros repos lo exige también aquí.
+Fronteras estructurales de este repo (cambiarlas exige ADR previo): el esquema de `.claude/methodology.toml` (`mthlib/config.py`: claves, defaults, validación), el formato de las plantillas del catálogo (`plugins/methodology/catalog/`: `meta.toml`, `agent.md.tmpl`, `guard.toml`), el contrato de la CLI `mth` (subcomandos y códigos de salida), los hooks y el guard de agentes, y el formato de specs, ADR y fragmentos de changelog. Los ADR viven en `specs/adr/process/` (única categoría hasta ahora). El repo desarrolla el plugin y se aplica su propia metodología: un cambio en el plugin que altere lo que exige a otros repos lo exige también aquí. **Brechas de actualización (ADR-0017):** toda spec o cambio que añada una exigencia a los repos adoptados (clave de configuración, agente del catálogo, formato, bloque de CLAUDE.md, hook) DEBE registrar su brecha en `REGISTRY` de `mthlib/update.py` en la misma rama; si no lo hace, es bloqueante.
 <!-- mth:local:end -->
 
 ## Severidad
