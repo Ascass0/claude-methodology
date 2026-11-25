@@ -140,6 +140,12 @@ class AddTests(AgentsTestCase):
         self.assertEqual(self.add("revisor-seguridad", replace=True), 0)
         self.assertIsNotNone(catalog.installed(own.read_text(encoding="utf-8"), None))
 
+    def test_a_catalog_agent_already_installed_is_not_a_foreign_one(self):
+        # verifies: SPEC-0012/AC-07
+        self.assertEqual(self.add("revisor-seguridad"), 0)
+        self.assertEqual(self.add("revisor-seguridad"), 0)
+        self.assertNotIn("--replace", self.output)
+
     def test_installs_files_shim_and_one_settings_entry_keeping_other_keys(self):
         # verifies: SPEC-0012/AC-17
         self.write(".claude/settings.json", json.dumps({"enabledPlugins": {"x@y": True},
@@ -371,6 +377,16 @@ class DoctorTests(AgentsTestCase):
         self.assertIn("revisor-diseno: editado a mano", found)
         self.assertIn("revisor-seguridad: su sección local obligatoria está vacía", found)
         self.assertIn("Falta la entrada PreToolUse", found)
+
+    def test_warns_about_an_edited_guard_and_only_about_it(self):
+        # verifies: SPEC-0012/AC-13
+        self.add("revisor-fallos", "revisor-diseno")
+        self.write(".claude/settings.json", "{}")
+        guard = self.root / ".claude/mth/agents/revisor-fallos.guard.toml"
+        guard.write_text(guard.read_text(encoding="utf-8") + "\n# x\n", encoding="utf-8")
+        found = "\n".join(self.findings())
+        self.assertIn("revisor-fallos: editado a mano", found)
+        self.assertNotIn("revisor-diseno:", found)
 
     def test_warns_about_missing_guard_shim_launcher_and_disabled_hooks(self):
         # unit: agents.doctor_findings

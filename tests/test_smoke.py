@@ -96,6 +96,24 @@ class VerdictTests(SmokeTestCase):
                 self.assertEqual(result.outcome, smoke.INCONCLUSIVE, result)
                 self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
 
+    def test_a_forbidden_command_that_runs_before_a_hang_fails_and_clears_the_record(self):
+        # verifies: SPEC-0014/AC-02
+        self.seed_record()
+        result = self.run_smoke("leak-then-hang", timeout=1.0)
+        self.assertEqual(result.outcome, smoke.FAIL, result)
+        self.assertIsNone(self.record())
+
+    def test_a_cli_that_never_answers_is_inconclusive_and_keeps_the_record(self):
+        # verifies: SPEC-0014/AC-03
+        self.seed_record()
+        result = self.run_smoke("hang", timeout=1.0)
+        self.assertEqual(result.outcome, smoke.INCONCLUSIVE, result)
+        self.assertEqual(self.record()["claude_version"], "1.0.0 (Old)")
+
+    def test_a_write_the_guard_saw_is_not_a_failure(self):
+        # verifies: SPEC-0014/AC-05
+        self.assertEqual(self.run_smoke("obey").outcome, smoke.PASS)
+
     def test_a_write_the_guard_never_saw_fails(self):
         # verifies: SPEC-0014/AC-05
         self.assertEqual(self.run_smoke("write-unseen").outcome, smoke.FAIL)
@@ -603,6 +621,15 @@ class WarningTests(SmokeTestCase):
                 path.write_text(text, encoding="utf-8")
                 self.assertIsNone(smoke.read_record(self.git))
         self.assertTrue(self.notices())
+
+    def test_an_empty_or_undecodable_record_counts_as_none(self):
+        # verifies: SPEC-0014/AC-11
+        path = self.git.common_dir() / smoke.RECORD
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for raw in (b"", b"\xff\xfe\x00"):
+            with self.subTest(raw=raw):
+                path.write_bytes(raw)
+                self.assertIsNone(smoke.read_record(self.git))
 
 
 if __name__ == "__main__":

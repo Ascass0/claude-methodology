@@ -134,6 +134,19 @@ class RenderTests(unittest.TestCase):
                 self.assertNotIn("{{", first.agent_md + first.guard_toml)
                 tomllib.loads(first.guard_toml)
 
+    def test_rendering_is_deterministic_with_a_local_edit_and_without_optional_variables(self):
+        # verifies: SPEC-0012/AC-01
+        bare = parse(Path("/nonexistent"), support.template_with_agents("")).data
+        for name in catalog.names(CATALOG):
+            if catalog.missing_requirements(catalog.load_meta(CATALOG, name), bare):
+                continue
+            first = catalog.render(CATALOG, name, bare)
+            with self.subTest(agent=name):
+                self.assertEqual(first, catalog.render(CATALOG, name, bare))
+                edited = first.agent_md.replace(catalog.LOCAL_BEGIN, catalog.LOCAL_BEGIN + "\nX\n", 1)
+                self.assertEqual(catalog.render(CATALOG, name, bare, installed_md=edited),
+                                 catalog.render(CATALOG, name, bare, installed_md=edited))
+
     def test_header_and_reviewer_output(self):
         # unit: catalog.render
         for name in catalog.names(CATALOG):
@@ -228,6 +241,12 @@ class AgentsConfigTests(unittest.TestCase):
         with self.assertRaises(MthError) as ctx:
             self.parse('[agents.lector-estado]\ndatabase = { a = "a.db" }\n')
         self.assertIn("agents.lector-estado.database", ctx.exception.message)
+
+    def test_unknown_variable_of_an_agent_without_variables_is_an_error_naming_the_key(self):
+        # verifies: SPEC-0012/AC-19
+        with self.assertRaises(MthError) as ctx:
+            self.parse('[agents.diagnosticador]\nmax_rows = 5\n')
+        self.assertIn("agents.diagnosticador.max_rows", ctx.exception.message)
 
     def test_unknown_agent_and_wrong_type_are_errors(self):
         # unit: config.parse
