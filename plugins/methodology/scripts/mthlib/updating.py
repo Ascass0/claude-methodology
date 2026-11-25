@@ -11,9 +11,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import __version__, adoption, agents, commits, config, lang, setup, update
+from . import __version__, adoption, agent_guard, agents, commits, config, lang, setup, update
 from .config import CONFIG_PATH, load, parse
 from .errors import MthError
+from .files import atomic_write
 from .git import Git
 from .ids import IdRegistry
 from .log import say, warn
@@ -126,12 +127,13 @@ def _begin(git: Git) -> bool:
 
 def _unpushed(git: Git, development: str) -> bool:
     base = git.remote_ref(BRANCH) if git.remote_has(BRANCH) else git.remote_ref(development)
-    return int(git.out("rev-list", "--count", f"{base}..HEAD").strip() or 0) > 0
+    return git.ahead_count(base) > 0
 
 
-def _unfinished(git: Git, development: str) -> bool:
-    """Work a previous run left on the branch: uncommitted changes or a commit that was never pushed."""
-    return not git.is_clean() or _unpushed(git, development)
+def _unfinished(repo: update.Repo) -> bool:
+    """Work a previous run left on the branch: uncommitted changes in what it owns or a commit never pushed."""
+    git = repo.git
+    return bool(git.out("status", "--porcelain", "--", *_owned_paths(repo))) or _unpushed(git, repo.cfg.development)
 
 
 def _existing_adr(git: Git, folder: Path, development: str) -> Path | None:
@@ -181,10 +183,11 @@ def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update
 
 def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> None:
     """Run every automatic gap (SPEC-0021): config keys, outdated agents, the CLAUDE.md block and the hook."""
-    git, root = repo.git, repo.cfg.root
+    git = repo.git
+    root = git.root
     ids = {g.id for g in automatic}
     outdated = update.outdated_agents(repo) if "agentes-desactualizados" in ids else []
-    (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
+    atomic_write(root / CONFIG_PATH, config_text)
     cfg = load(root)
     if outdated:
         agents.Manager(cfg).sync(outdated, False)
@@ -194,19 +197,24 @@ def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> 
         setup.install_hook(git, cfg["hooks"]["commit_msg"])
 
 
-def _owned_paths(repo: update.Repo, adr: Path) -> list[str]:
+def _agent_files(name: str) -> list[Path]:
+    return [agent_guard.AGENTS_DIR / f"{name}.md", agent_guard.GUARDS_DIR / f"{name}.guard.toml"]
+
+
+def _owned_paths(repo: update.Repo) -> list[str]:
     """Only what ``mth update`` writes: a resumed run must not commit anything else in the tree."""
     root, cfg = repo.git.root, repo.cfg
-    candidates = [CONFIG_PATH.as_posix(), cfg["paths"]["claude_md"], ".claude/agents", ".claude/mth", ".claude/hooks",
-                  ".claude/settings.json", ".gitignore", adr.relative_to(root).as_posix()]
-    return [c for c in candidates if (root / c).exists()]
+    candidates = [CONFIG_PATH, Path(cfg["paths"]["claude_md"]), agents.SHIM, agents.SETTINGS, agents.GITIGNORE,
+                  Path(cfg["paths"]["adr"]) / setup.ADR_SUBDIR,
+                  *(f for name in agents.catalog_names(root) for f in _agent_files(name))]
+    return [p.as_posix() for p in candidates if (root / p).exists()]
 
 
 def _finish(repo: update.Repo, adr: Path) -> None:
     git = repo.git
-    git.out("add", "--", *_owned_paths(repo, adr))
+    git.out("add", "--", *_owned_paths(repo))
     for name in update.edited_agents(repo):  # a hand-edited agent is the person's decision, never committed here
-        git.out("reset", "-q", "--", f".claude/agents/{name}.md", f".claude/mth/agents/{name}.guard.toml")
+        git.out("reset", "-q", "--", *(f.as_posix() for f in _agent_files(name)))
     if not git.ok("diff", "--cached", "--quiet"):  # staged changes; otherwise a previous run committed them
         git.commit_message(commits.build("chore", "methodology", "update claude-methodology",
                                          "Bring the repository up to date with the installed plugin: apply the "
@@ -239,16 +247,16 @@ def apply(start: Path) -> None:
     gaps = update.diagnose(repo)
     automatic = [g for g in gaps if g.clase == update.AUTOMATIC]
     pending = [g for g in gaps if g.clase != update.AUTOMATIC]
-    if not automatic and not (resuming and _unfinished(git, cfg.development)):
+    if not automatic and not (resuming and _unfinished(repo)):
         raise MthError("Nada que aplicar: no hay brechas automáticas.", hint="mth update --plan muestra lo pendiente.")
-    text = (cfg.root / CONFIG_PATH).read_text(encoding="utf-8")
+    text = (git.root / CONFIG_PATH).read_text(encoding="utf-8")
     if any(g.id == "config" for g in automatic):
         text = with_keys(text, tomllib.loads(update.TEMPLATE.read_text(encoding="utf-8")), update.missing_keys(repo))
-        parse(cfg.root, text)  # validate before any mutation
+        parse(git.root, text)  # validate before any mutation
     if not resuming:
         git.checkout_synced(cfg.development)
         git.out("checkout", "-b", BRANCH)
     adr = _record(repo, automatic, pending)
     _apply(repo, automatic, text)
     _finish(repo, adr)
-    _report(adr.relative_to(cfg.root), automatic, pending)
+    _report(adr.relative_to(git.root), automatic, pending)

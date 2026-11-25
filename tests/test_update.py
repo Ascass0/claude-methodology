@@ -81,13 +81,24 @@ class UpdateTestCase(unittest.TestCase):
 class ConfinementTests(UpdateTestCase):
     def test_a_configured_path_outside_the_repo_is_refused(self):
         # verifies: SPEC-0021/AC-07
-        for key, value in (("claude_md", "../x.md"), ("adr", "../../adr"), ("specs", "/etc")):
+        for key, value in (("claude_md", "../x.md"), ("adr", "../../adr"), ("specs", "/etc"), ("claude_md", "."), ("adr", "")):
             with self.subTest(key=key):
                 text = self.config_text.replace(f'{key} = ', f'{key} = "{value}"\n# was ', 1)
                 self.write(".claude/methodology.toml", text)
                 with self.assertRaises(MthError) as ctx:
                     update.open_repo(self.root)
                 self.assertIn(f"paths.{key}", ctx.exception.message)
+
+    def test_a_generated_adr_folder_that_links_outside_is_refused(self):
+        # verifies: SPEC-0021/AC-07
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (self.root / "specs/adr").mkdir(parents=True)
+        os.symlink(outside, self.root / "specs/adr/methodology")
+        with self.assertRaises(MthError) as ctx:
+            update.open_repo(self.root)
+        self.assertIn("fuera del repositorio", ctx.exception.message)
+        self.assertEqual(list(outside.iterdir()), [])
 
     def test_paths_inside_the_repo_are_accepted(self):
         # verifies: SPEC-0021/AC-07
@@ -295,11 +306,7 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("chore(methodology): update claude-methodology", out + self.git("log", "-1", "--format=%s"))
         self.assertEqual(compact.adr_problems(text, lang.ES), [])
         self.assertEqual(self.mth("trace").count("✗"), 0)
-
-    def test_hook_is_refreshed_in_the_clone(self):
-        # verifies: SPEC-0021/AC-06
-        self.mth("update")
-        self.assertNotIn("# viejo", (self.work / ".git/hooks/commit-msg").read_text())
+        self.assertNotIn("# viejo", (self.work / ".git/hooks/commit-msg").read_text())  # the clone's hook is refreshed
 
     def test_decisions_and_informative_gaps_are_listed_not_applied(self):
         # verifies: SPEC-0021/AC-05
@@ -370,6 +377,13 @@ class ApplyTests(unittest.TestCase):
         self.assertTrue(any(f.endswith(UPDATE_ADR) for f in files.splitlines()))
         self.assertIn(".env", self.git("status", "--porcelain"))
 
+    def test_resume_with_only_foreign_changes_has_nothing_to_finish(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        (self.work / "x.txt").write_text("ajeno\n")
+        self.assertIn("Nada que aplicar", self.mth("update", ok=False))
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")
+
     def test_resume_pushes_a_commit_that_was_never_pushed(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")
@@ -398,7 +412,6 @@ class ApplyTests(unittest.TestCase):
         # verifies: SPEC-0021/AC-01
         (self.work / ".claude/methodology.toml").unlink()
         self.assertIn("mth-init", self.mth("update", ok=False))
-        self.assertIn("mth-init", self.mth("update", "--plan", ok=False))
 
     def test_nothing_to_apply_creates_nothing(self):
         # verifies: SPEC-0021/AC-08

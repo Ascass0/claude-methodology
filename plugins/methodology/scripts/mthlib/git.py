@@ -65,6 +65,10 @@ class Git:
     def is_clean(self) -> bool:
         return self.out("status", "--porcelain") == ""
 
+    def ahead_count(self, base: str) -> int:
+        """Commits on HEAD that ``base`` does not have."""
+        return int(self.out("rev-list", "--count", f"{base}..HEAD").strip())
+
     def commit_message(self, message: str) -> None:
         """Commit the staged changes with ``message`` (written to a file so any text is safe)."""
         fh = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")

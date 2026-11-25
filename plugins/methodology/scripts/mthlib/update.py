@@ -183,9 +183,14 @@ def _confine(cfg: Config) -> None:
     root = cfg.root.resolve()
     for key in PATH_KEYS:
         rel = cfg["paths"][key]
-        if Path(rel).is_absolute() or not (root / rel).resolve().is_relative_to(root):
-            raise MthError(f"paths.{key} = '{rel}' sale del repositorio.",
+        inside = (root / rel).resolve()
+        if Path(rel).is_absolute() or inside == root or not inside.is_relative_to(root):
+            raise MthError(f"paths.{key} = '{rel}' sale del repositorio o es la raíz.",
                            hint="Usa una ruta relativa que quede dentro del repo.")
+    generated = (root / cfg["paths"]["adr"] / setup.ADR_SUBDIR).resolve()
+    if not generated.is_relative_to(root):
+        raise MthError(f"{cfg['paths']['adr']}/{setup.ADR_SUBDIR} apunta fuera del repositorio.",
+                       hint="Sustituye el enlace por una carpeta dentro del repo.")
 
 
 def open_repo(start: Path) -> Repo:

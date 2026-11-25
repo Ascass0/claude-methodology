@@ -17,7 +17,7 @@
 
 1. La actualización DEBE ser una operación propia (`mth update` y la skill `mth-update`), distinta de `mth init` (repo sin adoptar) y de `mth reconfigure` (cambiar decisiones).
 2. El diagnóstico DEBE basarse en **brechas** comprobables, no en una versión registrada: cada una con `id`, clase (`automatica`, `decision`, `informativa`), evidencia y acción.
-3. `mth update` DEBE aplicar solo las brechas `automatica`, en `chore/update-methodology` con un único commit y un ADR de actualización; NO DEBE modificar ningún valor ya decidido.
+3. `mth update` DEBE aplicar solo las brechas `automatica`, en `chore/update-methodology` con un único commit y un ADR de actualización; NO DEBE modificar ningún valor ya decidido. Reanudar la rama puede añadir otro commit con lo que faltaba y amplía el mismo ADR.
 4. Lo que exige criterio (agentes opcionales, agentes editados, conversión de documentos) DEBE conducirlo la skill con aprobación de la persona, en la misma rama.
 5. La skill DEBE usarse solo cuando la persona la invoca: el hook de sesión NO DEBE proponerla.
 6. Toda spec que añada una exigencia a los repos adoptados DEBE registrar su brecha en la misma rama; `revisor-adr` lo comprueba.
