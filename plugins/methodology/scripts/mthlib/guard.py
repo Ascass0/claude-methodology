@@ -27,7 +27,7 @@ _WRAPPERS = {"sudo", "doas", "env", "command", "nohup", "time", "exec", "nice", 
              "stdbuf", "flock", "taskset", "chrt", "unbuffer", "watch", "parallel"}  # run another command
 _FORGES = {"gh", "glab"}
 _JUDGED = {"git"} | _FORGES  # the programs whose subcommands the guard inspects
-_SHELL_WORDS = {"then", "do", "else", "elif", "if", "while", "until", "!"}  # keywords that precede a command
+_SHELL_WORDS = {"then", "do", "else", "elif", "if", "while", "until", "!", "$"}  # keywords that precede a command
 _GROUPING = re.compile(r"[(){}`]")  # (cmd), { cmd; }, `cmd`, $(cmd) run cmd like a plain command
 _DATA_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")  # gh/glab api: a request body (POST unless -X says), also `-fk=v`
 _GRAPHQL_MERGES = ("mergePullRequest", "enablePullRequestAutoMerge", "mergeBranch")  # GraphQL mutations that merge
@@ -84,12 +84,23 @@ def _tokens(segment: str) -> list[str]:
         return segment.split()
 
 
+def _segments(command: str) -> list[str]:
+    """The simple commands of ``command``; a backslash-newline continues a command instead of ending it."""
+    return _SPLIT.split(command.replace("\\\n", " "))
+
+
+def _clean_tokens(segment: str) -> list[str]:
+    """Tokens of ``segment`` past grouping symbols, shell keywords and ``VAR=value`` assignments."""
+    tok = _tokens(_GROUPING.sub(" ", segment.replace("${MTH}", "$MTH")).strip())  # keep ${MTH} in one piece
+    while tok and (tok[0] in _SHELL_WORDS or ("=" in tok[0] and not tok[0].startswith("-"))):
+        tok = tok[1:]
+    return tok
+
+
 def _invocations(command: str):
     """(program, subcommand) of each segment, with ``mth`` in any of its spellings."""
-    for segment in _SPLIT.split(command):
-        tok = _tokens(segment.strip())
-        while tok and "=" in tok[0] and not tok[0].startswith("-"):
-            tok = tok[1:]
+    for segment in _segments(command):
+        tok = _clean_tokens(segment)
         for i, token in enumerate(tok):
             if token in _MTH_SPELLINGS or token.rsplit("/", 1)[-1] in _MTH_NAMES:
                 rest = tok[i + 1:]
@@ -99,8 +110,8 @@ def _invocations(command: str):
                     yield "mth", rest[0]
                 break
         else:
-            if tok and tok[0].rsplit("/", 1)[-1] == "git":
-                rest = tok[1:]
+            prog, rest = _command_tokens(segment)
+            if prog == "git":
                 while rest and rest[0].startswith("-"):
                     rest = rest[2:] if rest[0] in ("-C", "-c") else rest[1:]
                 if rest:
@@ -167,9 +178,7 @@ def _command_tokens(segment: str) -> tuple[str, list[str]]:
     A prefix (``sudo -u root``, ``nice -n 5``, ``env -i``) is skipped up to the first program the guard
     judges, so its own options and their values cannot hide the command that follows.
     """
-    tok = _tokens(_GROUPING.sub(" ", segment).strip())
-    while tok and (tok[0] in _SHELL_WORDS or ("=" in tok[0] and not tok[0].startswith("-"))):
-        tok = tok[1:]  # shell keywords and leading VAR=value assignments
+    tok = _clean_tokens(segment)
     if tok and tok[0].rsplit("/", 1)[-1] in _WRAPPERS:
         tok = next((tok[n:] for n, t in enumerate(tok[1:], 1) if t.rsplit("/", 1)[-1] in _JUDGED), [])
     return (tok[0].rsplit("/", 1)[-1] if tok else ""), tok[1:]
@@ -177,7 +186,7 @@ def _command_tokens(segment: str) -> tuple[str, list[str]]:
 
 def violation(command: str, protected: set[str], current: str | None) -> str | None:
     """Reason why ``command`` must be blocked, or None."""
-    for segment in _SPLIT.split(command.replace("\\\n", " ")):  # a backslash-newline continues the command
+    for segment in _segments(command):
         prog, rest = _command_tokens(segment)
         if prog == "git":  # skip global options: git -C dir -c k=v --no-pager push ...
             while rest and rest[0].startswith("-"):
@@ -234,7 +243,7 @@ def main(stdin: str) -> int:
         reason = violation(command, ctx.protected, ctx.current)
         ask = None if reason else confirmation(command, ctx.autonomy)
     except Exception as exc:  # noqa: BLE001 — boundary of a hook: fail-open, see module doc.
-        print(f"[claude-methodology] guard no disponible: {exc}", file=sys.stderr)
+        print(f"[claude-methodology] guard no disponible: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 0
     if reason:
         print(f"[claude-methodology] Bloqueado: {reason}.", file=sys.stderr)

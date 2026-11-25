@@ -55,6 +55,14 @@ class ConfirmationTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIsNone(guard.confirmation(command, "supervised"))
 
+    def test_confirmation_sees_through_prefixes_and_shell_grouping(self):
+        # verifies: SPEC-0007/AC-03
+        for command in ("sudo git push origin x", "(git commit -m x)", "env GIT_TRACE=1 git push", "sudo mth integrate",
+                        "(mth release)", "git status && \\\ngit push"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(guard.confirmation(command, "supervised"))
+        self.assertIsNone(guard.confirmation("sudo ls", "supervised"))
+
     def test_invalid_levels_are_rejected_exactly(self):
         # verifies: SPEC-0007/AC-06
         for level in ("FULL", "", "until_pr"):
