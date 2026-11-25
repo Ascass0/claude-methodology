@@ -43,3 +43,25 @@ expect = "allow"
 [[guard]]
 command = "git log | xargs rm"
 expect = "deny"
+
+[[scope]]
+name = "excepcion-de-tamano-sin-motivo-que-se-sostenga"
+diff = '''
++[[limits.exceptions]]
++path = "src/service.py"
++max_lines = 2500
++reason = "es más cómodo tenerlo todo junto"
+'''
+context = "src/service.py mezcla acceso a base de datos, reglas de negocio y formato de respuestas."
+must_find = { rule = "§5" }
+
+[[scope]]
+name = "excepcion-de-tamano-que-se-sostiene"
+diff = '''
++[[limits.exceptions]]
++path = "src/parser/grammar.py"
++max_lines = 1400
++reason = "tabla de transiciones del parser, se lee entera y cambia como un único bloque"
+'''
+expect_blockers = 0
+must_not_find = ["§5 «Funciones pequeñas»"]

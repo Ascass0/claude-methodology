@@ -18,6 +18,8 @@ description: Comprueba la trazabilidad (IDs de specs y ADR definidos y únicos, 
 | `AC-NN no sigue ningún patrón EARS` | Reescribe el criterio en una línea: `CUANDO …, … DEBE …`, `SI …, ENTONCES … DEBE …`, `MIENTRAS …, … DEBE …` o `… DEBE …` (en `language.docs = en`: `WHEN`, `IF … THEN`, `WHILE`, `SHALL`/`MUST`) |
 | `FM-NN definido dos veces` / `fila de modos de fallo sin ID` | Cada fila de la tabla de modos de fallo lleva un `FM-NN` único |
 | `referencia a FM-NN, que la spec no define` | Corrige el ID o añade el modo de fallo a su spec |
+| `la rama hace que supera el límite` / `crece estando ya por encima` | Divide el fichero por responsabilidades, o declara `[[limits.exceptions]]` con `max_lines` y `reason` |
+| `superan el techo de su excepción` / `excepción caducada` | Amplía la excepción con su motivo, divide el fichero, o borra la excepción que ya no hace falta |
 | `falta el campo «X» del ADR` | Añade el campo: `Contexto`, `Decisión`, `Rechazado`, `Consecuencias`, `Impone` |
 
 ## Convenciones que comprueba
@@ -31,6 +33,10 @@ Si el repo tiene un esquema de IDs propio, se declara en `[ids]`; contenido que 
 ## Formato compacto
 
 Los documentos con la línea `- Formato: compacto` (`- Format: compact`) se validan con EARS, `FM-NN` y los campos del ADR; los demás, no. Las referencias `SPEC-NNNN/FM-NN` se comprueban siempre. Detalle en [SPEC-0018](../../../../specs/features/SPEC-0018-formato-compacto-de-specs-y-adr.md).
+
+## Límite de líneas por fichero
+
+`limits.max_file_lines` (1000 por defecto): los errores salen en la rama que hace crecer un fichero por encima del límite; los ficheros largos heredados que no se hacen crecer solo avisan (`mth trace --limits` los lista). Detalle en [SPEC-0020](../../../../specs/features/SPEC-0020-limite-de-lineas-por-fichero.md).
 
 ## Contenido legado
 

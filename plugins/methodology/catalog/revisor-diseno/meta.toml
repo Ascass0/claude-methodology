@@ -1,5 +1,5 @@
 name = "revisor-diseno"
-version = "1.0.0"
+version = "1.1.0"
 kind = "revisor"
 profiles = ["base"]
 summary = "SOLID, antipatrones STUPID, dependencias y acoplamiento, testabilidad y las reglas de código de §5."

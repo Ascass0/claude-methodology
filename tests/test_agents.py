@@ -306,8 +306,9 @@ class SyncTests(AgentsTestCase):
         self.assertEqual(self.mth("agents", "diff", "revisor-diseno"), 0)
         self.assertEqual(self.output, "")
         self.assertEqual(self.mth("agents", "list"), 0)
-        self.assertIn("revisor-diseno v1.0.0", self.output)
-        self.assertIn("instalado (v1.0.0)", self.output)
+        version = catalog.load_meta(CATALOG, "revisor-diseno")["version"]
+        self.assertIn(f"revisor-diseno v{version}", self.output)
+        self.assertIn(f"instalado (v{version})", self.output)
         self.assertIn("modelo sugerido: opus", self.output)
 
     def test_sync_rejects_agents_not_from_the_catalog(self):

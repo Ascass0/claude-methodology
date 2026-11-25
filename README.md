@@ -154,6 +154,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Cada AC tiene test | `mth trace`: una spec `implementada` sin `verifies: SPEC/AC` falla |
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
+| Ningún fichero supera `limits.max_file_lines` sin excepción con techo y motivo; solo hacerlo crecer bloquea | `mth trace` (`[limits]`). Ver [ADR-0016](specs/adr/process/ADR-0016-limite-de-lineas-por-fichero.md) |
 | Cada test lleva etiqueta (`verifies:`, `regression:` o `unit:`); aviso de los AC con un único test | `mth trace` (`trace.test_patterns`; en ficheros legados, aviso). Ver [ADR-0015](specs/adr/process/ADR-0015-triangulacion-y-motivo-declarado-de-cada-test.md) |
 | Specs y ADR con `- Formato: compacto`: criterios en EARS, `FM-NN` únicos y referenciados, campos fijos del ADR | `mth trace` (los documentos sin la marca no se validan). Ver [ADR-0014](specs/adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) |
 | Conventional Commits + cuerpo + `Refs:` | `mth commit`, hook `commit-msg`, revalidación en `mth integrate` |
