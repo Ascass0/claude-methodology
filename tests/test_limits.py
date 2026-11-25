@@ -39,10 +39,10 @@ class ConfigTests(unittest.TestCase):
         head = BASE + "[[limits.exceptions]]\n"
         cases = {
             "(path = 'src/g.py')' necesita 'max_lines'": head + 'path = "src/g.py"\nreason = "x"\n',
-            "necesita 'reason'": head + 'path = "src/g.py"\nmax_lines = 1400\n',
-            "necesita 'reason' ": head + 'path = "src/g.py"\nmax_lines = 1400\nreason = "  "\n',
-            "no supera 'limits.max_file_lines' = 1000": head + 'path = "src/g.py"\nmax_lines = 1000\nreason = "x"\n',
-            "claves desconocidas: motivo": head + 'path = "src/g.py"\nmax_lines = 1400\nreason = "x"\nmotivo = "y"\n',
+            "(path = 'src/g.py')' necesita 'reason'": head + 'path = "src/g.py"\nmax_lines = 1400\n',
+            "(path = 'src/g.py')' necesita 'reason' ": head + 'path = "src/g.py"\nmax_lines = 1400\nreason = "  "\n',
+            "(path = 'src/g.py')': max_lines = 1000 no supera 'limits.max_file_lines' = 1000": head + 'path = "src/g.py"\nmax_lines = 1000\nreason = "x"\n',
+            "(path = 'src/g.py')' tiene claves desconocidas: motivo": head + 'path = "src/g.py"\nmax_lines = 1400\nreason = "x"\nmotivo = "y"\n',
             "necesita 'path'": head + 'max_lines = 1400\nreason = "x"\n',
             "debe ser un entero de 1 o más": "[limits]\nmax_file_lines = 0\n",
         }
@@ -187,6 +187,15 @@ class BranchTests(BranchTestCase):
         out = self.trace(ok=False)
         self.assertIn("No se puede calcular el punto de partida", out)
         self.assertIn("git fetch", out)
+
+    def test_the_base_is_the_fork_point_not_the_tip_of_the_parent(self):
+        # verifies: SPEC-0020/AC-05
+        self.git("checkout", "-q", "development")
+        self.write("src/legacy.py", text(70))  # the parent grew after the branch forked
+        self.git("commit", "-qam", "grow on development")
+        self.git("checkout", "-q", "feat/demo")
+        self.write("src/legacy.py", text(65))  # +5 on the branch: below the parent's tip, above the fork point
+        self.assertIn("60 → 65", self.trace(ok=False))
 
     def test_a_blob_that_git_cannot_read_is_an_error_not_an_empty_file(self):
         # verifies: SPEC-0020/FM-02
