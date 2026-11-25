@@ -2,15 +2,15 @@
 
 - Estado: implementada
 - Fecha: 2026-11-24
+- Formato: compacto
 - ADRs: [ADR-0013](../adr/process/ADR-0013-decision-autonoma-de-version.md)
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0017/AC-NN`. -->
 
 ## Contexto
 
-`mth release` publica lo que haya en `changes/` con el mayor `bump` declarado, sin decir si merece la pena publicar ni si el nivel es coherente. [ADR-0013](../adr/process/ADR-0013-decision-autonoma-de-version.md) lo convierte en una decisión determinista y autónoma.
+- `mth release` publicaba lo que hubiera en `changes/` con el mayor `bump` declarado, sin decir si merece la pena ni si el nivel es coherente.
+- [ADR-0013](../adr/process/ADR-0013-decision-autonoma-de-version.md) lo convierte en una decisión determinista y autónoma.
 
 ## Objetivo
 
@@ -67,23 +67,23 @@ Las skills `mth-release` y `mth-develop` indican que, tras integrar en `developm
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Fragmento con `bump` por debajo del mínimo | `mth integrate`, `mth release` | Error que nombra el fragmento, el nivel y el mínimo; no se integra ni se publica |
-| Nivel `major` que cruzaría `1.0.0` | `mth release`, `--plan` | Error o `bloqueado`; solo `--allow-major` lo permite |
-| `--plan` fuera de `development` | `mth release --plan` | Error con la pista de cambiar a `development` |
-| Fragmento ilegible o con referencias inexistentes | `--plan`, `mth release` | El error de validación de siempre; no se decide nada |
-| Ramas remotas ilegibles | `--plan` | Se decide sin ellas y se avisa; la recomendación `esperar` no se emite |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Fragmento con `bump` por debajo del mínimo | `mth integrate` y `mth release`: error que nombra el fragmento, el nivel y el mínimo; no se integra ni se publica | AC-01, AC-02 |
+| FM-02 | Nivel `major` que cruzaría `1.0.0` | `mth release` y `--plan`: error o `bloqueado`; solo `--allow-major` lo permite | AC-05 |
+| FM-03 | `--plan` fuera de `development` | Error con la pista de cambiar a `development` | AC-03 |
+| FM-04 | Fragmento ilegible o con referencias inexistentes | El error de validación de siempre; no se decide nada | AC-03 |
+| FM-05 | Ramas remotas ilegibles | `--plan` decide sin ellas y avisa; no emite `esperar` | AC-04 |
 
 ## Criterios de aceptación
 
-- **AC-01**: El mínimo de un fragmento es `minor` para `feat`, `patch` para el resto, y sube a `minor` (antes de `1.0.0`) o `major` (desde `1.0.0`) con la sección de eliminaciones, en español y en inglés; un `bump` por debajo da un error que lo explica.
-- **AC-02**: `mth integrate` rechaza una rama de primer nivel con un fragmento por debajo de su mínimo, y `mth release` rechaza lo mismo antes de crear la rama de release.
-- **AC-03**: `mth release --plan` imprime los fragmentos con su nivel, el nivel resultante, la versión propuesta y la decisión con sus motivos, y no modifica nada (ni ramas, ni ficheros, ni etiquetas).
-- **AC-04**: La decisión es `no publicar` sin fragmentos, `bloqueado` con un fragmento por debajo del mínimo, `esperar` con ramas de trabajo abiertas que aportan fragmento y `publicar` en los demás casos.
-- **AC-05**: Un nivel `major` con la última versión menor que `1.0.0` es `bloqueado` y `mth release` lo rechaza; con `--allow-major` publica `1.0.0`.
-- **AC-06**: `mth release` publica la misma versión que `--plan` propone, y la decisión y sus motivos quedan en la traza.
-- **AC-07**: Las skills `mth-release` y `mth-develop` documentan la decisión autónoma (`mth release --plan` tras integrar, las cuatro decisiones y su respuesta).
+- **AC-01**: El mínimo de un fragmento DEBE ser `minor` para `feat` y `patch` para el resto, y subir a `minor` (antes de `1.0.0`) o `major` (desde `1.0.0`) con la sección de eliminaciones, en español y en inglés; SI el `bump` está por debajo, ENTONCES DEBE dar un error que lo explique.
+- **AC-02**: SI una rama de primer nivel tiene un fragmento por debajo de su mínimo, ENTONCES `mth integrate` DEBE rechazarla, y `mth release` DEBE rechazarlo antes de crear la rama de release.
+- **AC-03**: CUANDO se ejecuta `mth release --plan`, `mth` DEBE imprimir los fragmentos con su nivel, el nivel resultante, la versión propuesta y la decisión con sus motivos, sin modificar nada (ramas, ficheros ni etiquetas).
+- **AC-04**: La decisión DEBE ser `no publicar` sin fragmentos, `bloqueado` con un fragmento por debajo del mínimo, `esperar` con ramas de trabajo abiertas que aportan fragmento y `publicar` en los demás casos.
+- **AC-05**: SI el nivel resultante es `major` con la última versión menor que `1.0.0`, ENTONCES la decisión DEBE ser `bloqueado` y `mth release` DEBE rechazarlo; CON `--allow-major`, DEBE publicar `1.0.0`.
+- **AC-06**: `mth release` DEBE publicar la misma versión que `--plan` propone y dejar en la traza la decisión y sus motivos.
+- **AC-07**: Las skills `mth-release` y `mth-develop` DEBEN documentar la decisión autónoma (`mth release --plan` tras integrar, las cuatro decisiones y su respuesta).
 
 ## Notas
 
