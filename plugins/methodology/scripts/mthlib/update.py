@@ -65,30 +65,38 @@ def missing_config(template: dict[str, Any], raw: dict[str, Any], path: tuple[st
     return out
 
 
-def _config(repo: Repo) -> str | None:
+def missing_keys(repo: Repo) -> list[tuple[str, ...]]:
+    """Template keys the repository configuration lacks."""
     raw = tomllib.loads((repo.cfg.root / CONFIG_PATH).read_text(encoding="utf-8"))
-    template = tomllib.loads(TEMPLATE.read_text(encoding="utf-8"))
-    missing = missing_config(template, raw)
-    return ", ".join(".".join(p) for p in missing) or None
+    return missing_config(tomllib.loads(TEMPLATE.read_text(encoding="utf-8")), raw)
 
 
-def _agents_with(repo: Repo, status: Callable[[str], bool], names: list[str] | None = None) -> str | None:
+def _config(repo: Repo) -> str | None:
+    return ", ".join(".".join(p) for p in missing_keys(repo)) or None
+
+
+def _agents_with(repo: Repo, status: Callable[[str], bool], names: list[str] | None = None) -> list[str]:
     manager = agents.Manager(repo.cfg)
-    found = [n for n in (names if names is not None else agents.catalog_names(repo.cfg.root)) if status(manager.status(n))]
-    return ", ".join(found) or None
+    return [n for n in (names if names is not None else agents.catalog_names(repo.cfg.root))
+            if status(manager.status(n))]
 
 
-def _outdated(repo: Repo) -> str | None:
+def outdated_agents(repo: Repo) -> list[str]:
+    """Installed catalog agents that ``mth agents sync`` brings up to date."""
     return _agents_with(repo, lambda s: s.startswith("desactualizado"))
 
 
+def _outdated(repo: Repo) -> str | None:
+    return ", ".join(outdated_agents(repo)) or None
+
+
 def _edited(repo: Repo) -> str | None:
-    return _agents_with(repo, lambda s: s == "editado a mano")
+    return ", ".join(_agents_with(repo, lambda s: s == "editado a mano")) or None
 
 
 def _profile(repo: Repo) -> str | None:
     base = catalog.profiles(catalog.CATALOG_DIR)["base"]["agents"]
-    return _agents_with(repo, lambda s: s == "no instalado", base)
+    return ", ".join(_agents_with(repo, lambda s: s == "no instalado", base)) or None
 
 
 def _block(repo: Repo) -> str | None:

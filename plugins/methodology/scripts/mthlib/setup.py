@@ -27,7 +27,7 @@ BLOCK_END = "<!-- claude-methodology:end -->"
 ADOPT_BRANCH = "chore/adopt-methodology"
 RECONFIGURE_BRANCH = "chore/reconfigure-methodology"  # SPEC-0011
 RECONFIGURED_HEADER = "# claude-methodology · regenerado por `mth reconfigure` (ver el ADR de reestructuración).\n"
-_METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration)-(de|of)-claude-methodology\.md$")
+METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration|actualizacion|update)-(de|of)-claude-methodology\.md$")
 MARKETPLACE = "claude-methodology"
 PLUGIN = "methodology"
 
@@ -395,7 +395,7 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     git.out("checkout", "-b", RECONFIGURE_BRANCH)
     (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
     previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / "methodology").glob("*.md")
-                      if (m := _METHODOLOGY_ADR.search(p.name)))
+                      if (m := METHODOLOGY_ADR.search(p.name)))
     ident = IdRegistry(new_cfg, git.files()).next_id(new_cfg["trace"]["adr_kind"])
     folder = root / new_cfg["paths"]["adr"] / "methodology"
     folder.mkdir(parents=True, exist_ok=True)
