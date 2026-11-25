@@ -2,6 +2,7 @@
 # Referencia completa: README de claude-methodology.
 version = 1
 remote = "origin"
+forge = "github"
 
 [commands]
 # Comando de tests. Obligatorio: usa "" solo mientras el repo no tenga tests.
@@ -54,12 +55,31 @@ required_for = ["feat", "fix", "hotfix"]
 [review]
 # Revisores en orden de precedencia: los del repo (.claude/agents/<nombre>.md) y los
 # compartidos del plugin (verificador). Ponlo primero: comprueba que la rama cumple su spec.
-agents = ["verificador", "revisor-seguridad", "revisor-fallos"]
+agents = [
+  "verificador",
+  "revisor-seguridad",
+  "revisor-fallos",
+  "revisor-adr",
+  "revisor-diseno",
+  "revisor-parsimonia",
+]
 required_for = ["feat", "fix", "hotfix"]
 
 # Revisores que solo aplican si el diff toca sus rutas (globs; '!' excluye, gana el último).
 [review.paths]
 # revisor-contratos = ["subagents/**", "schemas/**"]
+revisor-adr = [
+  "specs/adr/**",
+  "**/pyproject.toml",
+  "**/requirements*.txt",
+  "**/package.json",
+  "**/go.mod",
+  "**/Cargo.toml",
+  "**/Dockerfile*",
+  "**/compose*.y*ml",
+  "**/*.schema.json",
+  ".github/workflows/**",
+]
 
 [roles]
 # Agentes para cada rol (vacío = Claude asume el rol). documentador y verificador vienen en el plugin.
@@ -97,3 +117,22 @@ pattern = '"version": "(\d+\.\d+\.\d+)"'
 [[release.version_files]]
 path = "plugins/methodology/scripts/mthlib/__init__.py"
 pattern = '__version__ = "(\d+\.\d+\.\d+)"'
+
+[limits]
+max_file_lines = 1000
+exclude = ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generated/**"]
+
+[models]
+ladder = ["haiku", "sonnet", "opus"]
+task = "sonnet"
+review = "sonnet"
+documenter = "sonnet"
+
+[hooks]
+commit_msg = "own"
+
+[autonomy]
+level = "full"
+
+[language]
+docs = "es"
