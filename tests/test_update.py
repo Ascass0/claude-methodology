@@ -5,11 +5,14 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -19,7 +22,7 @@ sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
 import catalog_support as support  # noqa: E402
 import test_mth  # noqa: E402
-from mthlib import agents, setup, update  # noqa: E402
+from mthlib import agents, compact, lang, setup, update, updating  # noqa: E402
 from mthlib.config import load  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 from mthlib.git import Git  # noqa: E402
@@ -197,6 +200,171 @@ class RegistryTests(unittest.TestCase):
         for kind in update.REGISTRY:
             self.assertIn(f"| `{kind.id}` |", spec)
             self.assertIn(f"`{kind.clase}`", spec)
+
+
+BRANCH = "chore/update-methodology"
+UPDATE_ADR = "-actualizacion-de-claude-methodology.md"
+
+
+class ApplyTests(unittest.TestCase):
+    setUp_e2e = test_mth.EndToEndTests.setUp
+    tearDown = test_mth.EndToEndTests.tearDown
+    git = test_mth.EndToEndTests.git
+    mth = test_mth.EndToEndTests.mth
+
+    def setUp(self):
+        self.setUp_e2e()
+        self.mth("init")
+        cfg = self.work / ".claude/methodology.toml"
+        text = cfg.read_text().replace('test = ""', 'test = "true"').replace('review = "sonnet"', 'review = "opus"')
+        text = re.sub(r"\n\[limits\].*?(?=\n\[|\Z)", "", text, flags=re.S)  # gaps: [limits] and [autonomy] are missing
+        text = re.sub(r"\n\[autonomy\].*?(?=\n\[|\Z)", "", text, flags=re.S)
+        # Installed catalog agents carry plugin-internal SPEC/ADR IDs that an adopter does not define.
+        text = text.replace("exclude = []", 'exclude = [".claude/agents/**", ".claude/hooks/**"]', 1)
+        cfg.write_text(text)
+        self.mth("agents", "add", "revisor-fallos")
+        agent = self.work / ".claude/agents/revisor-fallos.md"
+        agent.write_text(agent.read_text().replace("revisor-fallos@1.1.0", "revisor-fallos@1.0.0"))
+        claude = self.work / "CLAUDE.md"
+        claude.write_text(claude.read_text().replace("Metodología", "Otra cosa"))
+        test_mth._write(self.work / "specs/features/SPEC-0001-a.md", "# SPEC-0001 · A\n\n- Estado: aprobada\n")
+        self.git("add", "-A")
+        self.mth("commit", "--type", "chore", "--scope", "methodology", "--summary", "adopt with gaps",
+                 "--body", "Config without two tables, outdated agent and block.", "--refs", "n/a")
+        self.mth("integrate", "--title", "chore(methodology): adopt claude-methodology", "--summary", "Adopción.")
+        hook = self.work / ".git/hooks/commit-msg"
+        hook.write_text(hook.read_text() + "# viejo\n")
+        self.before = (self.work / ".claude/methodology.toml").read_text()
+
+    def on_branch(self, path: str) -> str:
+        return self.git("show", f"origin/{BRANCH}:{path}")
+
+    def untouched(self):
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", BRANCH), "")
+        self.assertEqual(self.git("branch", "--show-current"), "development")
+        self.assertEqual((self.work / ".claude/methodology.toml").read_text(), self.before)
+
+    def test_applies_the_automatic_gaps_in_one_commit(self):
+        # verifies: SPEC-0021/AC-03
+        # verifies: SPEC-0021/AC-04
+        # verifies: SPEC-0021/AC-06
+        # verifies: SPEC-0021/AC-08
+        out = self.mth("update")
+        self.assertEqual(self.git("branch", "--show-current"), BRANCH)
+        self.git("fetch", "-q")
+        self.assertEqual(self.git("rev-list", "--count", f"origin/development..origin/{BRANCH}"), "1")
+        data = tomllib.loads(self.on_branch(".claude/methodology.toml"))
+        self.assertEqual(data["autonomy"], {"level": "full"})
+        self.assertEqual(data["limits"]["max_file_lines"], 1000)
+        self.assertEqual(data["models"]["review"], "opus")  # a decided value is never touched
+        self.assertEqual(data["commands"]["test"], "true")
+        self.assertIn("claude-methodology · configuración del repositorio", self.on_branch(".claude/methodology.toml"))
+        self.assertIn("revisor-fallos@1.1.0", self.on_branch(".claude/agents/revisor-fallos.md"))
+        self.assertIn("Metodología", self.on_branch("CLAUDE.md"))
+        self.assertEqual(self.mth("update", "--plan", ok=True).count("[automatica]"), 0)
+        files = self.git("show", "--name-only", "--format=", f"origin/{BRANCH}").splitlines()
+        adr = next(f for f in files if f.endswith(UPDATE_ADR))
+        text = self.on_branch(adr)
+        self.assertIn("- Formato: compacto", text)
+        for needle in ("`config`", "`agentes-desactualizados`", "`bloque`", "`hook`", "claude-methodology 0.", "ADR-0"):
+            self.assertIn(needle, text)
+        ident = adr.rsplit("/", 1)[1].split("-actual")[0]
+        self.assertIn(f"Refs: {ident}", self.git("log", "-1", "--format=%B", f"origin/{BRANCH}"))
+        self.assertIn("chore(methodology): update claude-methodology", out + self.git("log", "-1", "--format=%s"))
+        self.assertEqual(compact.adr_problems(text, lang.ES), [])
+        self.assertEqual(self.mth("trace").count("✗"), 0)
+
+    def test_hook_is_refreshed_in_the_clone(self):
+        # verifies: SPEC-0021/AC-06
+        self.mth("update")
+        self.assertNotIn("# viejo", (self.work / ".git/hooks/commit-msg").read_text())
+
+    def test_decisions_and_informative_gaps_are_listed_not_applied(self):
+        # verifies: SPEC-0021/AC-05
+        # verifies: SPEC-0021/AC-10
+        out = self.mth("update")
+        self.assertIn("Pendiente (decision) formato", out)
+        self.assertIn("Pendiente (decision) agentes-perfil", out)
+        self.assertIn("SPEC-0001", self.git("show", f"HEAD:specs/features/SPEC-0001-a.md"))
+        self.assertNotIn("Formato: compacto", self.on_branch("specs/features/SPEC-0001-a.md"))
+        self.assertFalse((self.work / ".claude/agents/revisor-adr.md").exists())
+        adr = next(f for f in self.git("show", "--name-only", "--format=", "HEAD").splitlines() if f.endswith(UPDATE_ADR))
+        self.assertIn("`formato` (decision)", (self.work / adr).read_text())
+
+    def test_running_it_again_has_nothing_left_to_apply(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        out = self.mth("update", ok=False)
+        self.assertIn("Nada que aplicar", out)
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "1")
+        self.assertNotIn("[automatica]", self.mth("update", "--plan"))
+
+    def test_resumes_on_the_update_branch(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        hook = self.work / ".git/hooks/commit-msg"
+        hook.write_text(hook.read_text() + "# otra vez\n")
+        self.mth("update")  # on chore/update-methodology: applies only what is left, no second branch
+        self.assertEqual(self.git("branch", "--show-current"), BRANCH)
+        self.assertNotIn("# otra vez", hook.read_text())
+        self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "2")
+
+    def test_refuses_without_creating_anything(self):
+        # verifies: SPEC-0021/AC-07
+        (self.work / "x.txt").write_text("sin confirmar\n")
+        self.mth("update", ok=False)
+        (self.work / "x.txt").unlink()
+        self.untouched()
+        self.git("push", "-q", "origin", "development:" + BRANCH)  # the branch already exists
+        self.mth("update", ok=False)
+        self.git("push", "-q", "origin", f":{BRANCH}")
+        cfg = self.work / ".claude/methodology.toml"
+        cfg.write_text(cfg.read_text() + "\n[intruso]\nx = 1\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "--no-verify", "-m", "wip: bad config")
+        self.assertIn("intruso", self.mth("update", ok=False))
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", BRANCH), "")
+
+    def test_not_adopted_fails(self):
+        # verifies: SPEC-0021/AC-01
+        (self.work / ".claude/methodology.toml").unlink()
+        self.assertIn("mth-init", self.mth("update", ok=False))
+        self.assertIn("mth-init", self.mth("update", "--plan", ok=False))
+
+    def test_nothing_to_apply_creates_nothing(self):
+        # verifies: SPEC-0021/AC-08
+        self.mth("update")
+        self.mth("integrate", "--title", "chore(methodology): update claude-methodology", "--summary", "Actualización.")
+        self.git("checkout", "-q", "development")
+        self.git("pull", "-q")
+        self.assertIn("Nada que aplicar", self.mth("update", ok=False))
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", BRANCH), "")
+
+
+class AdrTextTests(unittest.TestCase):
+    gaps = [update.Gap("config", update.AUTOMATIC, "limits", "añadir")]
+
+    def test_adr_follows_the_compact_format_in_both_languages(self):
+        # verifies: SPEC-0021/AC-08
+        for vocab in (lang.ES, lang.EN):
+            text = updating.adr_text("ADR-0002", "ADR-0001", self.gaps, [update.Gap("formato", update.DECISION, "3 docs", "x")],
+                                     vocab, date(2026, 11, 25))
+            self.assertTrue(compact.is_compact(text, vocab), vocab.code)
+            self.assertEqual(compact.adr_problems(text, vocab), [], vocab.code)
+            self.assertIn("ADR-0001", text)
+
+    def test_missing_keys_are_added_without_touching_existing_lines(self):
+        # verifies: SPEC-0021/AC-03
+        template = tomllib.loads('forge = "github"\n[limits]\nmax_file_lines = 1000\nexclude = []\n[hooks]\ncommit_msg = "own"\n')
+        text = '# mi config\nversion = 1\n[limits]\nmax_file_lines = 500  # mío\n'
+        out = updating.with_keys(text, template, [("forge",), ("limits", "exclude"), ("hooks",)])
+        data = tomllib.loads(out)
+        self.assertEqual((data["forge"], data["limits"], data["hooks"]),
+                         ("github", {"max_file_lines": 500, "exclude": ["**/*.lock", "**/package-lock.json",
+                                                                         "**/migrations/**", "**/generated/**"]},
+                          {"commit_msg": "own"}))
+        self.assertIn("# mi config", out)
+        self.assertIn("max_file_lines = 500  # mío", out)
 
 
 if __name__ == "__main__":
