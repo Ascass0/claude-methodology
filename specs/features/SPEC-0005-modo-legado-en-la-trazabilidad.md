@@ -2,17 +2,15 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0003
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0005/AC-NN`. -->
 
 ## Contexto
 
-Un repo que adopta la metodología con contenido previo (specs sin criterios con test, enlaces que salen del repo, IDs con otro formato) tiene hoy dos salidas: corregirlo todo antes de integrar nada o excluirlo con `trace.exclude`. La primera bloquea la adopción. La segunda hace que ese contenido deje de comprobarse para siempre, también cuando alguien lo modifica.
-
-La adopción gradual ([SPEC-0004](SPEC-0004-adopcion-guiada.md), [ADR-0003](../adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md)) necesita un punto intermedio: lo anterior a la adopción queda visible como deuda sin bloquear, y lo que se toca después pasa a cumplir las reglas completas.
+- Un repo que adopta con contenido previo (specs sin criterios con test, enlaces fuera del repo, IDs con otro formato) tenía dos salidas: corregirlo todo antes de integrar (bloquea la adopción) o excluirlo con `trace.exclude` (deja de comprobarse para siempre, también al modificarlo).
+- La adopción gradual ([SPEC-0004](SPEC-0004-adopcion-guiada.md), [ADR-0003](../adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md)) necesita un punto intermedio: lo anterior queda visible como deuda sin bloquear y lo que se toca después cumple las reglas completas.
 
 ## Objetivo
 
@@ -43,19 +41,19 @@ Un fichero es legado si existe en el árbol de `trace.legacy_base` y su contenid
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| `trace.legacy_base` no es un hash completo | Carga de la configuración | Fail-fast: ningún comando se ejecuta |
-| El commit no existe en el repo (clon superficial, historia ajena) | `mth trace` y los gates | Error que nombra el commit; los hallazgos no se rebajan a avisos (denegar, no degradar) |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | `trace.legacy_base` no es un hash completo | Fail-fast al cargar la configuración: ningún comando se ejecuta | AC-02 |
+| FM-02 | El commit no existe en el repo (clon superficial, historia ajena) | `mth trace` y los gates: error que nombra el commit; los hallazgos no se rebajan a avisos (denegar, no degradar) | AC-06 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Sin `trace.legacy_base`, `mth trace` se comporta como hasta ahora: todo hallazgo es un error.
-- **AC-02**: La carga de la configuración rechaza un `trace.legacy_base` que no sea un hash de 40 caracteres hexadecimales.
-- **AC-03**: Un hallazgo en un fichero sin cambios desde `trace.legacy_base` es un aviso: `mth trace` termina con éxito y muestra cuántos hay.
-- **AC-04**: Un hallazgo en un fichero modificado después de `trace.legacy_base`, o creado después, es un error.
-- **AC-05**: `mth trace --legacy` lista cada hallazgo legado con su fichero y su línea.
-- **AC-06**: Si el commit de `trace.legacy_base` no existe, `mth trace` falla con un error que lo nombra.
+- **AC-01**: MIENTRAS no se declare `trace.legacy_base`, `mth trace` DEBE tratar todo hallazgo como un error.
+- **AC-02**: SI `trace.legacy_base` no es un hash de 40 caracteres hexadecimales, ENTONCES la carga de la configuración DEBE rechazarlo.
+- **AC-03**: SI un hallazgo está en un fichero sin cambios desde `trace.legacy_base`, ENTONCES `mth trace` DEBE tratarlo como aviso, terminar con éxito y mostrar cuántos hay.
+- **AC-04**: SI un hallazgo está en un fichero modificado o creado después de `trace.legacy_base`, ENTONCES `mth trace` DEBE tratarlo como error.
+- **AC-05**: CUANDO se ejecuta `mth trace --legacy`, `mth` DEBE listar cada hallazgo legado con su fichero y su línea.
+- **AC-06**: SI el commit de `trace.legacy_base` no existe, ENTONCES `mth trace` DEBE fallar con un error que lo nombre.
 
 ## Notas
 

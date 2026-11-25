@@ -2,15 +2,16 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0003
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0004/AC-NN`. -->
 
 ## Contexto
 
-`mth init` adopta la metodología añadiendo ficheros, sin mirar cómo trabaja ya el repo. En un repo avanzado eso provoca conflictos silenciosos: specs que dejan de estar trazadas, un hook `commit-msg` ajeno que desactiva la validación, agentes del repo que sustituyen a los del plugin, o instrucciones de CLAUDE.md que contradicen las reglas base. Además, el plugin aplica sus reglas antes de que nadie decida adoptarlo. [ADR-0003](../adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md) recoge la decisión.
+- `mth init` adoptaba añadiendo ficheros sin mirar cómo trabaja ya el repo: specs que dejan de estar trazadas, un `commit-msg` ajeno que desactiva la validación, agentes del repo que sustituyen a los del plugin, instrucciones de CLAUDE.md que contradicen las reglas base.
+- El plugin aplicaba sus reglas antes de que nadie decidiera adoptarlo.
+- Decisión: [ADR-0003](../adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md).
 
 ## Objetivo
 
@@ -134,30 +135,30 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Hook de sesión o guard sin configuración | `session`, `guard` | El aviso de adopción y ningún bloqueo; un fallo del hook sigue sin bloquear la sesión |
-| `settings.local.json` ilegible | `mth init --decline` | Error que nombra el fichero; no se sobrescribe |
-| `mth survey` en un repo ya adoptado | `mth survey` | Error: el repo ya está adoptado; usa `mth doctor` |
-| Fichero ilegible o enorme durante el inventario | `mth survey` | Se ignora la señal de ese fichero y se avisa; el resto del inventario sigue |
-| JSON de respuestas inválido, con preguntas sin responder, preguntas que el inventario no pide, opciones o parámetros desconocidos | `mth init --answers` | Error con la pregunta y el motivo; no se modifica nada |
-| Configuración resultante inválida (también por las claves de `otro`) | `mth init --answers` | Error de validación de la configuración; no se modifica nada |
-| Árbol sucio, sin remoto `main` o rama de adopción ya existente | `mth init --answers` | Los mismos errores que `mth init` |
-| La persona no aprueba el plan de migración tras tres rondas de ajuste | Skill `mth-init` | Se detiene y avisa con lo pendiente; no adopta |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Hook de sesión o guard sin configuración | Aviso de adopción y ningún bloqueo; un fallo del hook no bloquea la sesión | AC-01, AC-02 |
+| FM-02 | `settings.local.json` ilegible | `mth init --decline`: error que nombra el fichero; no se sobrescribe | AC-03 |
+| FM-03 | `mth survey` en un repo ya adoptado | Error: el repo ya está adoptado; usa `mth doctor` | AC-07 |
+| FM-04 | Fichero ilegible o enorme durante el inventario | Se ignora esa señal y se avisa; el resto sigue | AC-07 |
+| FM-05 | JSON de respuestas inválido, con preguntas sin responder, no pedidas, opciones o parámetros desconocidos | `mth init --answers`: error con la pregunta y el motivo; no se modifica nada | AC-08 |
+| FM-06 | Configuración resultante inválida (también por las claves de `otro`) | Error de validación; no se modifica nada | AC-08 |
+| FM-07 | Árbol sucio, sin remoto `main` o rama de adopción ya existente | Los mismos errores que `mth init` | AC-10 |
+| FM-08 | La persona no aprueba el plan de migración tras tres rondas de ajuste | Skill `mth-init`: se detiene y avisa con lo pendiente; no adopta | AC-11 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Sin `methodology.toml`, el hook de sesión imprime el aviso de adopción y no las reglas base; con él, imprime las reglas base.
-- **AC-02**: Sin `methodology.toml`, el guard no bloquea comandos que sí bloquea en un repo adoptado (push a `main`, rebase).
-- **AC-03**: `mth init --decline` desactiva el plugin en `.claude/settings.local.json` conservando las demás claves, es idempotente y falla sin sobrescribir si el fichero no es JSON válido.
-- **AC-04**: `mth survey --json` clasifica como `new` un repo con solo README, como `existing` uno con código y sin señales de proceso, como `methodology` uno con specs, agentes o un hook ajeno, y como `fork` uno con remoto `upstream`.
-- **AC-05**: Las preguntas del inventario son las de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo produce como mucho `revisores`, `autonomia`, `idioma`, `ci` y `modelos`.
-- **AC-06**: El inventario detecta specs y ADR con su patrón de ID, agentes y colisiones de nombre, gestores de hooks, herramientas de publicación, ficheros de versión, candidatos a comando de tests e idioma, y no modifica el repo.
-- **AC-07**: `mth survey` falla en un repo adoptado, y un fichero ilegible durante el inventario produce un aviso sin detener el resto.
-- **AC-08**: `mth init --answers` rechaza, sin modificar nada, un JSON inválido, una pregunta pedida sin responder, una pregunta no pedida, una opción o un parámetro desconocidos y unas claves `otro` que dejan la configuración inválida.
-- **AC-09**: `mth init --answers` genera la configuración con el efecto de cada opción de la tabla, los valores del inventario para lo que no se pregunta, los ajustes del perfil `fork` y las claves de `otro` fusionadas.
-- **AC-10**: `mth init --answers` crea la rama de adopción con un único commit que incluye la configuración y el ADR de adopción, con el perfil, cada pregunta, su opción y las notas.
-- **AC-11**: El catálogo de la skill tiene una sección por cada ID de pregunta del inventario, con opciones que coinciden con las que acepta `mth init --answers`, y la skill declara `model: opus`.
+- **AC-01**: MIENTRAS no exista `methodology.toml`, el hook de sesión DEBE imprimir el aviso de adopción y no las reglas base; MIENTRAS exista, DEBE imprimir las reglas base.
+- **AC-02**: MIENTRAS no exista `methodology.toml`, el guard NO DEBE bloquear comandos que bloquea en un repo adoptado (push a `main`, rebase).
+- **AC-03**: CUANDO se ejecuta `mth init --decline`, `mth` DEBE desactivar el plugin en `.claude/settings.local.json` conservando las demás claves, de forma idempotente; SI el fichero no es JSON válido, ENTONCES DEBE fallar sin sobrescribirlo.
+- **AC-04**: CUANDO se ejecuta `mth survey --json`, `mth` DEBE clasificar como `new` un repo con solo README, `existing` uno con código sin señales de proceso, `methodology` uno con specs, agentes o un hook ajeno, y `fork` uno con remoto `upstream`.
+- **AC-05**: `mth survey` DEBE producir las preguntas de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo DEBE producir como mucho `revisores`, `autonomia`, `idioma`, `ci` y `modelos`.
+- **AC-06**: CUANDO se ejecuta `mth survey`, `mth` DEBE detectar specs y ADR con su patrón de ID, agentes y colisiones de nombre, gestores de hooks, herramientas de publicación, ficheros de versión, candidatos a comando de tests e idioma, sin modificar el repo.
+- **AC-07**: SI el repo ya está adoptado, ENTONCES `mth survey` DEBE fallar; SI un fichero es ilegible durante el inventario, ENTONCES DEBE avisar sin detener el resto.
+- **AC-08**: SI el JSON es inválido, falta una pregunta pedida, sobra una no pedida, hay una opción o parámetro desconocidos o las claves `otro` dejan la configuración inválida, ENTONCES `mth init --answers` DEBE rechazarlo sin modificar nada.
+- **AC-09**: CUANDO se ejecuta `mth init --answers`, `mth` DEBE generar la configuración con el efecto de cada opción de la tabla, los valores del inventario para lo no preguntado, los ajustes del perfil `fork` y las claves de `otro` fusionadas.
+- **AC-10**: CUANDO se ejecuta `mth init --answers`, `mth` DEBE crear la rama de adopción con un único commit con la configuración y el ADR de adopción (perfil, cada pregunta, su opción y las notas).
+- **AC-11**: El catálogo de la skill DEBE tener una sección por cada ID de pregunta del inventario con opciones que coincidan con las que acepta `mth init --answers`, y la skill DEBE declarar `model: opus`.
 
 ## Notas
 

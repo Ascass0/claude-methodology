@@ -3,40 +3,40 @@
 - Estado: aceptado
 - Fecha: 2026-11-18
 - Categoría: process
-
-<!-- Estados: propuesto → aceptado → sustituido por ADR-NNNN | obsoleto. Formato basado en MADR. -->
+- Formato: compacto
 
 ## Contexto
 
-`mth init` adopta la metodología añadiendo ficheros. No detecta la forma de trabajar que ya tenga el repo y deja a criterio de Claude cómo ajustar la configuración. En un repo avanzado esto produce conflictos silenciosos: specs en otra carpeta que dejan de estar trazadas, un hook `commit-msg` ajeno que desactiva la validación, agentes del repo que sustituyen a los del plugin, instrucciones de CLAUDE.md que contradicen las reglas base o una rama `development` que nadie usa.
-
-Además, el plugin se activa antes de adoptar. Si está instalado a nivel de usuario, el hook de sesión inyecta las reglas base y el guard bloquea `main` en todos los repos de esa persona, también en los que nunca decidió adoptarlo.
-
-Fuerzas en juego:
-
-- **Instalar no es aceptarlo todo.** Quien instala el plugin quiere llegar a la metodología, no perder lo que ya tiene.
-- **Cada destino necesita una conversación distinta.** Un repo vacío no tiene nada que proteger; uno con metodología propia necesita decidir artefacto por artefacto.
-- **Determinismo** (PRINCIPLES §2): detectar qué hay en el repo y traducir respuestas a configuración son operaciones deterministas. Interpretar instrucciones en prosa o convertir documentos no lo son.
-- **Trazabilidad:** las adaptaciones de la metodología a un repo son decisiones estructurales de ese repo.
+- `mth init` solo añadía ficheros: no detectaba cómo trabaja ya el repo y dejaba a criterio de Claude el ajuste. En un repo avanzado produce conflictos silenciosos: specs en otra carpeta sin trazar, un `commit-msg` ajeno que desactiva la validación, agentes propios que sustituyen a los del plugin, CLAUDE.md contradictorio o una `development` que nadie usa.
+- El plugin se activa antes de adoptar: instalado a nivel de usuario, inyecta las reglas y el guard bloquea `main` también en repos que nunca decidieron adoptarlo.
+- Instalar no es aceptarlo todo; cada destino pide una conversación distinta (vacío frente a metodología propia).
+- Determinismo (PRINCIPLES §2): detectar el repo y traducir respuestas a configuración es determinista; interpretar prosa o convertir documentos no.
+- Las adaptaciones de la metodología a un repo son decisiones estructurales de ese repo.
 
 ## Decisión
 
-1. **El plugin no actúa hasta que el repo adopta.** Sin `.claude/methodology.toml`, el hook de sesión no inyecta las reglas base, sino una instrucción breve para proponer la adopción guiada en la primera respuesta, y el guard no bloquea nada. Quien la rechaza la desactiva para ese repo en `.claude/settings.local.json`, que no se versiona.
-2. **El inventario es determinista.** `mth survey` detecta señales del repo, lo clasifica en un perfil (nuevo, existente, con metodología propia, fork) y decide qué preguntas hacen falta: las de la base del perfil más las que dispara cada conflicto detectado.
-3. **La entrevista la conduce Opus.** La skill `mth-init` se ejecuta con `model: opus`, porque es la tarea con más criterio del ciclo y se ejecuta antes de que exista `[models]`. Los textos de cada pregunta son fijos y están en la skill, para que la metodología se presente siempre igual. Opus solo rellena lo detectado, omite lo que no aplica e itera sobre el plan de migración en el perfil con metodología propia.
-4. **Las respuestas se traducen a configuración con código.** Opus escribe las respuestas en un JSON y `mth init --answers` lo valida contra el inventario, genera `methodology.toml` y el ADR de adopción del repo destino, y abre la rama de adopción. Una respuesta personalizada ("Otro") se expresa como claves de configuración que se validan igual que el resto.
-5. **Lo que no es determinista lo hace Opus en la rama de adopción**: convertir documentos, retirar líneas de CLAUDE.md, renombrar agentes o crear un workflow de CI. Todo queda en el PR de adopción.
-6. **Sin respuestas no se migra.** Sin sesión interactiva, el perfil nuevo puede adoptarse con los valores por defecto. Los demás perfiles se detienen tras el inventario.
+1. Sin `.claude/methodology.toml`, el hook de sesión NO DEBE inyectar las reglas base (solo una instrucción breve para proponer la adopción) y el guard NO DEBE bloquear nada. Quien rechaza adoptar lo desactiva en `.claude/settings.local.json` (no versionado).
+2. `mth survey` DEBE ser determinista: detecta señales, clasifica el perfil (nuevo, existente, con metodología propia, fork) y decide las preguntas (base del perfil más las que dispara cada conflicto).
+3. La entrevista la conduce Opus (`mth-init`, `model: opus`): es la tarea con más criterio y corre antes de que exista `[models]`. Los textos de las preguntas son fijos, en la skill. Opus solo rellena lo detectado, omite lo que no aplica e itera el plan de migración del perfil con metodología propia.
+4. `mth init --answers` DEBE validar el JSON de respuestas contra el inventario, generar `methodology.toml` y el ADR de adopción del destino y abrir la rama de adopción. Una respuesta «Otro» se expresa como claves de configuración validadas igual.
+5. Lo no determinista (convertir documentos, retirar líneas de CLAUDE.md, renombrar agentes, crear el workflow de CI) lo hace Opus en la rama de adopción; todo queda en el PR.
+6. Sin respuestas NO DEBE migrarse: sin sesión interactiva, el perfil nuevo adopta los valores por defecto y los demás se detienen tras el inventario.
 
-## Alternativas consideradas
+## Rechazado
 
-- **Migración automática completa:** convertir specs, hooks y agentes sin preguntar. Decide por la persona y produce un PR enorme e imposible de revisar.
-- **Un cuestionario fijo para todos los repos:** catorce preguntas en un repo vacío ahuyentan a quien empieza, y en un repo con metodología propia no bastan.
-- **Que Opus genere directamente `methodology.toml`:** funcionaría casi siempre, pero un error de configuración solo aparecería después. Con el JSON de respuestas, la traducción es determinista y está probada.
-- **Bloquear la sesión hasta adoptar:** un hook no puede impedir que la persona trabaje, y no debería hacerlo en un repo que no ha decidido nada.
+- Migración automática completa: decide por la persona y produce un PR enorme e irrevisable.
+- Cuestionario fijo: catorce preguntas ahuyentan en un repo vacío y no bastan con metodología propia.
+- Que Opus genere `methodology.toml` directamente: un error de configuración aparecería tarde; con el JSON la traducción es determinista y está probada.
+- Bloquear la sesión hasta adoptar: un hook no puede impedir trabajar y no debe hacerlo en un repo sin decisión.
 
 ## Consecuencias
 
-- **Positivas:** el plugin se puede instalar a nivel de usuario sin efectos en los repos que no lo adoptan. La adopción hace solo las preguntas necesarias, y cada adaptación queda registrada en el ADR de adopción del repo.
-- **Negativas:** hay que mantener la coherencia entre las preguntas del inventario y los textos de la skill (un test lo comprueba). La adopción de un repo con metodología propia cuesta una sesión de Opus.
-- **Riesgo aceptado:** la detección de señales es heurística (nombres de carpetas, ficheros conocidos). Lo que no detecta no genera pregunta, pero Opus revisa el inventario y la persona puede corregir el perfil en la primera pregunta.
+- **+** El plugin se instala a nivel de usuario sin efectos en repos que no adoptan; solo se hacen las preguntas necesarias y cada adaptación queda en el ADR de adopción.
+- **−** Hay que mantener la coherencia entre las preguntas del inventario y los textos de la skill (lo comprueba un test).
+- **−** Adoptar un repo con metodología propia cuesta una sesión de Opus.
+- **riesgo** La detección es heurística (nombres de carpetas, ficheros conocidos) → Opus revisa el inventario y la persona corrige el perfil en la primera pregunta.
+
+## Impone
+
+- [script] `mthlib/survey.py` (inventario y perfil), `mthlib/adoption.py` (traducción de respuestas), `mthlib/session.py` y `mthlib/guard.py` (inactivos sin configuración).
+- [criterio] Test de coherencia entre las preguntas del inventario y `skills/mth-init/preguntas.md`.

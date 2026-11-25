@@ -2,15 +2,16 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0004
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0007/AC-NN`. -->
 
 ## Contexto
 
-La metodología trabaja con autonomía completa: Claude crea ramas, hace commits, integra y publica sin pedir permiso. PRINCIPLES §11 deja la supervisión en manos de cada repo, que tendría que escribir su propio hook. En la adopción de un repo con equipo o con hábitos de revisión manual, la autonomía es el cambio más fuerte, y la adopción guiada ([SPEC-0004](SPEC-0004-adopcion-guiada.md)) tiene que poder ofrecer niveles intermedios sin que cada repo programe un hook. [ADR-0004](../adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) recoge la decisión.
+- La metodología trabaja con autonomía completa; PRINCIPLES §11 deja la supervisión a un hook propio de cada repo.
+- Al adoptar en un repo con equipo o revisión manual, la autonomía es el cambio más fuerte: la adopción guiada ([SPEC-0004](SPEC-0004-adopcion-guiada.md)) debe ofrecer niveles intermedios sin que cada repo programe un hook.
+- Decisión: [ADR-0004](../adr/process/ADR-0004-autonomia-configurable-por-repositorio.md).
 
 ## Objetivo
 
@@ -38,20 +39,20 @@ Tabla nueva `[autonomy]`, con la clave `level`:
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Nivel desconocido | Carga de la configuración | Fail-fast. El guard, que no puede cargar la configuración, aplica `supervised` en vez de dejar pasar sin confirmar |
-| La persona rechaza la confirmación | Claude Code | El comando no se ejecuta; Claude lo trata como un rechazo y no lo reintenta por otra vía |
-| Sesión no interactiva | Claude Code | `ask` equivale a denegar |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Nivel desconocido | Fail-fast al cargar; el guard, que no puede cargar, aplica `supervised` en vez de dejar pasar | AC-06 |
+| FM-02 | La persona rechaza la confirmación | El comando no se ejecuta; Claude lo trata como rechazo y no lo reintenta por otra vía | AC-02 |
+| FM-03 | Sesión no interactiva | `ask` equivale a denegar | AC-02 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Con `level = "full"` o sin la tabla, el guard no pide confirmación para ningún comando.
-- **AC-02**: Con `until-pr`, el guard responde `ask` para `mth integrate`, `mth release` y `mth hotfix finish`, con cualquiera de las formas de invocar `mth`, y no para `mth commit` ni `mth branch`.
-- **AC-03**: Con `supervised`, el guard responde `ask` además para `mth commit`, `mth branch`, `git commit` y `git push`.
-- **AC-04**: Un comando que el guard bloquea (por ejemplo, un `git push --force`) se bloquea igual en cualquier nivel, sin pedir confirmación.
-- **AC-05**: Las reglas de sesión describen el nivel configurado y los pasos que se confirman.
-- **AC-06**: La carga de la configuración rechaza un nivel distinto de `full`, `until-pr` o `supervised`, y con una configuración inválida el guard pide confirmación como en `supervised`.
+- **AC-01**: MIENTRAS `level = "full"` o no exista la tabla, el guard NO DEBE pedir confirmación para ningún comando.
+- **AC-02**: MIENTRAS `level = "until-pr"`, el guard DEBE responder `ask` para `mth integrate`, `mth release` y `mth hotfix finish` con cualquier forma de invocar `mth`, y NO DEBE hacerlo para `mth commit` ni `mth branch`.
+- **AC-03**: MIENTRAS `level = "supervised"`, el guard DEBE responder `ask` además para `mth commit`, `mth branch`, `git commit` y `git push`.
+- **AC-04**: SI el guard bloquea un comando (p. ej. `git push --force`), ENTONCES DEBE bloquearlo igual en cualquier nivel, sin pedir confirmación.
+- **AC-05**: Las reglas de sesión DEBEN describir el nivel configurado y los pasos que se confirman.
+- **AC-06**: SI el nivel no es `full`, `until-pr` o `supervised`, ENTONCES la carga de la configuración DEBE rechazarlo; SI la configuración es inválida, ENTONCES el guard DEBE pedir confirmación como en `supervised`.
 
 ## Notas
 
