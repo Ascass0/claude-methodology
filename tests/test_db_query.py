@@ -46,6 +46,7 @@ class QueryTests(unittest.TestCase):
         self.assertFalse((self.root / "x.db").exists())
 
     def test_reads_schema_and_pragma_info(self):
+        # unit: db_query.query
         self.assertEqual(self.query(None).columns, ["name", "sql"])
         self.assertEqual(len(self.query("PRAGMA table_info(t)").rows), 2)
 
@@ -60,12 +61,14 @@ class QueryTests(unittest.TestCase):
         self.assertIn("truncado a 2 filas", db_query.format_result(result, 2))
 
     def test_slow_queries_are_cut(self):
+        # unit: db_query.query
         slow = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n"
         with self.assertRaises(db_query.QueryError) as ctx:
             self.query(slow, timeout_s=0.2)
         self.assertIn("límite", ctx.exception.message)
 
     def test_missing_database_file(self):
+        # unit: db_query.query
         self.dbs["vacia"] = "no-existe.db"
         with self.assertRaises(db_query.QueryError):
             self.query("SELECT 1", alias="vacia")
@@ -95,6 +98,7 @@ class QueryTests(unittest.TestCase):
         self.assertIn("caracteres más", text)
 
     def test_cells_are_escaped(self):
+        # unit: db_query.format_result
         result = db_query.Result(["a"], [("x\ty\nz",), (None,), (b"\x00\x01",)], False)
         self.assertEqual(db_query.format_result(result, 10), "a\nx\\ty\\nz\nNULL\n<2 bytes>")
 
@@ -143,6 +147,7 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(sqlite3.connect(self.root / "data/state.db").execute("SELECT count(*) FROM t").fetchone()[0], 10)
 
     def test_schema_and_sql_are_exclusive(self):
+        # unit: cli db-query
         rc, _, err = self.mth("db-query", "--db", "estado", "--schema", "SELECT 1")
         self.assertEqual(rc, 1)
         rc, out, _ = self.mth("db-query", "--db", "estado", "--schema")

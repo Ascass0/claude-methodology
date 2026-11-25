@@ -1,5 +1,5 @@
 name = "revisor-parsimonia"
-version = "1.0.0"
+version = "1.1.0"
 kind = "revisor"
 profiles = ["base"]
 summary = "YAGNI y lo más simple que funcione; los tests que sobran; el proceso proporcional al cambio."
