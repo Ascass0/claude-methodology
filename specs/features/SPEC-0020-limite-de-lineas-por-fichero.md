@@ -1,6 +1,6 @@
 # SPEC-0020 · Límite de líneas por fichero
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-25
 - Formato: compacto
 - ADRs: [ADR-0016](../adr/process/ADR-0016-limite-de-lineas-por-fichero.md)
