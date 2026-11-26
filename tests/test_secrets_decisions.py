@@ -162,5 +162,21 @@ class InterviewTests(unittest.TestCase):
         self.assertEqual((cfg["secrets"]["hook"], cfg["secrets"]["ci"]), ("on", ""))
 
 
+class DocsTests(unittest.TestCase):
+    def test_readme_and_skills_document_the_pieces_and_the_branch_protection(self):
+        # verifies: SPEC-0024/AC-16
+        # verifies: SPEC-0024/FM-08
+        plugin = HERE.parent / "plugins" / "methodology" / "skills"
+        readme = (HERE.parent / "README.md").read_text(encoding="utf-8")
+        for needle in ("secrets.hook", "secrets.ci", "hooks.pre_commit", "mth secrets --staged", "secrets.yml",
+                       "secretos-hook", "secretos-ci", "Protección de rama"):
+            self.assertIn(needle, readme)
+        self.assertIn("## `secretos`", (plugin / "mth-init" / "preguntas.md").read_text(encoding="utf-8"))
+        self.assertIn("secretos", (plugin / "mth-init" / "SKILL.md").read_text(encoding="utf-8"))
+        update_skill = (plugin / "mth-update" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("secretos-hook", update_skill)
+        self.assertIn("secretos-ci", update_skill)
+
+
 if __name__ == "__main__":
     unittest.main()
