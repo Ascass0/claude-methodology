@@ -4,6 +4,7 @@ Este es el repositorio de desarrollo del plugin de metodología (`plugins/method
 
 - La metodología que se te carga en cada sesión (principios, skills `mth-*`, hooks, agentes, script `mth`) es la **versión instalada del plugin** (caché de `~/.claude/plugins`), no el código de `plugins/methodology/` que estás modificando. Pueden diferir.
 - Un cambio en `plugins/methodology/` puede alterar la herramienta con la que se desarrolla ese mismo cambio. Ten presente qué versión estás ejecutando y cuál estás editando, y no asumas que tus cambios ya están activos en la sesión.
+- **Plan antes que nada.** Toda idea nueva parte de un plan de ejecución discutido con la persona y guardado en `.work/plans/PLAN-NNNN-<slug>.md` (local, nunca se commitea), antes de crear rama, spec o código. Los agentes trabajan contra ese plan, no contra la memoria de la sesión. Estado `acordado` solo con el visto bueno de la persona; `chore` y `docs` no necesitan plan. Hasta que el plugin publicado traiga el gate (`mth branch --plan`, `mth integrate`), esta regla es la única protección.
 - Esta sección es solo del repositorio de desarrollo: no forma parte del plugin ni debe copiarse a plantillas, docs de usuario ni a nada que se distribuya.
 
 <!-- claude-methodology:start -->
