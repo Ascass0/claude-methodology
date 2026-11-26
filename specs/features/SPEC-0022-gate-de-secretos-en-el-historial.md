@@ -19,7 +19,7 @@
 
 ## Fuera de alcance
 
-- Hook de precommit y plantilla de workflow de CI.
+- Hook de precommit y plantilla de workflow de CI: los cubre [SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md).
 - Otros escáneres distintos de `gitleaks`.
 - Reescribir o limpiar historia.
 - Escaneo de dependencias y análisis estático (otra spec).
