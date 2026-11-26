@@ -23,7 +23,7 @@
 5. Los IDs `PLAN-NNNN` no se citan en `Refs:` de los commits ni en documentos versionados: son locales y `mth` no puede validarlos. El plan cita las specs, no al revés.
 6. `mth plan` se extiende con `new`, `agree`, `list`, `show` y `done`; sus acciones actuales (`check`, `verify`, `model`, `stats`) no cambian.
 7. `planificador` es un agente del plugin en `agents/`, enlazado por `[roles].planner`: matiza ADR-0008, que lo limitaba a `verificador` y `documentador`. Es de solo lectura (lo exige su texto, como `verificador`), lee el catálogo con `mth agents list`, asigna solo agentes del catálogo, recomienda instalar los que el repo no tiene y deja como preguntas abiertas lo que no sabe.
-8. El planificador siempre usa `opus`. El modelo no va en su cabecera (ADR-0002): lo fija la skill `mth-plan` al lanzarlo y no es configurable.
+8. El planificador siempre usa `opus`. El modelo no va en su cabecera (ADR-0002): lo fija la skill `mth-plan` al lanzarlo y no es configurable. `mth models` lo muestra como fijo y el agente avisa si el encargo no declara opus; es un refuerzo, no una garantía, porque el plugin no controla el parámetro `model` de la herramienta Agent.
 9. El orquestador instala los agentes del catálogo que el plan acordado recomienda (la persona los aprobó al acordarlo) y reparte el trabajo apoyándose en el plan y en las sugerencias del planificador. No instala ninguno que el plan no recomiende. Toda desviación se anota en el «Registro de ejecución» del plan con su motivo. El reparto del plan es una sugerencia.
 10. Las claves nuevas llegan a los repos adoptados por el gap automático `config` de `mth update`: no hay brecha nueva.
 

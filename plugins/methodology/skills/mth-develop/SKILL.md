@@ -19,7 +19,7 @@ description: Ciclo autónomo de desarrollo dirigido por specs, de la spec a la v
 
 ## 2. Plan acordado → skill `mth-plan`
 
-Para `feat`, `fix` y `hotfix` (`plans.required_for`), antes de crear la rama: `mth plan new`, el agente `planificador` redacta el borrador, la persona lo discute y da su visto bueno y `mth plan agree PLAN-NNNN` lo fija. El plan es un fichero local de `.work/plans/` (nunca se commitea) y no lo cita ningún documento versionado. `chore` y `docs` no lo necesitan. Al terminar el trabajo: `mth plan done PLAN-NNNN`.
+Para `feat`, `fix` y `hotfix` (`plans.required_for`), antes de crear la rama: `mth plan new`, el agente `planificador` (siempre lanzado con `model: "opus"`) redacta el borrador, la persona lo discute y da su visto bueno y `mth plan agree PLAN-NNNN` lo fija. El plan es un fichero local de `.work/plans/` (nunca se commitea) y no lo cita ningún documento versionado. `chore` y `docs` no lo necesitan. Al terminar el trabajo: `mth plan done PLAN-NNNN`.
 
 ## 3. Rama → skill `mth-branch`
 
