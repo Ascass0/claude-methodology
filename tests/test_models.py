@@ -101,6 +101,9 @@ class ModelCommandTests(ModelRepoTestCase):
     def test_models_command_shows_the_planner_as_fixed_opus(self):
         # verifies: SPEC-0023/AC-21
         self.assertIn("Planificador: opus (fijo)", self.mth("models"))
+        custom = '[models]\nladder = ["fable", "opus"]\ntask = "opus"\nreview = "fable"\ndocumenter = "opus"\n'
+        self.write(".claude/methodology.toml", self.config + custom)
+        self.assertIn("Planificador: opus (fijo)", self.mth("models"))
 
     def test_plan_check_shows_effective_models(self):
         # verifies: SPEC-0002/AC-03
