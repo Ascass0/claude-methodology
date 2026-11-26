@@ -4,10 +4,11 @@
 
 **Precedencia:** seguridad > fail-safe/fail-fast > corrección > trazabilidad > parsimonia > estilo.
 
-**Ciclo:** rama (`mth-branch`) → spec y ADR (`mth-spec`) → código + tests + docs → commits temáticos (`mth-commit`) → revisión (`mth-review`) → integración (`mth-integrate`) → versión (`mth-release`). Detalle: skill `mth-develop`.
+**Ciclo:** plan acordado con la persona (`mth-plan`, obligatorio en `feat`, `fix` y `hotfix`) → rama (`mth-branch`) → spec y ADR (`mth-spec`) → código + tests + docs → commits temáticos (`mth-commit`) → revisión (`mth-review`) → integración (`mth-integrate`) → versión (`mth-release`). Detalle: skill `mth-develop`.
 
 **Reglas que no se negocian:**
 - Integrar, etiquetar o borrar ramas solo con `mth` (`{{MTH}}`), nunca a mano. Nunca se reescribe historia compartida (sin rebase, squash ni force-push).
+- Sin plan acordado no hay rama `feat`, `fix` ni `hotfix` (`mth branch --plan`; `mth integrate` lo comprueba). El plan es un fichero local de `.work/plans/`: no se commitea.
 - Sin spec no hay feature: se escribe primero. Decisión estructural sin ADR = error.
 - Cada criterio de aceptación y cada modo de fallo, al menos un test (`verifies: SPEC-NNNN/AC-NN`).
 - Specs y ADR nuevos en formato compacto (`- Formato: compacto`): AC en EARS, modos de fallo `FM-NN`, ADR con campos fijos.

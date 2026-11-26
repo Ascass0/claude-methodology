@@ -33,6 +33,7 @@ Recibes la rama, el comando del diff, los IDs de las specs afectadas y la ruta d
    ```
 6. **Afirmaciones.** Contrasta lo que dicen los mensajes de commit, el fragmento de changelog y la documentación con el código. Cualquier afirmación sin respaldo ("maneja timeouts", "validado") es un hallazgo.
 7. **Estado de la spec.** Si la rama pone una spec en `implementada`, todos sus criterios deben quedar verificados.
+8. **Plan acordado.** Si el encargo trae la ruta de un plan acordado (`.work/plans/PLAN-NNNN-<slug>.md`), léelo y compara el diff con sus tareas y ficheros. Un cambio fuera de los ficheros del plan, o una tarea del plan sin hacer, es un hallazgo `importante` en `HALLAZGOS`, con la tarea y el fichero. Las desviaciones anotadas en su «Registro de ejecución» con motivo no son hallazgo. No cambies la forma del informe: nada de secciones nuevas.
 
 ## Severidad
 

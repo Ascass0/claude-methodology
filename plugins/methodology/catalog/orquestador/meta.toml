@@ -1,5 +1,5 @@
 name = "orquestador"
-version = "1.0.1"
+version = "1.1.0"
 kind = "principal"          # no es un subagente: se arranca con `claude --agent orquestador`
 profiles = ["autonomo"]
 summary = "Hilo principal para sesiones autónomas largas: planifica desde la spec, delega en dev-* y trabajadores, revisa manifiestos e integra con mth."

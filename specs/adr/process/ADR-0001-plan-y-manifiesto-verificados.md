@@ -12,6 +12,7 @@
 - Legibilidad: personas y revisores sin contexto leen specs y planes.
 - Sin dependencias: `mth` solo usa la biblioteca estándar de Python ≥ 3.11.
 - Fail-safe: ante una duda (formato ambiguo, glob que podría solaparse) se rechaza.
+- Matizado por [ADR-0021](ADR-0021-planes-acordados-antes-de-desarrollar.md): existe además un plan acordado local anterior a la spec; este ADR rige solo el «Plan de trabajo» de una spec.
 
 ## Decisión
 

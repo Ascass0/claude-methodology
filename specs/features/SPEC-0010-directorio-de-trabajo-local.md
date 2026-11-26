@@ -32,7 +32,7 @@
 
 | Subdirectorio | Contenido |
 |---|---|
-| `plans/` | planes de trabajo, manifiestos de agentes y borradores de diseño |
+| `plans/` | planes acordados `PLAN-NNNN-<slug>.md` ([SPEC-0023](SPEC-0023-planes-acordados-antes-de-desarrollar.md)), manifiestos de agentes y borradores de diseño |
 | `merge-request/` | títulos, resúmenes y cuerpos de PR |
 | `security-report/` | informes de seguridad |
 | `reviews/` | informes completos de los revisores |

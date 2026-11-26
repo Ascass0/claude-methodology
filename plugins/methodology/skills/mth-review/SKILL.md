@@ -24,12 +24,16 @@ Lanza los revisores obligatorios **en el orden de `review.agents`**: el `verific
 Revisa la rama <rama> respecto a <destino>.
 - Diff: git diff <remoto>/<destino>...HEAD
 - Specs y ADR afectados: <IDs y rutas>
+- Plan acordado (solo al verificador): <ruta de .work/plans/PLAN-NNNN-*.md de la rama, `mth plan list`>; avisa si el diff se sale del plan
 - Principios: <ruta de PRINCIPLES.md del contexto de sesión>
 Aplica solo tu especialidad. Para cada hallazgo devuelve:
   severidad (bloqueante | importante | sugerencia) · fichero:línea · problema · corrección propuesta
 Bloqueante = incumple una regla DEBE, un criterio de aceptación, o introduce un riesgo.
+No inventes títulos de sección: solo FUERA DE ALCANCE, RESUMEN:, BLOQUEANTES:, TESTS:, CRITERIOS y ALCANCE: además de HALLAZGOS.
 Termina con: BLOQUEANTES: <n>
 ```
+
+Títulos de sección que `mth` admite en un informe: `FUERA DE ALCANCE`, `RESUMEN:`, `BLOQUEANTES:`, `TESTS:`, `CRITERIOS` y `ALCANCE:`. Cualquier otro título dentro de `HALLAZGOS` hace fallar el registro: no inventes títulos y pide a los revisores que no los usen.
 
 Guarda el informe de cada revisor **tal cual lo devolvió**, sin resumir ni retocar, en `.work/tmp/<agente>.md` (`mth` solo lee informes dentro del repo). `mth review record` lo archiva byte a byte en `.work/reviews/<sha>-<agente>-<n>.md` (`<n>` = número de intento) y es el registro de la revisión. Si quieres un resumen, que sea un fichero aparte que enlace al original; nunca lo sustituye. El informe incluye siempre la sección `HALLAZGOS` y termina con `BLOQUEANTES: <n>`.
 

@@ -51,7 +51,7 @@ Señales que detecta:
 | `tags` | Etiquetas `<prefijo>X.Y.Z` y su prefijo más frecuente |
 | `specs` | Carpetas `specs/`, `spec/`, `rfcs/`, `rfc/`, `design/`, `docs/specs/`, `docs/rfcs/`, `docs/design/` con ficheros `.md`, y el patrón de ID más frecuente de sus encabezados (`[A-Z]+-\d+`) |
 | `adrs` | Carpetas `adr/`, `adrs/`, `decisions/`, `docs/adr/`, `docs/adrs/`, `docs/decisions/`, `doc/adr/`, `specs/adr/` con ficheros `.md`, y su patrón de ID. Sus ficheros no cuentan como specs |
-| `agents` | Ficheros `.claude/agents/*.md`, y los que tienen el nombre de un agente del plugin (`verificador`, `documentador`) |
+| `agents` | Ficheros `.claude/agents/*.md`, y los que tienen el nombre de un agente del plugin (`verificador`, `documentador`, `planificador`) |
 | `claude_dirs` | `.claude/skills/` o `.claude/commands/` con contenido |
 | `instructions` | `CLAUDE.md`, `.claude/CLAUDE.md` o `AGENTS.md` no vacíos |
 | `commit_hook` | Un `commit-msg` ajeno en el directorio de hooks de git |

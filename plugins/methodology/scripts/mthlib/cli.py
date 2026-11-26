@@ -7,7 +7,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan,
+from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
                review, session, setup, survey, update, updating)
 from .config import load
 from .errors import MthError
@@ -216,26 +216,72 @@ def _cmd_plan_stats(ctx: Ctx, spec: str | None) -> int:
     return 0
 
 
+AGREED_ACTIONS = ("new", "agree", "list", "show", "done")  # SPEC-0023: plans agreed with the person
+
+
+def _plan_list(ctx: Ctx) -> int:
+    found, broken = plans.listing(flow.plans_dir(ctx))
+    for p in found:
+        print(f"{p.ident} · {p.state} · {p.title}" + (f" · {', '.join(p.branches)}" if p.branches else ""))
+    for path in broken:
+        warn(f"{path.name}: ilegible o sin el formato de un plan")
+    if not found and not broken:
+        say("No hay planes en .work/plans/.")
+    return 0
+
+
+def _plan_new(ctx: Ctx, slug: str, title: str | None) -> int:
+    path = plans.create(flow.plans_dir(ctx), slug, title or slug.replace("-", " ").capitalize())
+    say(f"✓ Plan creado: {path.relative_to(ctx.root)} (en borrador; redáctalo con la skill mth-plan)")
+    return 0
+
+
+def _plan_transition(ctx: Ctx, ident: str, state: str) -> int:
+    plan = plans.transition(plans.find(flow.plans_dir(ctx), ident), state)
+    ctx.tracer.event("plan.transition", plan=plan.ident, state=plan.state)
+    say(f"✓ {plan.ident} pasa a «{plan.state}»")
+    return 0
+
+
+def _cmd_agreed_plan(ctx: Ctx, args: argparse.Namespace) -> int:
+    """The actions of SPEC-0023; ``args.target`` is the slug of ``new`` or the PLAN-NNNN of the others."""
+    action = args.action
+    if action == "list":
+        return _plan_list(ctx)
+    if not args.target:
+        raise MthError(f"plan {action} necesita {'el slug' if action == 'new' else 'el ID del plan (PLAN-NNNN)'}.")
+    if action == "new":
+        return _plan_new(ctx, args.target, args.title)
+    if action == "show":
+        print(plans.raw(plans.find(flow.plans_dir(ctx), args.target)), end="")
+        return 0
+    if action == "agree":
+        return _plan_transition(ctx, args.target, "acordado")
+    return _plan_transition(ctx, args.target, "abandonado" if args.abandon else "ejecutado")
+
+
 def _cmd_plan(args: argparse.Namespace) -> int:
     ctx = _ctx("plan")
+    if args.action in AGREED_ACTIONS:
+        return _cmd_agreed_plan(ctx, args)
     models = ctx.cfg["models"]
     if args.action == "stats":
-        if args.spec:
+        if args.target:
             raise MthError("plan stats no admite una spec posicional.", hint="Usa --spec SPEC-NNNN.")
         return _cmd_plan_stats(ctx, args.only_spec)
-    if not args.spec:
+    if not args.target:
         raise MthError(f"plan {args.action} necesita el ID de la spec.")
-    _, tasks = _plan_tasks(ctx, args.spec)
+    _, tasks = _plan_tasks(ctx, args.target)
     if args.action == "check":
         by_wave = plan.waves(tasks)
-        say(f"✓ Plan de {args.spec} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
+        say(f"✓ Plan de {args.target} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
         for wave, items in by_wave.items():
             print(f"  Oleada {wave}: " + ", ".join(f"{t.id} ({t.effective_model(models['task'])})" for t in items))
         return 0
     if args.action == "model":
         task = next((t for t in tasks if t.id == args.task), None)
         if task is None:
-            raise MthError(f"{args.task or '(sin tarea)'} no es una tarea del plan de {args.spec}.")
+            raise MthError(f"{args.task or '(sin tarea)'} no es una tarea del plan de {args.target}.")
         model = task.effective_model(models["task"])
         print(plan.next_model(models["ladder"], model) if args.retry else model)
         return 0
@@ -253,18 +299,18 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     errors += result.errors
     for task_id, (outcome, digest) in sorted(result.outcomes.items()):
         model = overrides.get(task_id) or in_wave[task_id].effective_model(models["task"])
-        ctx.tracer.event("plan.task", spec=args.spec, task=task_id, wave=args.wave, model=model,
+        ctx.tracer.event("plan.task", spec=args.target, task=task_id, wave=args.wave, model=model,
                          result=outcome, manifest=digest)
     for w in result.warnings:
         warn(w)
     for e in errors:
         print(f"✗ {e}")
-    ctx.tracer.event("plan.verify", spec=args.spec, wave=args.wave, errors=len(errors), warnings=len(result.warnings))
+    ctx.tracer.event("plan.verify", spec=args.target, wave=args.wave, errors=len(errors), warnings=len(result.warnings))
     if errors:
-        say(f"Oleada {args.wave} de {args.spec} rechazada: {len(errors)} errores")
+        say(f"Oleada {args.wave} de {args.target} rechazada: {len(errors)} errores")
         return EXIT_ERROR
     suffix = f" ({len(result.warnings)} desvíos por resolver)" if result.warnings else ""
-    say(f"✓ Oleada {args.wave} de {args.spec} verificada{suffix}")
+    say(f"✓ Oleada {args.wave} de {args.target} verificada{suffix}")
     return 0
 
 
@@ -388,6 +434,7 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("slug")
     s.add_argument("--child", action="store_true", help="rama hija de la rama actual")
     s.add_argument("--spec", help="ID de la spec que motiva la rama")
+    s.add_argument("--plan", help="PLAN-NNNN acordado de la rama (obligatorio en los tipos de plans.required_for)")
 
     s = sub.add_parser("commit", help="commit con mensaje validado")
     s.add_argument("--type", required=True, choices=commits.TYPES)
@@ -420,14 +467,16 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--summary", default="")
 
     s = sub.add_parser("plan", help="plan de trabajo: validar, verificar una oleada, modelo de una tarea, métricas")
-    s.add_argument("action", choices=["check", "verify", "model", "stats"])
-    s.add_argument("spec", nargs="?", help="ID de la spec (SPEC-NNNN)")
+    s.add_argument("action", choices=["check", "verify", "model", "stats", *AGREED_ACTIONS])
+    s.add_argument("target", nargs="?", help="ID de la spec (SPEC-NNNN); en new el slug del plan y en agree, show y done su PLAN-NNNN")
     s.add_argument("task", nargs="?", help="ID de la tarea (plan model)")
     s.add_argument("--wave", type=int, help="oleada a verificar")
     s.add_argument("--manifest", action="append", help="manifiesto JSON de una tarea (repetible)")
     s.add_argument("--model", action="append", help="modelo usado en una tarea: T-NN=<alias> (repetible)")
     s.add_argument("--retry", action="store_true", help="plan model: modelo del reintento")
     s.add_argument("--spec", dest="only_spec", help="plan stats: solo esta spec")
+    s.add_argument("--title", help="plan new: título del plan (por defecto, el slug)")
+    s.add_argument("--abandon", action="store_true", help="plan done: marca el plan como abandonado")
     sub.add_parser("models", help="escalera de modelos y nivel de cada rol")
 
     sub.add_parser("sync", help="integra la rama destino en la actual (merge)")
@@ -528,7 +577,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     elif c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
     elif c == "branch":
-        start(ctx, args.kind, args.slug, args.child, args.spec)
+        start(ctx, args.kind, args.slug, args.child, args.spec, args.plan)
     elif c == "commit":
         commit(ctx, args.type, args.scope, args.summary, _text(args.body, args.body_file, "body"),
                _split_refs(args.refs), args.breaking)

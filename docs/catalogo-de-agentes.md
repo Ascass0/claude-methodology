@@ -2,6 +2,10 @@
 
 Referencia operativa del catálogo de plantillas de agentes del plugin (`plugins/methodology/catalog/`). El diseño y las decisiones están en [SPEC-0012](../specs/features/SPEC-0012-catalogo-de-agentes.md) y [ADR-0008](../specs/adr/process/ADR-0008-catalogo-de-plantillas-de-agentes.md); el resumen y los límites, en el [README](../README.md#catálogo-de-agentes).
 
+## Agentes del plugin
+
+Además de las plantillas del catálogo, el plugin incluye tres agentes propios, que no se instalan con `mth agents add`: `documentador`, `verificador` y `planificador`. El `planificador` siempre usa Opus, trabaja en solo lectura y, al redactar un plan acordado, lee `mth agents list` y recomienda los agentes del catálogo que conviene instalar sin instalarlos. Los instala el `orquestador` al empezar el plan. Ver [ADR-0021](../specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md).
+
 ## Uso
 
 | Comando | Qué hace |

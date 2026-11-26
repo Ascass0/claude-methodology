@@ -40,7 +40,8 @@ DEFAULTS: dict[str, Any] = {
     "commits": {"require_refs": ["feat", "fix", "refactor", "perf"], "external_refs": []},
     "changes": {"required_for": ["feat", "fix", "hotfix"]},
     "review": {"agents": [], "required_for": ["feat", "fix", "hotfix"], "paths": {}},
-    "roles": {"coder": "", "documenter": "", "verifier": ""},
+    "roles": {"coder": "", "documenter": "", "verifier": "", "planner": ""},
+    "plans": {"required_for": ["feat", "fix", "hotfix"]},
     "ci": {"required": True},
     "trace": {"links": True, "acceptance": True, "spec_kind": "SPEC",
               "adr_kind": "ADR", "include": ["**"], "exclude": [], "legacy_base": "",
@@ -82,7 +83,8 @@ _SCHEMA: dict[str, Any] = {
     "commits": {"require_refs": list, "external_refs": list},
     "changes": {"required_for": list},
     "review": {"agents": list, "required_for": list, "paths": dict},
-    "roles": {"coder": str, "documenter": str, "verifier": str},
+    "roles": {"coder": str, "documenter": str, "verifier": str, "planner": str},
+    "plans": {"required_for": list},
     "ci": {"required": bool},
     "trace": {"links": bool, "acceptance": bool, "spec_kind": str,
               "adr_kind": str, "include": list, "exclude": list, "legacy_base": str,
@@ -213,6 +215,10 @@ def _check_semantics(data: dict[str, Any]) -> None:
         raise MthError(f"'trace.legacy_base' = '{legacy}' debe ser el hash completo de un commit (40 caracteres hexadecimales).")
     limits.validate(data["limits"])
     secretgate.validate(data["secrets"])
+    known = {"feat", "fix", "chore", "hotfix", *data["branches"]["extra"]}
+    if unknown := [k for k in data["plans"]["required_for"] if k not in known]:  # SPEC-0023/AC-01
+        raise MthError(f"'plans.required_for' tiene tipos de rama desconocidos: {', '.join(map(str, unknown))}.",
+                       hint=f"Tipos admitidos: {', '.join(sorted(known))}.")
     for glob, regex in data["trace"]["test_patterns"].items():
         if not isinstance(regex, str):
             raise MthError(f"'trace.test_patterns.\"{glob}\"' debe ser una expresión regular (texto) o \"\" para desactivarla.")
