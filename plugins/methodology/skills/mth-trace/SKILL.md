@@ -32,12 +32,12 @@ Si el repo tiene un esquema de IDs propio, se declara en `[ids]`; contenido que 
 
 ## Formato compacto
 
-Los documentos con la línea `- Formato: compacto` (`- Format: compact`) se validan con EARS, `FM-NN` y los campos del ADR; los demás, no. Las referencias `SPEC-NNNN/FM-NN` se comprueban siempre. Detalle en [SPEC-0018](../../../../specs/features/SPEC-0018-formato-compacto-de-specs-y-adr.md).
+Los documentos con la línea `- Formato: compacto` (`- Format: compact`) se validan con EARS, `FM-NN` y los campos del ADR; los demás, no. Las referencias `SPEC-NNNN/FM-NN` se comprueban siempre.
 
 ## Límite de líneas por fichero
 
-`limits.max_file_lines` (1000 por defecto): los errores salen en la rama que hace crecer un fichero por encima del límite; los ficheros largos heredados que no se hacen crecer solo avisan (`mth trace --limits` los lista). Detalle en [SPEC-0020](../../../../specs/features/SPEC-0020-limite-de-lineas-por-fichero.md).
+`limits.max_file_lines` (1000 por defecto): los errores salen en la rama que hace crecer un fichero por encima del límite; los ficheros largos heredados que no se hacen crecer solo avisan (`mth trace --limits` los lista).
 
 ## Contenido legado
 
-Si el repo declara `trace.legacy_base` (adopción gradual), los hallazgos en ficheros sin cambios desde ese commit son avisos: no bloquean ni los gates. `mth trace` muestra cuántos hay y `mth trace --legacy` los lista con `fichero:línea`. Un fichero que tocas o creas deja de ser legado: corrige sus hallazgos como cualquier otro. Detalle en [SPEC-0005](../../../../specs/features/SPEC-0005-modo-legado-en-la-trazabilidad.md).
+Si el repo declara `trace.legacy_base` (adopción gradual), los hallazgos en ficheros sin cambios desde ese commit son avisos: no bloquean ni los gates. `mth trace` muestra cuántos hay y `mth trace --legacy` los lista con `fichero:línea`. Un fichero que tocas o creas deja de ser legado: corrige sus hallazgos como cualquier otro.

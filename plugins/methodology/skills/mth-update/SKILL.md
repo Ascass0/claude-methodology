@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # Actualizar el repo al plugin nuevo
 
-`mth` es el comando del contexto de sesión (`$MTH`). El repo ya adoptó la metodología y el plugin ha cambiado: se trae lo nuevo sin tocar ninguna decisión ya tomada (SPEC-0021 y ADR-0017 de claude-methodology). Cambiar una decisión es `mth-reconfigure`; un repo sin `.claude/methodology.toml` es `mth-init`.
+`mth` es el comando del contexto de sesión (`$MTH`). El repo ya adoptó la metodología y el plugin ha cambiado: se trae lo nuevo sin tocar ninguna decisión ya tomada. Cambiar una decisión es `mth-reconfigure`; un repo sin `.claude/methodology.toml` es `mth-init`.
 
 ## 1. Diagnóstico
 

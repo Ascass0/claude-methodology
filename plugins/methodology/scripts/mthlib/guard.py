@@ -215,7 +215,7 @@ def violation(command: str, protected: set[str], current: str | None) -> str | N
             if any(r.split(":")[-1] in protected for r in refspecs) or (not refspecs and on_protected):
                 return f"no se hace push directo a {'/'.join(sorted(protected))}: usa mth integrate"
         if sub == "add" and _forces_work_dir(args):
-            return f"{WORK_DIR}/ es local y no se versiona (SPEC-0010)"
+            return f"{WORK_DIR}/ es local y no se versiona"
         if sub == "rebase" and not ({"--abort", "--quit"} & set(args)):
             return "rebase reescribe historia: usa `mth sync` (merge)"
         if sub == "pull" and ({"--rebase", "-r"} & set(args) or any(a.startswith("--rebase=") for a in args)):

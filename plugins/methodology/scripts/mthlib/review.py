@@ -87,7 +87,7 @@ class Parsed:
 
 
 def parse_report(text: str) -> Parsed:
-    """Count the findings of a reviewer report and check the figure the reviewer declared (SPEC-0013).
+    """Count the findings of a reviewer report and check the figure the reviewer declared.
 
     Raises:
         ReportError: No single HALLAZGOS section, a line that is not a finding, 'ninguno'
@@ -245,7 +245,7 @@ MAX_SUMMARY = 4096
 
 def record_report(git_dir: Path, root: Path, reviews_dir: Path, branch: str, sha: str, agent: str,
                   report: Path, summary: str) -> dict:
-    """Record a review computed from the report; failures are recorded as ``failed`` (SPEC-0013).
+    """Record a review computed from the report; failures are recorded as ``failed``.
 
     Returns:
         The stored entry. ``status`` is ``ok`` or ``failed``.
@@ -341,7 +341,7 @@ def check(git_dir: Path, branch: str, sha: str, agents: list[str]) -> dict[str, 
     if failed:
         detail = "; ".join(f"{a}: {found[a].get('reason', '?')} (intento {found[a].get('attempts', 1)})" for a in failed)
         raise MthError(f"Revisión fallida, no aprobada: {detail}.",
-                       hint="Pide una corrección al mismo agente con SendMessage y registra de nuevo (SPEC-0013).")
+                       hint="Pide una corrección al mismo agente con SendMessage y registra de nuevo.")
     blocking = [a for a in agents if found[a]["blocking"] > 0]
     if blocking:
         raise MthError(f"Hay hallazgos bloqueantes sin resolver: {', '.join(blocking)}.",

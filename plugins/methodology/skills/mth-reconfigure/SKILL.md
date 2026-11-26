@@ -6,7 +6,7 @@ model: opus
 
 # Reestructurar la metodología
 
-`mth` es el comando del contexto de sesión (`$MTH`). Es la misma entrevista que la adopción (skill `mth-init`), con el mismo catálogo de preguntas ([preguntas.md](../mth-init/preguntas.md)), pero sobre un repo que ya la ha adoptado. Las respuestas se aplican **sobre la configuración actual**: lo que no se pregunta no cambia (SPEC-0011 y ADR-0007 de claude-methodology).
+`mth` es el comando del contexto de sesión (`$MTH`). Es la misma entrevista que la adopción (skill `mth-init`), con el mismo catálogo de preguntas ([preguntas.md](../mth-init/preguntas.md)), pero sobre un repo que ya la ha adoptado. Las respuestas se aplican **sobre la configuración actual**: lo que no se pregunta no cambia.
 
 Si el repo no tiene `.claude/methodology.toml`, esta skill no aplica: usa `mth-init`.
 

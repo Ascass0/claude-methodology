@@ -503,7 +503,7 @@ def doctor(start: Path) -> int:
         gh_ok = GitHub(git.root)._gh("auth", "status", check=False).returncode == 0 if _has_gh() else False
         report(gh_ok, "gh instalado y autenticado")
     else:
-        report(True, f"forge = {cfg.forge}: mth integrate y mth release hacen solo la parte local (SPEC-0016)")
+        report(True, f"forge = {cfg.forge}: mth integrate y mth release hacen solo la parte local")
     try:
         status = install_hook(git, cfg["hooks"]["commit_msg"])
         report(status != "foreign", f"Hook commit-msg: {status}")

@@ -9,7 +9,7 @@ description: Publica una versión (development → main con merge commit, tag Se
 
 ## Decidir si publicar y con qué nivel (autónomo)
 
-No decides por intuición: lo calcula `mth` (SPEC-0017, ADR-0013). Tras **cada integración en `development`**, ejecuta `mth release --plan` (solo lee; desde `development`). Imprime los fragmentos con su nivel, el nivel resultante, la versión propuesta y una decisión con sus motivos:
+No decides por intuición: lo calcula `mth`. Tras **cada integración en `development`**, ejecuta `mth release --plan` (solo lee; desde `development`). Imprime los fragmentos con su nivel, el nivel resultante, la versión propuesta y una decisión con sus motivos:
 
 | Decisión | Qué haces |
 |---|---|

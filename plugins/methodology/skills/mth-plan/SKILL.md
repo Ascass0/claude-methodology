@@ -5,7 +5,7 @@ description: Crea y acuerda con la persona el plan de ejecución de una idea ant
 
 # Plan acordado
 
-`mth` es el comando del contexto de sesión (`$MTH`). Toda idea de tipo `feat`, `fix` o `hotfix` necesita un plan acordado con la persona **antes** de crear la rama, la spec o el código (SPEC-0023, ADR-0021). El plan es un fichero local `.work/plans/PLAN-NNNN-<slug>.md` que nunca se commitea: los agentes trabajan contra él y no contra la memoria de la sesión. `chore` y `docs` no lo necesitan.
+`mth` es el comando del contexto de sesión (`$MTH`). Toda idea de tipo `feat`, `fix` o `hotfix` necesita un plan acordado con la persona **antes** de crear la rama, la spec o el código. El plan es un fichero local `.work/plans/PLAN-NNNN-<slug>.md` que nunca se commitea: los agentes trabajan contra él y no contra la memoria de la sesión. `chore` y `docs` no lo necesitan.
 
 ## Quién hace qué
 
