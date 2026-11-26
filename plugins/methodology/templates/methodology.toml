@@ -122,6 +122,12 @@ exclude = ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generate
 # Gate de secretos en el historial (gitleaks). "" = sin decidir (mth update lo señala), "off" = desactivado,
 # "block" = mth integrate no sube una rama con secretos nuevos. mth secrets lo ejecuta a mano.
 mode = ""
+# Hook pre-commit que escanea lo preparado con gitleaks (falla cerrado sin la herramienta). "" = sin
+# decidir (mth update lo señala), "off" = sin hook, "on" = mth instala el hook (convivencia: hooks.pre_commit).
+hook = ""
+# Workflow de GitHub Actions (.github/workflows/secrets.yml) que escanea cada PR y cada push a main y
+# development. "" = sin decidir, "off" = sin workflow, "on" = mth escribe el workflow (solo con GitHub y ci.required).
+ci = ""
 # Hallazgos aceptados que ya estaban en el historial (mth secrets --history --accept). Rota esos secretos.
 baseline = ".gitleaks-baseline.json"
 
@@ -142,6 +148,9 @@ tag_prefix = "v"
 # activa), "replace" lo guarda como commit-msg.pre-mth e instala el de mth, "chain" lo guarda como
 # commit-msg.local y lo ejecuta antes de validar. Un gestor de hooks (husky…) se configura a mano.
 commit_msg = "own"
+# Lo mismo para un hook pre-commit ajeno (solo importa con secrets.hook = "on"): own, replace
+# (pre-commit.pre-mth) o chain (pre-commit.local, se ejecuta antes).
+pre_commit = "own"
 
 [autonomy]
 # "full": Claude crea ramas, commits, integra y publica sin preguntar. "until-pr": integrar y

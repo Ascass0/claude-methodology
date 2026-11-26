@@ -40,7 +40,7 @@ class ConfigTests(unittest.TestCase):
     def test_defaults_are_undecided(self):
         # verifies: SPEC-0022/AC-01
         section = parse(Path("."), BASE)["secrets"]
-        self.assertEqual(section, {"mode": "", "baseline": ".gitleaks-baseline.json"})
+        self.assertEqual(section, {"mode": "", "hook": "", "ci": "", "baseline": ".gitleaks-baseline.json"})
 
     def test_unknown_mode_or_empty_baseline_fail_fast_naming_the_key(self):
         # verifies: SPEC-0022/AC-01

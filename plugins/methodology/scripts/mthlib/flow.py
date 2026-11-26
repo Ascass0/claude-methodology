@@ -164,11 +164,17 @@ def _gate_secrets(ctx: Ctx, rev_range: str) -> None:
         say("· Secretos: sin hallazgos nuevos")
 
 
-def scan_secrets(ctx: Ctx, history: bool, accept: bool) -> None:
-    """``mth secrets``: scan the branch over its target, or the whole history."""
+def scan_secrets(ctx: Ctx, history: bool, accept: bool, staged: bool = False) -> None:
+    """``mth secrets``: scan the branch over its target, the whole history or what is staged."""
     section = ctx.cfg["secrets"]
     if accept and not history:
         raise MthError("--accept solo se usa con --history.")
+    if staged:
+        if history:
+            raise MthError("--staged no se combina con --history.")
+        secretgate.enforce_staged(ctx.root, section)
+        say("✓ Sin secretos en lo preparado")
+        return
     if history:
         if accept:
             count = secretgate.accept_history(ctx.root, section)

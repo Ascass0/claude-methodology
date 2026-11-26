@@ -24,6 +24,8 @@ if mode == "hang":
 if mode == "leak":
     finding = {"RuleID": "aws-access-token", "File": "src/cfg.py", "StartLine": 7,
                "Commit": "0123456789abcdef", "Secret": "TOPSECRET"}
+    if "--staged" in argv:  # a staged finding has no commit yet
+        finding["Commit"] = ""
     if "--baseline-path" in argv:  # like the real tool: accepted findings are not reported
         with open(argv[argv.index("--baseline-path") + 1]) as fh:
             if any(i.get("RuleID") == finding["RuleID"] and i.get("File") == finding["File"] for i in json.load(fh)):
