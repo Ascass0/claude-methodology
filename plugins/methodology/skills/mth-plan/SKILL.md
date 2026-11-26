@@ -14,7 +14,7 @@ description: Crea y acuerda con la persona el plan de ejecución de una idea ant
 | Tú (hilo principal) | Reúnes el contexto, lanzas al planificador, presentas el borrador, lo discutes con la persona y ejecutas `mth plan agree` solo con su visto bueno |
 | `planificador` (agente del plugin, siempre Opus) | Redacta el plan con los agentes del catálogo, las oleadas, las dependencias y los agentes que conviene instalar. No puede preguntar: lo que no sabe queda como pregunta abierta |
 | Persona | Decide y da el visto bueno |
-| Orquestador | Después, reparte el trabajo apoyándose en el plan |
+| Orquestador | Después, instala los agentes del catálogo que el plan recomienda y reparte el trabajo apoyándose en el plan |
 
 ## Pasos
 
@@ -37,7 +37,7 @@ description: Crea y acuerda con la persona el plan de ejecución de una idea ant
 4. Guarda su respuesta **tal cual** en el fichero del plan. No la retoques para que `agree` pase.
 5. Preséntalo a la persona: tareas por oleada con su agente sugerido, agentes a instalar y preguntas abiertas, con la ruta del fichero. Resuelve las preguntas abiertas con `AskUserQuestion`.
 6. Itera: si la persona cambia algo, relanza al planificador (mismo encargo más «Correcciones de la persona: …» y el plan actual) y guarda el resultado. Un cambio trivial que la persona dicte lo puedes escribir tú en el fichero.
-7. **Agentes a instalar:** si la sección no está vacía, pregunta cuáles instala la persona y ejecuta `mth agents add <agentes>`. Si rechaza alguno, anótalo en el plan: el orquestador asumirá esa tarea.
+7. **Agentes a instalar:** si la sección no está vacía, pregunta a la persona si los aprueba. Los que rechace se quitan del plan (y la tarea que los usaba pasa a otro agente o al hilo principal). Los que apruebe los instala el orquestador (`mth agents add`, oleada 0) al empezar; sin orquestador, los instalas tú.
 8. Con el visto bueno **explícito** de la persona: `mth plan agree PLAN-NNNN`. Valida el plan y, si falla, devuelve los problemas: corrígelos con la persona. Nunca edites el estado a mano.
 9. Crea la rama con `mth branch <tipo> <slug> --plan PLAN-NNNN` y sigue la skill `mth-develop`. Al terminar el trabajo del plan: `mth plan done PLAN-NNNN` (o `--abandon`).
 

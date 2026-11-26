@@ -157,7 +157,7 @@ class VersionFileFlowTests(unittest.TestCase):
     def adopt(self, entry: str = ENTRY) -> None:
         self.mth("init")
         cfg_path = self.work / ".claude/methodology.toml"
-        cfg_path.write_text(cfg_path.read_text().replace('test = ""', 'test = "true"') + "\n" + entry)
+        cfg_path.write_text(test_mth.without_plan_gate(cfg_path.read_text()).replace('test = ""', 'test = "true"') + "\n" + entry)
         (self.work / "package.json").write_text(PACKAGE, encoding="utf-8")
         self.git("add", "-A")
         self.mth("commit", "--type", "chore", "--scope", "methodology", "--summary", "configure repo",

@@ -70,6 +70,12 @@ required_for = ["feat", "fix", "hotfix"]
 coder = ""
 documenter = "documentador"
 verifier = "verificador"
+planner = "planificador"
+
+[plans]
+# Tipos de rama que necesitan un plan acordado con la persona (.work/plans/PLAN-NNNN, local) antes de crearse
+# (mth branch --plan) y de integrarse. chore y docs no lo necesitan. Skill mth-plan.
+required_for = ["feat", "fix", "hotfix"]
 
 [models]
 # Alias de la herramienta Agent de Claude Code: haiku, sonnet, opus, fable.

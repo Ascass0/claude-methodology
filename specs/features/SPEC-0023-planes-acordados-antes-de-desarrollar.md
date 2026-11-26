@@ -72,7 +72,7 @@
 
 - `agents/planificador.md`: agente del plugin de solo lectura, sin `model` en la cabecera. Lee el catálogo con `mth agents list`, asigna solo agentes del catálogo, recomienda instalar en `Agentes a instalar` los que el repo no tiene, no asigna los de requisitos sin cumplir y deja como preguntas abiertas lo que no sabe.
 - Skill `mth-plan`: reúne el contexto, lanza el planificador con `model: opus`, presenta el borrador, lo itera con la persona y ejecuta `mth plan agree` solo con su visto bueno.
-- Orquestador (catálogo): lee el plan acordado de la rama, no empieza sin él, sigue oleadas y dependencias, pasa el plan y la tarea en cada encargo y anota desviaciones en el `Registro de ejecución`.
+- Orquestador (catálogo): lee el plan acordado de la rama, no empieza sin él, instala con `mth agents add` los agentes del catálogo que el plan recomienda (y solo esos), sigue oleadas y dependencias, pasa el plan y la tarea en cada encargo y anota desviaciones en el `Registro de ejecución`.
 - Verificador: recibe el plan acordado y avisa como hallazgo (en `HALLAZGOS`, sin secciones nuevas) si el diff se sale de él.
 
 ## Modos de fallo
@@ -107,7 +107,7 @@
 - **AC-14**: `mth doctor` DEBE comprobar el agente del rol `planner`.
 - **AC-15**: `agents/planificador.md` DEBE existir sin `model` en su cabecera ni herramientas de escritura, y su texto DEBE exigir leer el catálogo con `mth agents list`, asignar solo agentes del catálogo, recomendar instalar los que falten con motivo y tarea, no asignar los de requisitos sin cumplir y dejar como pregunta abierta lo que no sepa.
 - **AC-16**: La skill `mth-plan` DEBE existir, lanzar el planificador con `model: opus` y ejecutar `mth plan agree` solo con el visto bueno de la persona.
-- **AC-17**: El texto del orquestador DEBE exigir el plan acordado, las oleadas y dependencias, pasar plan y tarea en cada encargo y anotar las desviaciones en el `Registro de ejecución`; el texto del verificador DEBE pedir el aviso de desvío del plan como hallazgo.
+- **AC-17**: El texto del orquestador DEBE exigir el plan acordado, instalar los agentes del catálogo que el plan recomienda y ninguno más, las oleadas y dependencias, pasar plan y tarea en cada encargo y anotar las desviaciones en el `Registro de ejecución`; el texto del verificador DEBE pedir el aviso de desvío del plan como hallazgo.
 - **AC-18**: Las claves `[plans]` y `[roles].planner` DEBEN llegar a un repo adoptado por el gap `config` de `mth update` sin una brecha nueva.
 - **AC-19**: El ciclo de `context/core.md`, `mth-develop`, `mth-branch`, el README y el catálogo de agentes DEBEN incluir el plan acordado y el planificador.
 

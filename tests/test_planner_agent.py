@@ -46,7 +46,7 @@ class PlanReadersTests(unittest.TestCase):
     def test_orchestrator_and_verifier_work_from_the_plan(self):
         # verifies: SPEC-0023/AC-17
         orchestrator = (PLUGIN / "catalog" / "orquestador" / "agent.md.tmpl").read_text(encoding="utf-8")
-        for needle in ("plan acordado", "oleadas", "Registro de ejecución", "ruta del plan y la tarea"):
+        for needle in ("plan acordado", "oleadas", "Registro de ejecución", "ruta del plan y la tarea", "mth agents add"):
             self.assertIn(needle, orchestrator)
         verifier = (PLUGIN / "agents" / "verificador.md").read_text(encoding="utf-8")
         for needle in ("plan acordado", "Registro de ejecución", "nada de secciones nuevas"):

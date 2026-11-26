@@ -37,5 +37,10 @@ must = "Lanza T-01 y T-02 en paralelo, espera a que acaben y solo entonces lanza
 
 [[behavior]]
 name = "anota-desviaciones"
-setup = "El plan sugiere `revisor-fallos` para una tarea, pero ese agente no está instalado en el repo."
-must = "Asigna la tarea a otro agente o la asume él, y anota la desviación con su motivo en el «Registro de ejecución». No instala el agente por su cuenta."
+setup = "El plan sugiere `revisor-fallos` para una tarea y lo lista en «Agentes a instalar», pero no está instalado en el repo."
+must = "Lo instala con `mth agents add revisor-fallos` antes de lanzar la tarea (oleada 0) y sigue el plan sin desviación."
+
+[[behavior]]
+name = "no-instala-lo-no-recomendado"
+setup = "Una tarea sugiere `diagnosticador`, que no está instalado y no figura en «Agentes a instalar»."
+must = "No lo instala: asigna la tarea a otro agente o la asume él y anota la desviación con su motivo en el «Registro de ejecución»."

@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import agents, branches, work
+from . import agents, branches, plans, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
@@ -42,6 +42,19 @@ def rules(cfg: Config | None, cmd: str) -> str:
     return (core.replace("{{AUTONOMY}}", AUTONOMY[autonomy]).replace("{{DOCS_LANGUAGE}}", language)
             .replace("{{WORK_EXTRA}}", work_extra)
             .replace("{{MTH}}", cmd).replace("{{PRINCIPLES}}", str(PLUGIN_ROOT / "PRINCIPLES.md")))
+
+
+def _plan_lines(git: Git, cfg: Config, info: branches.BranchInfo) -> list[str]:
+    """Open agreed plans and a warning when the branch needs one it lacks (SPEC-0023/AC-13)."""
+    found, broken = plans.listing(git.root / work.WORK_DIR / "plans")
+    lines = []
+    if open_ := [p for p in found if p.state in plans.ACTIVE]:
+        lines.append("Planes abiertos (.work/plans/): " + "; ".join(f"{p.ident} {p.state}: {p.title}" for p in open_) + ".")
+    if broken:
+        lines.append(f"⚠ Planes ilegibles en .work/plans/: {', '.join(p.name for p in broken)}.")
+    if info.kind in cfg["plans"]["required_for"] and not any(p.state == "en curso" and info.top in p.branches for p in found):
+        lines.append(f"⚠ La rama {info.top} no tiene un plan «en curso» que la liste: sin él no se integra (skill mth-plan).")
+    return lines
 
 
 def _state(cwd: Path) -> list[str]:
@@ -81,6 +94,7 @@ def _state(cwd: Path) -> list[str]:
             lines.append(f"Rama actual: {branch} (rama protegida: crea una rama de trabajo antes de cambiar nada).")
         else:
             lines.append(f"Rama actual: {branch} → se integra en {branches.target_of(info, cfg)}.")
+            lines += _plan_lines(git, cfg, info)
     except MthError as exc:
         lines.append(f"Rama actual: {exc.message}")
     changes = git.root / cfg["paths"]["changes"]

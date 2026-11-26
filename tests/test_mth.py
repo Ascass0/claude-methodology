@@ -233,6 +233,11 @@ class LauncherTests(unittest.TestCase):
         shutil.rmtree(tmp)
 
 
+def without_plan_gate(text: str) -> str:
+    """These flows predate SPEC-0023 and do not exercise plans: open the gate in their configuration."""
+    return re.sub(r"(\[plans\][^\[]*?required_for = )\[[^\]]*\]", r"\1[]", text, flags=re.S)
+
+
 @unittest.skipUnless(shutil.which("git"), "git required")
 class EndToEndTests(unittest.TestCase):
     """main → development → feat (+ child) → release → hotfix, against a local remote."""
@@ -287,7 +292,7 @@ class EndToEndTests(unittest.TestCase):
         self.mth("init")
         self.assertEqual(self.git("branch", "--show-current"), "chore/adopt-methodology")
         cfg_path = self.work / ".claude/methodology.toml"
-        cfg = (cfg_path.read_text().replace('test = ""', 'test = "true"')
+        cfg = (without_plan_gate(cfg_path.read_text()).replace('test = ""', 'test = "true"')
                .replace('agents = ["verificador"]', 'agents = ["verificador", "revisor-x", "revisor-docs"]')
                .replace('# revisor-contratos = ["subagents/**", "schemas/**"]', 'revisor-docs = ["docs/**", "!docs/drafts/**"]'))
         cfg_path.write_text(cfg)
@@ -415,6 +420,8 @@ class EndToEndTests(unittest.TestCase):
             [commits]
             external_refs = ["refs/remotes/upstream/main"]
             [review]
+            required_for = []
+            [plans]
             required_for = []
             [ci]
             required = false
