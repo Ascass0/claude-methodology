@@ -14,6 +14,7 @@
 
 1. Se aplican las brechas automáticas de esta ejecución (sin cambiar ningún valor ya decidido):
    - `bloque`: bloque stale en CLAUDE.md
+   - La sección «Este repositorio se desarrolla a sí mismo» estaba dentro de los marcadores gestionados y la regeneración la borró: se repone fuera del bloque, que solo contiene lo generado.
 2. Quedan pendientes; las conduce la skill `mth-update` o la persona:
    - `humo` (informativa): Las restricciones de los agentes del catálogo no se han verificado con Claude Code 2.1.332 (Claude Code) (mth smoke).
    - `triangulacion` (informativa): 43 criterios con un único test
