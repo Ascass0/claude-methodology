@@ -37,7 +37,9 @@
 
 - Ruta `.work/plans/PLAN-NNNN-<slug>.md`: `NNNN` es el mayor número existente más uno, con cuatro cifras.
 - Cabecera con `- Estado:`, `- Fecha:`, `- Acordado con:`, `- Refs:` y `- Rama:` (una o varias ramas).
-- Secciones, en este orden: `Idea`, `Decisiones acordadas`, `Fuera de alcance`, `Tareas`, `Agentes a instalar`, `Verificación y cierre`, `Riesgos`, `Preguntas abiertas` y `Registro de ejecución`.
+- Secciones de un plan ejecutable, en este orden: `Idea`, `Decisiones acordadas`, `Fuera de alcance`, `Tareas`, `Agentes a instalar`, `Verificación y cierre`, `Riesgos`, `Preguntas abiertas` y `Registro de ejecución`.
+- Una hoja de ruta cambia `Tareas`, `Agentes a instalar` y `Verificación y cierre` por una sección `Fases` (cada fase tiene después su propio plan): `Idea`, `Decisiones acordadas`, `Fases`, `Fuera de alcance`, `Riesgos`, `Preguntas abiertas` y `Registro de ejecución`.
+- El formato del plan no depende de `language.docs`.
 - `Tareas`: tabla `| Tarea | Oleada | Agente sugerido | Depende de | Ficheros | Hecho cuando |`, hasta 50 tareas.
 - Estados: `borrador`, `acordado`, `en curso`, `ejecutado`, `abandonado`.
 
@@ -52,7 +54,7 @@
 | `done PLAN-NNNN [--abandon]` | Pasa a `ejecutado`, o a `abandonado` con `--abandon` |
 
 - Validación de `agree`: secciones obligatorias presentes, `Preguntas abiertas` sin pendientes («Ninguna»), IDs de tarea únicos, `Depende de` con tareas que existen y sin ciclos, la oleada de una tarea mayor que la de sus dependencias, ficheros disjuntos dentro de una oleada (mismas reglas de solape que `mth plan check`).
-- Transiciones: `borrador` → `acordado` → `en curso` → `ejecutado`; `abandonado` desde cualquier estado distinto de `ejecutado`. Cualquier otra se rechaza.
+- Transiciones: `borrador` → `acordado` → `en curso` → `ejecutado`; también `acordado` → `ejecutado` (una hoja de ruta no abre rama propia); `abandonado` desde cualquier estado distinto de `ejecutado`. Cualquier otra se rechaza.
 - Las acciones `check`, `verify`, `model` y `stats` siguen siendo las del «Plan de trabajo» de una spec.
 
 ### Gate
