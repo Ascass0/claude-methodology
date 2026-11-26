@@ -9,15 +9,17 @@ import json
 import shutil
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from .errors import MthError
+from .files import atomic_write
 from .proc import run
 
 TOOL = "gitleaks"
 MODES = ("", "off", "block")
 EXIT_LEAKS = 2  # passed as --exit-code so a tool failure (1) is not read as a finding
+SCAN_TIMEOUT = 600  # seconds: nothing waits forever; a timeout blocks like any other failure (SPEC-0022/AC-15)
 INSTALL_HINT = "Instala gitleaks (https://github.com/gitleaks/gitleaks#installing) o pon secrets.mode = \"off\"."
 ACCEPT_WARNING = ("Los secretos aceptados siguen en el historial: rótalos en su servicio. "
                   "Aceptarlos no los invalida.")
@@ -42,8 +44,25 @@ def validate(section: dict[str, Any]) -> None:
     """
     if section["mode"] not in MODES:
         raise MthError(f"'secrets.mode' = {section['mode']!r} debe ser \"\" (sin decidir), \"off\" o \"block\".")
-    if not section["baseline"].strip():
-        raise MthError("'secrets.baseline' debe ser una ruta no vacía.")
+    raw = section["baseline"].strip()
+    parts = PurePath(raw).parts
+    if not raw or PurePath(raw).is_absolute() or ".." in parts or (parts and parts[0] == ".git"):
+        raise MthError(f"'secrets.baseline' = {section['baseline']!r} debe ser una ruta relativa dentro del repo, "
+                       "sin '..' y fuera de .git/.")  # the value comes from the repo: never trust it (SPEC-0022/AC-14)
+
+
+def baseline_path(root: Path, section: dict[str, Any]) -> Path:
+    """The baseline file inside the repository.
+
+    Raises:
+        MthError: The path resolves (symbolic links included) outside the repository or into ``.git``.
+    """
+    top = root.resolve()
+    path = (top / section["baseline"]).resolve()
+    if not path.is_relative_to(top) or path.is_relative_to(top / ".git"):
+        raise MthError(f"'secrets.baseline' = {section['baseline']!r} apunta fuera del repo o dentro de .git/.",
+                       hint="Usa una ruta relativa dentro del repo.")
+    return path
 
 
 def is_installed() -> bool:
@@ -88,18 +107,19 @@ def scan(root: Path, rev_range: str | None, baseline: Path | None, report_copy: 
             args.append(f"--log-opts={rev_range}")
         if baseline is not None and baseline.is_file():
             args += ["--baseline-path", str(baseline)]
-        done = run(args, cwd=root, check=False)
+        done = run(args, cwd=root, check=False, timeout=SCAN_TIMEOUT)
         if done.returncode not in (0, EXIT_LEAKS):
-            tail = (done.stderr or done.stdout).strip().splitlines()[-1:] or ["sin salida"]
-            raise MthError(f"gitleaks falló (código {done.returncode}): {tail[0]}",
-                           hint="Revisa el rango de commits (un clon superficial puede no tenerlo) y repite.")
+            # The tool's own output is not echoed: it can quote a match before --redact applies.
+            raise MthError(f"gitleaks falló (código {done.returncode}).",
+                           hint="Revisa el rango de commits (un clon superficial puede no tenerlo) y repite el escaneo.")
+        # gitleaks may write no report when there is nothing to report: exit 0 without one is clean.
         text = report.read_text(encoding="utf-8") if report.is_file() else ""
         found = parse_report(text)
         if done.returncode == EXIT_LEAKS and not found:
             raise MthError("gitleaks avisó de hallazgos pero no dejó informe.", hint="Repite el escaneo.")
-        if report_copy is not None:
+        if report_copy is not None:  # redacted by --redact: the baseline never stores a secret value
             report_copy.parent.mkdir(parents=True, exist_ok=True)
-            report_copy.write_text(text if text.strip() else "[]\n", encoding="utf-8")
+            atomic_write(report_copy, text if text.strip() else "[]\n")
         return found
 
 
@@ -109,7 +129,7 @@ def enforce(root: Path, section: dict[str, Any], rev_range: str | None) -> None:
     Raises:
         MthError: There are findings, or the scan could not run.
     """
-    found = scan(root, rev_range, root / section["baseline"])
+    found = scan(root, rev_range, baseline_path(root, section))
     if found:
         listing = "\n".join(f"  - {f}" for f in found[:50])
         more = f"\n  … y {len(found) - 50} más" if len(found) > 50 else ""
@@ -119,4 +139,4 @@ def enforce(root: Path, section: dict[str, Any], rev_range: str | None) -> None:
 
 def accept_history(root: Path, section: dict[str, Any]) -> int:
     """Write the baseline with every finding in the history and return how many there are."""
-    return len(scan(root, None, None, report_copy=root / section["baseline"]))
+    return len(scan(root, None, None, report_copy=baseline_path(root, section)))

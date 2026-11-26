@@ -68,6 +68,8 @@
 | FM-05 | Línea base inexistente | Se escanea sin ella | AC-05 |
 | FM-06 | El informe temporal queda en disco | Se borra siempre, también ante error | AC-10 |
 | FM-07 | Aceptar un hallazgo sin rotarlo | `--accept` avisa de que hay que rotar | AC-06 |
+| FM-08 | `secrets.baseline` absoluta, con `..`, en `.git/` o que resuelve fuera del repo (enlace simbólico) | Error de configuración o de ejecución; no se escribe ni se lee fuera del repo | AC-14 |
+| FM-09 | `gitleaks` no termina | Se corta a los 600 s y bloquea como cualquier otro fallo | AC-15 |
 
 ## Criterios de aceptación
 
@@ -79,13 +81,16 @@
 - **AC-06**: CUANDO se ejecuta `mth secrets --history --accept`, `mth` DEBE escribir la línea base con los hallazgos y avisar de que los secretos deben rotarse.
 - **AC-07**: CUANDO `secrets.mode = "block"`, `mth integrate` DEBE escanear la rama antes de subirla y, con un hallazgo, DEBE fallar sin subir; con `"off"` NO DEBE escanear; con `""` DEBE avisar de que falta decidir.
 - **AC-08**: SI `gitleaks` no está instalado, ENTONCES `mth secrets` y el gate DEBEN fallar con el remedio y NO DEBEN darlo por limpio.
-- **AC-09**: SI `gitleaks` termina con un código distinto de 0 y 2 o su informe no es legible, ENTONCES `mth` DEBE fallar nombrando la causa.
+- **AC-09**: SI `gitleaks` termina con un código distinto de 0 y 2 o su informe no es legible, ENTONCES `mth` DEBE fallar nombrando la causa sin reproducir la salida de la herramienta.
 - **AC-10**: `mth secrets` DEBE borrar el informe temporal también cuando el escaneo falla.
 - **AC-11**: `mth doctor` DEBE marcar ✗ con `block` y `gitleaks` ausente, y ⚠ con `""` o `off`.
 - **AC-12**: MIENTRAS `secrets.mode = ""`, `mth update --plan` DEBE listar la brecha `secretos` de clase `decision`; con `"off"` o `"block"` NO DEBE listarla.
+- **AC-14**: SI `secrets.baseline` es absoluta, contiene `..`, empieza por `.git` o resuelve fuera del repo, ENTONCES `mth` DEBE fallar sin leer ni escribir ese fichero.
+- **AC-15**: SI `gitleaks` no termina en `SCAN_TIMEOUT` segundos, ENTONCES `mth` DEBE cortarlo y fallar.
 - **AC-13**: El README, `mth-update` y `mth-init` DEBEN documentar `[secrets]`, `mth secrets` y la brecha, y `revisor-seguridad` DEBE vigilar `secrets.baseline` y `secrets.mode`.
 
 ## Notas
 
 - Tests con un `gitleaks` falso en `PATH` (no se exige la herramienta real para correr la suite).
+- La línea base y la configuración de `gitleaks` viajan en la rama que se escanea: una rama hostil podría ampliarlas. `revisor-seguridad` vigila esos cambios en el diff (ADR-0020).
 - Este repo queda sin decidir (`""`) hasta que la persona elija; `mth update --plan` lo mostrará.

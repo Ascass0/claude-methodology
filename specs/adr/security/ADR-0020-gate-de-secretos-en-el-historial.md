@@ -21,7 +21,8 @@
 4. Los hallazgos se imprimen con regla, fichero, línea y commit corto; nunca el valor. El informe temporal de la herramienta se pide con `--redact` y se borra siempre.
 5. Los hallazgos ya existentes se aceptan de forma explícita con `mth secrets --history --accept`, que escribe `secrets.baseline` (informe redactado). Solo los hallazgos fuera de la línea base bloquean. Aceptar no limpia: el comando avisa de que el secreto debe rotarse.
 6. La remediación de un secreto filtrado es rotarlo; ningún comando de `mth` reescribe historia.
-7. `mth doctor` marca ✗ si `mode = "block"` y falta `gitleaks`, y ⚠ si el modo está sin decidir o en `off`.
+7. `secrets.baseline` viene del repo y no es de fiar: DEBE ser relativa, sin `..`, fuera de `.git/` y sin resolver fuera del repo; el escaneo se corta a los 600 s y falla cerrado. [script]
+8. `mth doctor` marca ✗ si `mode = "block"` y falta `gitleaks`, y ⚠ si el modo está sin decidir o en `off`.
 
 ## Rechazado
 
@@ -30,6 +31,7 @@
 - Escanear solo en la CI: no cubre a quien no use `mth` ni evita subir el secreto; la CI sigue siendo la red de respaldo.
 - Hook de precommit en esta iteración: el hook local no se puede imponer y exige instalarlo en cada clon; queda para una spec posterior.
 - Limpiar el historial con `filter-repo`: reescribe historia compartida y no invalida el secreto.
+- Llamar al módulo `secrets.py`: choca con la biblioteca estándar; es `secretgate.py`.
 - Escáner propio con expresiones regulares: reinventa una herramienta madura y se queda atrás.
 
 ## Consecuencias
@@ -39,6 +41,7 @@
 - **−** Dependencia externa opcional (`gitleaks`) y una sección de configuración más.
 - **riesgo** Aceptar un hallazgo sin rotarlo → el comando lo avisa y `revisor-seguridad` mira la línea base en el diff.
 - **riesgo** El gate se apaga con `mode = "off"` → `mth doctor` lo marca y el cambio queda en el diff.
+- **riesgo** La línea base y la configuración de `gitleaks` viajan en la rama escaneada: una rama hostil podría ampliarlas → `revisor-seguridad` mira esos ficheros en el diff.
 - **riesgo** Un escáner no detecta toda contraseña (p. ej. una inventada en un fichero) → barrera, no garantía.
 
 ## Impone

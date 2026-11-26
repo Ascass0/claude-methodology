@@ -52,6 +52,14 @@ class ConfigTests(unittest.TestCase):
         for mode in ("", "off", "block"):
             parse(Path("."), BASE + f'[secrets]\nmode = "{mode}"\n')
 
+    def test_baseline_outside_the_repo_is_rejected(self):
+        # verifies: SPEC-0022/AC-14
+        # verifies: SPEC-0022/FM-08
+        for value in ("/etc/passwd", "../x.json", "a/../../x.json", ".git/hooks/pre-commit"):
+            with self.assertRaises(MthError, msg=value):
+                parse(Path("."), BASE + f'[secrets]\nbaseline = "{value}"\n')
+        parse(Path("."), BASE + '[secrets]\nbaseline = "config/.gitleaks-baseline.json"\n')
+
 
 class ScanTests(unittest.TestCase):
     def setUp(self):
@@ -127,6 +135,38 @@ class ScanTests(unittest.TestCase):
                 secretgate.enforce(self.root, SECTION, "a..b")
         self.assertIn("gitleaks", ctx.exception.message)
         self.assertIn("Instala", ctx.exception.hint)
+
+    def test_baseline_that_resolves_outside_the_repo_is_refused(self):
+        # verifies: SPEC-0022/AC-14
+        outside = self.tmp / "outside.json"
+        (self.root / "link.json").symlink_to(outside)
+        self.mode("leak")
+        for call in (lambda s: secretgate.accept_history(self.root, s), lambda s: secretgate.enforce(self.root, s, "a..b")):
+            with self.assertRaises(MthError):
+                call({**SECTION, "baseline": "link.json"})
+        self.assertFalse(outside.exists())
+
+    def test_accepted_findings_stop_blocking_and_new_ones_still_block(self):
+        # verifies: SPEC-0022/AC-05
+        self.mode("leak")
+        with self.assertRaises(MthError):
+            secretgate.enforce(self.root, SECTION, "a..b")
+        secretgate.accept_history(self.root, SECTION)
+        secretgate.enforce(self.root, SECTION, "a..b")
+
+    def test_tool_output_is_never_echoed_and_a_hang_times_out(self):
+        # verifies: SPEC-0022/AC-09
+        # verifies: SPEC-0022/AC-15
+        # verifies: SPEC-0022/FM-09
+        self.mode("error")
+        with self.assertRaises(MthError) as ctx:
+            secretgate.enforce(self.root, SECTION, "a..b")
+        self.assertNotIn("TOPSECRET", ctx.exception.message + (ctx.exception.hint or ""))
+        self.mode("hang")
+        with mock.patch.object(secretgate, "SCAN_TIMEOUT", 1):
+            with self.assertRaises(MthError) as ctx:
+                secretgate.enforce(self.root, SECTION, "a..b")
+        self.assertIn("no respondió", ctx.exception.message)
 
     def test_tool_failure_or_unreadable_report_fail_closed(self):
         # verifies: SPEC-0022/AC-09

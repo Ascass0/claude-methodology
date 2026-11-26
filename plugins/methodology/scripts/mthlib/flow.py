@@ -155,6 +155,7 @@ def _gate_trace(ctx: Ctx) -> None:
 
 
 def _gate_secrets(ctx: Ctx, rev_range: str) -> None:
+    # ADR-0020 §1-2: block scans and fails closed; "" warns and continues; "off" does nothing.
     mode = ctx.cfg["secrets"]["mode"]
     if mode == "":
         warn("secrets.mode sin decidir: no se buscan secretos (mth update --plan lo detalla).")

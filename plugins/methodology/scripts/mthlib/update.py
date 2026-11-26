@@ -131,7 +131,7 @@ def _format(repo: Repo) -> str | None:
     return f"{len(old)} de {len(docs)} documentos sin «{vocab.format_label}: {vocab.compact}»" if old else None
 
 
-def _secrets(repo: Repo) -> str | None:
+def _secrets(repo: Repo) -> str | None:  # SPEC-0022/AC-12
     return "secrets.mode sin decidir: no se buscan secretos al integrar" if repo.cfg["secrets"]["mode"] == "" else None
 
 
