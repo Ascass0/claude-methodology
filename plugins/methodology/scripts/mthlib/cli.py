@@ -405,6 +405,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--single", action="store_true", help="lista los criterios de aceptación con un único test")
     s.add_argument("--limits", action="store_true", help="lista los ficheros por encima del límite de líneas")
 
+    s = sub.add_parser("secrets", help="busca secretos en la rama o en el historial (gitleaks)")
+    s.add_argument("--history", action="store_true", help="escanea todo el historial")
+    s.add_argument("--accept", action="store_true", help="con --history: acepta los hallazgos actuales como línea base")
+
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
     s.add_argument("--refs")
@@ -519,7 +523,9 @@ def _dispatch(args: argparse.Namespace) -> int:
     if c == "smoke":
         return _cmd_smoke(args)
     ctx = _ctx(c)
-    if c == "doc":
+    if c == "secrets":
+        flow.scan_secrets(ctx, args.history, args.accept)
+    elif c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
     elif c == "branch":
         start(ctx, args.kind, args.slug, args.child, args.spec)

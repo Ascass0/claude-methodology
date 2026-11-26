@@ -28,13 +28,14 @@ from mthlib.errors import MthError  # noqa: E402
 from mthlib.git import Git  # noqa: E402
 
 FALLOS = catalog.load_meta(catalog.CATALOG_DIR, "revisor-fallos")["version"]
+SEGURIDAD = catalog.load_meta(catalog.CATALOG_DIR, "revisor-seguridad")["version"]
 
 COMPACT = "# SPEC-0001 · T\n\n- Estado: aprobada\n- Formato: compacto\n"
 LEGACY = "# SPEC-0002 · T\n\n- Estado: aprobada\n"
 
 
 class UpdateTestCase(unittest.TestCase):
-    config_text = support.template_with_agents()
+    config_text = support.template_with_agents().replace('mode = ""', 'mode = "off"', 1)  # SPEC-0022: decided
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()
@@ -354,7 +355,7 @@ class ApplyTests(unittest.TestCase):
         self.mth("update")
         self.mth("agents", "add", "revisor-seguridad")  # a second agent, outdated after the first run
         agent = self.work / ".claude/agents/revisor-seguridad.md"
-        agent.write_text(agent.read_text().replace("revisor-seguridad@1.0.0", "revisor-seguridad@0.9.0"))
+        agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
         self.mth("update")
         self.assertEqual(self.git("rev-list", "--count", "origin/development..HEAD"), "2")
         adrs = [f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines() if f.endswith(UPDATE_ADR)]

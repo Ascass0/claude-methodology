@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import branches, changelog, commits, forge, globs, limits, releaseplan, review, versions
+from . import branches, changelog, commits, forge, globs, limits, releaseplan, review, secretgate, versions
 from .config import Config
 from .errors import MthError
 from .files import atomic_write
@@ -152,6 +152,35 @@ def _gate_trace(ctx: Ctx) -> None:
         raise MthError(f"Trazabilidad rota ({len(findings)} hallazgos):\n{listing}{more}",
                        hint="Corrige las referencias (skill mth-trace) y vuelve a intentarlo.")
     say("· Trazabilidad OK")
+
+
+def _gate_secrets(ctx: Ctx, rev_range: str) -> None:
+    mode = ctx.cfg["secrets"]["mode"]
+    if mode == "":
+        warn("secrets.mode sin decidir: no se buscan secretos (mth update --plan lo detalla).")
+    elif mode == "block":
+        secretgate.enforce(ctx.root, ctx.cfg["secrets"], rev_range)
+        say("· Secretos: sin hallazgos nuevos")
+
+
+def scan_secrets(ctx: Ctx, history: bool, accept: bool) -> None:
+    """``mth secrets``: scan the branch over its target, or the whole history."""
+    section = ctx.cfg["secrets"]
+    if accept and not history:
+        raise MthError("--accept solo se usa con --history.")
+    if history:
+        if accept:
+            count = secretgate.accept_history(ctx.root, section)
+            say(f"✓ {count} hallazgos aceptados en {section['baseline']}")
+            warn(secretgate.ACCEPT_WARNING)
+            return
+        secretgate.enforce(ctx.root, section, None)
+    else:
+        info = branches.parse(ctx.git.current_branch(), ctx.cfg)
+        if info is None:
+            raise MthError("La rama actual no tiene destino con el que comparar.", hint="Usa `mth secrets --history`.")
+        secretgate.enforce(ctx.root, section, f"{ctx.git.remote_ref(branches.target_of(info, ctx.cfg))}..HEAD")
+    say("✓ Sin secretos nuevos")
 
 
 def _gate_tests(ctx: Ctx) -> str:
@@ -397,6 +426,7 @@ def integrate(ctx: Ctx, title: str, summary: str) -> None:
     found = _gate_commits(ctx, f"{g.remote_ref(target)}..HEAD")
     frag = _fragment(ctx, info)
     _gate_trace(ctx)
+    _gate_secrets(ctx, f"{g.remote_ref(target)}..HEAD")
     reviews = _review(ctx, info, branch)
     tests = _gate_tests(ctx)
 
