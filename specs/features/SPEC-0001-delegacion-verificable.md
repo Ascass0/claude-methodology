@@ -30,6 +30,7 @@ Al delegar la sesión principal:
 - Lanzar o relanzar agentes desde `mth`: lo hace la sesión principal, siguiendo la skill.
 - Revisar la spec y el plan con contexto limpio antes de aprobarlos, clasificar los hallazgos al resolver e informes de deriva: specs futuras.
 - Guardar el resultado de `mth plan verify` como gate de `mth integrate`.
+- Los planes acordados antes de desarrollar y sus acciones de `mth plan` (`new`, `agree`, `list`, `show`, `done`): [SPEC-0023](SPEC-0023-planes-acordados-antes-de-desarrollar.md). Las acciones de esta spec son las del «Plan de trabajo» de una spec.
 - Validar con JSON Schema: la validación es propia, estricta y sin dependencias.
 
 ## Comportamiento

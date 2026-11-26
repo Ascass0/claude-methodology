@@ -131,6 +131,10 @@ def _format(repo: Repo) -> str | None:
     return f"{len(old)} de {len(docs)} documentos sin «{vocab.format_label}: {vocab.compact}»" if old else None
 
 
+def _secrets(repo: Repo) -> str | None:  # SPEC-0022/AC-12
+    return "secrets.mode sin decidir: no se buscan secretos al integrar" if repo.cfg["secrets"]["mode"] == "" else None
+
+
 def _smoke(repo: Repo) -> str | None:
     notices = smoke.warnings(repo.git, bool(agents.catalog_names(repo.cfg.root)))
     return notices[0] if notices else None
@@ -149,6 +153,7 @@ REGISTRY: tuple[GapKind, ...] = (
     GapKind("bloque", AUTOMATIC, "Regenerar el bloque de la metodología", _block),
     GapKind("hook", AUTOMATIC, "Reinstalar el hook según hooks.commit_msg", _hook),
     GapKind("formato", DECISION, "Migración: convertir los documentos o dejarlos como están", _format),
+    GapKind("secretos", DECISION, "Activar el gate de secretos (secrets.mode = \"block\") o desactivarlo (\"off\")", _secrets),
     GapKind("humo", INFORMATIVE, "Ejecutar mth smoke", _smoke),
     GapKind("triangulacion", INFORMATIVE, "Trabajo de tests por spec (mth trace --single)", _single),
 )

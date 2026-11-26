@@ -87,7 +87,7 @@ class ReleasePlanFlowTests(unittest.TestCase):
         self.setUp_base()
         self.mth("init")
         cfg_path = self.work / ".claude/methodology.toml"
-        cfg_path.write_text(cfg_path.read_text().replace('test = ""', 'test = "true"')
+        cfg_path.write_text(test_mth.without_plan_gate(cfg_path.read_text()).replace('test = ""', 'test = "true"')
                             .replace('agents = ["verificador"]', "agents = []"))
         self.git("add", "-A")
         self.mth("commit", "--type", "chore", "--scope", "methodology", "--summary", "configure repo",

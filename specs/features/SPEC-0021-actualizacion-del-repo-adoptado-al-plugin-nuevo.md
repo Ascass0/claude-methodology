@@ -52,6 +52,7 @@ Registro inicial:
 | `bloque` | Bloque de CLAUDE.md distinto del de la plantilla | Comparación del bloque | `automatica` | Regenerar el bloque |
 | `hook` | Hook `commit-msg` de la metodología desactualizado | `mth doctor` | `automatica` | Reinstalar según `hooks.commit_msg` |
 | `formato` | Specs y ADR sin `Formato: compacto` | Cuenta por documento | `decision` | Migración: convertir o dejar como están |
+| `secretos` | `secrets.mode` sin decidir | `mth update --plan` ([SPEC-0022](SPEC-0022-gate-de-secretos-en-el-historial.md)) | `decision` | Activar el gate (`block`) o desactivarlo (`off`) |
 | `humo` | Sin registro de `mth smoke` o de otra versión de Claude Code | `mth doctor` | `informativa` | Ejecutar `mth smoke` |
 | `triangulacion` | Criterios con un único test | `mth trace --single` | `informativa` | Trabajo de tests por spec |
 

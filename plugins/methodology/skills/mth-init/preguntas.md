@@ -2,7 +2,7 @@
 
 Cada sección es una pregunta de `mth survey`, con su ID. Los textos son fijos para que la metodología se presente siempre igual: sustituye solo los `{…}` por lo que diga el inventario.
 
-**Solo se preguntan las de `outcome: decision`** (ADR-0011 de claude-methodology). Las `deducida` y `por_defecto` no se preguntan: `mth init --answers` les aplica su `answer` y las muestra en el resumen, donde la persona puede corregirlas; para cambiar una, escribe su respuesta en el JSON como si la hubieras preguntado. Las secciones de esas preguntas sirven de referencia para esa corrección y para `mth-reconfigure`, que sí las pregunta todas.
+**Solo se preguntan las de `outcome: decision`**. Las `deducida` y `por_defecto` no se preguntan: `mth init --answers` les aplica su `answer` y las muestra en el resumen, donde la persona puede corregirlas; para cambiar una, escribe su respuesta en el JSON como si la hubieras preguntado. Las secciones de esas preguntas sirven de referencia para esa corrección y para `mth-reconfigure`, que sí las pregunta todas.
 
 **Ofrece solo las opciones de `options`** cuando el inventario las da: una opción que no está ahí falla con este repo y `mth init --answers` la rechaza. No añadas opciones ni describas comportamientos que no estén en este catálogo.
 
@@ -124,7 +124,7 @@ Descripciones y vistas previas: las de `specs`, aplicadas a los ADR.
 
 **Cabecera:** Revisores (selección múltiple, sin vista previa)
 
-Se hace siempre: también ofrece los agentes del catálogo del plugin (SPEC-0012 de claude-methodology).
+Se hace siempre: también ofrece los agentes del catálogo del plugin.
 
 **Pregunta 1:** Antes de integrar, la metodología revisa cada rama con agentes de contexto limpio: solo ven el diff, las specs y los principios. Siempre va primero el `verificador` del plugin, que comprueba que la rama cumple su spec. En tu repo hay {`security-reviewer`, `api-reviewer`}. ¿Cuáles añadimos como revisores?
 

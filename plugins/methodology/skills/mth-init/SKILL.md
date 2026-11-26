@@ -6,7 +6,7 @@ model: opus
 
 # Adoptar la metodología
 
-`mth` es el comando del contexto de sesión (`$MTH`). La adopción la conduce Opus porque es la tarea con más criterio del ciclo: entender cómo trabaja ya el repo y adaptar la metodología sin romperlo (ADR-0003 y ADR-0011 de claude-methodology). Lo determinista lo hace `mth`: el inventario, qué se deduce y qué se pregunta, y la traducción de respuestas a configuración.
+`mth` es el comando del contexto de sesión (`$MTH`). La adopción la conduce Opus porque es la tarea con más criterio del ciclo: entender cómo trabaja ya el repo y adaptar la metodología sin romperlo. Lo determinista lo hace `mth`: el inventario, qué se deduce y qué se pregunta, y la traducción de respuestas a configuración.
 
 Si el repo ya tiene `.claude/methodology.toml` y la persona quiere cambiar cómo se aplica la metodología o rehacer la entrevista, usa la skill `mth-reconfigure`.
 
@@ -27,7 +27,7 @@ En un repo nuevo, sustituye la segunda mitad por: «El repo está vacío, así q
 ## 3. Pregunta
 
 - Haz **solo** las preguntas con `outcome: decision`, con los textos de [preguntas.md](preguntas.md), en el orden del inventario (la precedencia entre el repo y la metodología va primero) y en **una sola ronda** con `AskUserQuestion`. Ofrece únicamente las opciones de `options` cuando el inventario las da.
-- Si hay más de cuatro `decision`, hazlas en las rondas necesarias y avisa a la persona de que falta una regla de deducción (ADR-0011): anótalo en tu mensaje de cierre.
+- Si hay más de cuatro `decision`, hazlas en las rondas necesarias y avisa a la persona de que falta una regla de deducción: anótalo en tu mensaje de cierre.
 - Las preguntas `deducida` y `por_defecto` no se preguntan: aparecen en el resumen del paso 4, donde la persona las corrige si quiere.
 - Si la persona corrige el perfil o la evidencia ("esas RFC están abandonadas"), ajústalo en la respuesta que corresponda. El inventario no se edita.
 - Si rechaza adoptar en cualquier momento: `mth init --decline` y termina.
@@ -52,6 +52,7 @@ Si no puedes preguntar: con el perfil `new`, adopta con las opciones recomendada
    - crear el workflow de CI (`ci: crear`);
    - añadir `mth check-msg "$1"` al gestor de hooks, si lo hay;
    - rellenar la sección local (`<!-- mth:local:begin -->`) de los agentes del catálogo instalados: el modelo de amenazas de `revisor-seguridad` es obligatorio. Sale de lo que has leído del repo; si no hay base para escribirlo, pregunta a la persona.
+   - gate de secretos: pregunta con `AskUserQuestion` si activar `secrets.mode = "block"` (escanea con `gitleaks` antes de subir; recomendado) o `"off"`, y escríbelo en `methodology.toml`; sin respuesta queda sin decidir y `mth doctor` lo avisa. Con `block`, ejecuta `mth secrets --history`: lo que ya haya en el historial se rota y solo después se acepta con `--accept`. Anota la decisión en el ADR de adopción;
 5. `mth doctor` sin ✗ y `mth trace` sin errores (los avisos de legado son normales en una adopción gradual).
 6. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
 

@@ -120,7 +120,7 @@ Los necesarios y ninguno más:
 - Un test de **regresión** por bug corregido, que falle sin el fix. [criterio]
 - Tests de las **funciones públicas con lógica no trivial** no cubiertas por lo anterior. [criterio]
 
-Cada test declara por qué existe (ADR-0015):
+Cada test declara por qué existe:
 
 - **Etiqueta obligatoria** en el comentario del test: `verifies: SPEC-NNNN/AC-NN`, `verifies: SPEC-NNNN/FM-NN`, `regression: <referencia>` o `unit: <símbolo público>`. Un test sin etiqueta es andamiaje: error en `mth trace` y bloquea `mth integrate` (aviso en ficheros legados). [script: `mth trace`]
 - **Triangulación:** todo AC cuya salida dependa de la entrada DEBE tener al menos dos ejemplos de clases de equivalencia distintas (dos tests o uno parametrizado). Un AC sin entrada variable queda exento. [criterio; `mth trace` avisa de los AC con un único test]
@@ -138,9 +138,9 @@ Además:
 - La documentación DEBE actualizarse en la misma rama que el cambio; una feature sin docs no está hecha. [criterio]
 - Una única fuente de verdad: se enlaza, no se duplica. [criterio]
 - Los enlaces internos DEBEN ser relativos, válidos y apuntar dentro del repo; lo de otro repo, con URL absoluta. [script: `mth trace`]
-- Docs, specs, ADR, changelog y PR en el idioma de `language.docs` (español por defecto, o inglés); `mth` solo reconoce las palabras clave y plantillas de ese idioma (ADR-0005). [script en las palabras clave; criterio en el resto]
+- Docs, specs, ADR, changelog y PR en el idioma de `language.docs` (español por defecto, o inglés); `mth` solo reconoce las palabras clave y plantillas de ese idioma. [script en las palabras clave; criterio en el resto]
 - Estándares: Keep a Changelog, SemVer, MADR para ADR, Conventional Commits. [script en los tres últimos]
-- **Estilo compacto** de specs, ADR y documentos que se cargan en el contexto del agente (ADR-0014). [criterio: `revisor-adr`; la longitud no la comprueba un script]
+- **Estilo compacto** de specs, ADR y documentos que se cargan en el contexto del agente. [criterio: `revisor-adr`; la longitud no la comprueba un script]
   - Una regla por línea; tablas y campos en lugar de párrafos.
   - Referencias por ID en lugar de repetir contenido.
   - Sin introducciones ni resúmenes finales.
@@ -211,7 +211,7 @@ Además:
 ## 11. Autonomía
 
 - Se trabaja de forma autónoma: crear ramas, commits, integrar, publicar y lanzar skills NO requiere permiso. Es `autonomy.level = full`, el valor por defecto.
-- Un repo con supervisión elige `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, cada rama nueva, commit y push). Una confirmación rechazada NO DEBE sortearse por otra vía. [hook: el guard pide la confirmación (ADR-0004)]
+- Un repo con supervisión elige `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, cada rama nueva, commit y push). Una confirmación rechazada NO DEBE sortearse por otra vía. [hook: el guard pide la confirmación]
 - La autonomía se apoya en gates deterministas: no se integra con tests en rojo, trazabilidad rota, revisiones pendientes ni CI en rojo. [script]
 - Se DEBE detener el trabajo y avisar solo si:
   1. dos specs o principios se contradicen y la precedencia no lo resuelve;

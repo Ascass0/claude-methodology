@@ -18,8 +18,8 @@ claude-methodology/
 │   ├── context/core.md               # reglas base inyectadas en cada sesión
 │   ├── hooks/hooks.json              # SessionStart + PreToolUse(Bash)
 │   ├── scripts/mth.py, mthlib/       # CLI determinista (Python ≥ 3.11, sin dependencias)
-│   ├── skills/mth-*/SKILL.md         # develop, init, spec, branch, commit, review, integrate, release, trace
-│   ├── agents/                       # agentes compartidos: verificador, documentador
+│   ├── skills/mth-*/SKILL.md         # develop, plan, init, spec, branch, commit, review, integrate, release, trace
+│   ├── agents/                       # agentes compartidos: verificador, documentador, planificador
 │   ├── catalog/                      # plantillas de agentes instalables (no activas)
 │   └── templates/                    # config, spec, ADR, CHANGELOG, bloque de CLAUDE.md
 └── tests/                            # tests unitarios y de extremo a extremo (gh simulado)
@@ -111,7 +111,8 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 | `commits.external_refs` | Refs de historia externa (upstream) cuyos commits no se validan ni se listan |
 | `changes.required_for` | Ramas que aportan fragmento de changelog |
 | `review.agents` / `required_for` | Agentes revisores del repo (en orden de precedencia) y ramas que exigen revisión |
-| `roles.*` | Agentes del repo para coder, documentador y verificador |
+| `roles.*` | Agentes del repo para coder, documentador, verificador y planificador (`roles.planner`, por defecto `planificador`) |
+| `plans.required_for` | Tipos de rama que necesitan un plan acordado antes de crearse y de integrarse (por defecto `feat`, `fix` y `hotfix`). El plan es un fichero local de `.work/plans/`, nunca se commitea. Ver [SPEC-0023](specs/features/SPEC-0023-planes-acordados-antes-de-desarrollar.md) y [ADR-0021](specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md) |
 | `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
 | `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
@@ -152,11 +153,13 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 
 | Regla | Mecanismo |
 |---|---|
+| Toda idea `feat`, `fix` o `hotfix` parte de un plan acordado con la persona, antes de la rama | `mth plan new/agree/list/show/done`; `mth branch --plan PLAN-NNNN` exige el plan acordado y `mth integrate` y `mth hotfix finish` exigen que la rama figure en un plan en curso (`[plans]`). Ver [ADR-0021](specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md) |
 | Toda feature parte de una spec | `mth integrate` exige que el fragmento de una `feat` referencie su spec |
 | Cada AC tiene test | `mth trace`: una spec `implementada` sin `verifies: SPEC/AC` falla |
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
 | Ningún fichero supera `limits.max_file_lines` sin excepción con techo y motivo; solo hacerlo crecer bloquea | `mth trace` (`[limits]`). Ver [ADR-0016](specs/adr/process/ADR-0016-limite-de-lineas-por-fichero.md) |
+| Ningún secreto nuevo llega a `development`: `gitleaks` escanea la rama antes de subirla; los hallazgos viejos se aceptan de forma explícita y se rotan | `mth integrate` con `[secrets]` (`secrets.mode = "block"`) y `mth secrets [--history [--accept]]`. Ver [ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md) |
 | Cada test lleva etiqueta (`verifies:`, `regression:` o `unit:`); aviso de los AC con un único test | `mth trace` (`trace.test_patterns`; en ficheros legados, aviso). Ver [ADR-0015](specs/adr/process/ADR-0015-triangulacion-y-motivo-declarado-de-cada-test.md) |
 | Specs y ADR con `- Formato: compacto`: criterios en EARS, `FM-NN` únicos y referenciados, campos fijos del ADR | `mth trace` (los documentos sin la marca no se validan). Ver [ADR-0014](specs/adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) |
 | Conventional Commits + cuerpo + `Refs:` | `mth commit`, hook `commit-msg`, revalidación en `mth integrate` |
@@ -187,10 +190,13 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 
 ## Agentes
 
-El plugin incluye dos agentes compartidos por todos los repos:
+El plugin incluye tres agentes compartidos por todos los repos:
 
 - **`verificador`**: primer revisor de cada rama. Comprueba que cada criterio y cada modo de fallo de la spec están implementados y cubiertos por un test que de verdad lo comprueba, ejecuta los tests, confirma que un fix trae su test de regresión y detecta afirmaciones falsas en commits, changelog y docs.
 - **`documentador`**: actualiza docs, fragmento de changelog y los registros documentales que exija el repo, en español y sin duplicar fuentes de verdad.
+- **`planificador`**: siempre con Opus y en solo lectura. Redacta el plan de una idea (tareas, agente sugerido de cada una, oleadas, dependencias y preguntas abiertas) y recomienda los agentes del catálogo que conviene instalar; no instala nada. Lo lanza la skill `mth-plan`; la persona acuerda el plan con `mth plan agree`. El orquestador (catálogo) instala los agentes recomendados y reparte el trabajo según el plan, y el verificador avisa si el diff se sale de él.
+
+`mth plan new <slug>`, `agree PLAN-NNNN`, `list`, `show PLAN-NNNN` y `done PLAN-NNNN [--abandon]` gestionan los planes acordados, que viven en `.work/plans/PLAN-NNNN-<slug>.md` (local). `mth plan check|verify|model|stats` siguen operando sobre el plan de trabajo de la spec.
 
 Cada repo añade en `.claude/agents/` sus **agentes de implementación** (`dev-*`), especializados por área, y sus revisores específicos. La sesión principal orquesta. Si delega dos o más tareas, el reparto es la sección `## Plan de trabajo` de la spec: tareas agrupadas en oleadas, con sus ficheros permitidos y sus criterios, que `mth plan check SPEC-NNNN` valida antes de lanzar nada. Las tareas de una oleada se ejecutan en paralelo; cada `dev-*` recibe un encargo autocontenido y devuelve un manifiesto JSON. Al cerrar la oleada, `mth plan verify SPEC-NNNN --wave N --manifest <fichero> …` contrasta los manifiestos con el plan y con los cambios reales del árbol de trabajo. Cada tarea lleva su modelo (columna `Modelo` del plan o `models.task`) y `mth plan model` da el alias que se pasa a la herramienta Agent. Una tarea no ejecutada o no completada se relanza una sola vez, con el nivel siguiente de la escalera (`mth plan model --retry`); si vuelve a fallar, la sesión principal la implementa o rehace el plan. Con `mth plan verify --model T-NN=alias` queda registrado qué modelo ejecutó cada tarea y `mth plan stats` resume los resultados por modelo. Los revisores y el documentador se lanzan con `models.review` y `models.documenter`. Los commits los hace siempre la sesión principal, al cerrar cada oleada. El formato del plan y del manifiesto está en [SPEC-0001](specs/features/SPEC-0001-delegacion-verificable.md) y la decisión, en [ADR-0001](specs/adr/process/ADR-0001-plan-y-manifiesto-verificados.md); los niveles de modelo, las métricas y su formato, en [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md) y [ADR-0002](specs/adr/process/ADR-0002-niveles-de-modelo.md); el protocolo, en la skill `mth-develop`.
 

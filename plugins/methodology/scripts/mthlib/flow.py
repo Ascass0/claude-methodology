@@ -14,7 +14,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import branches, changelog, commits, forge, globs, limits, releaseplan, review, versions
+from . import branches, changelog, commits, forge, globs, limits, plans, releaseplan, review, secretgate, versions, work
 from .config import Config
 from .errors import MthError
 from .files import atomic_write
@@ -154,6 +154,51 @@ def _gate_trace(ctx: Ctx) -> None:
     say("· Trazabilidad OK")
 
 
+def _gate_secrets(ctx: Ctx, rev_range: str) -> None:
+    # ADR-0020 §1-2: block scans and fails closed; "" warns and continues; "off" does nothing.
+    mode = ctx.cfg["secrets"]["mode"]
+    if mode == "":
+        warn("secrets.mode sin decidir: no se buscan secretos (mth update --plan lo detalla).")
+    elif mode == "block":
+        secretgate.enforce(ctx.root, ctx.cfg["secrets"], rev_range)
+        say("· Secretos: sin hallazgos nuevos")
+
+
+def scan_secrets(ctx: Ctx, history: bool, accept: bool) -> None:
+    """``mth secrets``: scan the branch over its target, or the whole history."""
+    section = ctx.cfg["secrets"]
+    if accept and not history:
+        raise MthError("--accept solo se usa con --history.")
+    if history:
+        if accept:
+            count = secretgate.accept_history(ctx.root, section)
+            say(f"✓ {count} hallazgos aceptados en {section['baseline']}")
+            warn(secretgate.ACCEPT_WARNING)
+            return
+        secretgate.enforce(ctx.root, section, None)
+    else:
+        info = branches.parse(ctx.git.current_branch(), ctx.cfg)
+        if info is None:
+            raise MthError("La rama actual no tiene destino con el que comparar.", hint="Usa `mth secrets --history`.")
+        secretgate.enforce(ctx.root, section, f"{ctx.git.remote_ref(branches.target_of(info, ctx.cfg))}..HEAD")
+    say("✓ Sin secretos nuevos")
+
+
+def plans_dir(ctx: Ctx) -> Path:
+    return ctx.root / work.WORK_DIR / "plans"
+
+
+def _gate_plan(ctx: Ctx, info: branches.BranchInfo) -> None:
+    """ADR-0021: a branch of a required kind needs a running plan that lists its top-level branch."""
+    if info.kind in ctx.cfg["plans"]["required_for"]:
+        try:
+            plan = plans.for_branch(plans_dir(ctx), info.top)
+        except MthError:
+            ctx.tracer.event("plan.denied", branch=info.top)
+            raise
+        say(f"· Plan: {plan.ident}")
+
+
 def _gate_tests(ctx: Ctx) -> str:
     command = ctx.cfg.test_command
     if not command:
@@ -267,7 +312,7 @@ def _pr_body(summary: str, refs: list[str], frag: changelog.Fragment | None,
 
 
 # -- start --------------------------------------------------------------------
-def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None) -> str:
+def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None, plan: str | None = None) -> str:
     """Create a top-level branch from its base, or a child of the current branch."""
     g, cfg = ctx.git, ctx.cfg
     branches.validate_slug(slug)
@@ -301,6 +346,9 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None) -> str:
         refs.append(spec)
     if g.remote_has(name) or g.local_has(name):
         raise MthError(f"La rama {name} ya existe.")
+    plan_path = plans.for_start(plans_dir(ctx), plan, kind) if plan or kind in cfg["plans"]["required_for"] else None
+    if plan_path is not None:  # the first change: if the plan cannot be written, no branch is created (SPEC-0023/FM-10)
+        say(f"· Plan {plans.add_branch(plan_path, name).ident}: rama {name} registrada")
     g.checkout_synced(base)
     g.out("checkout", "-b", name)
     if kind in cfg["changes"]["required_for"]:
@@ -309,7 +357,7 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None) -> str:
         frag_path.write_text(changelog.template(kind, refs, cfg.vocab), encoding="utf-8")
         say(f"· Fragmento creado: {frag_path.relative_to(ctx.root)} (complétalo antes de integrar)")
     g.push(name)
-    ctx.tracer.event("branch.start", branch=name, base=base, spec=spec)
+    ctx.tracer.event("branch.start", branch=name, base=base, spec=spec, plan=plan_path.name[:9] if plan_path else None)
     say(f"✓ Rama {name} creada desde {base}")
     return name
 
@@ -394,9 +442,11 @@ def integrate(ctx: Ctx, title: str, summary: str) -> None:
     _require_synced(ctx, target)
     if not info.is_child:
         _require_no_children(ctx, branch)
+    _gate_plan(ctx, info)
     found = _gate_commits(ctx, f"{g.remote_ref(target)}..HEAD")
     frag = _fragment(ctx, info)
     _gate_trace(ctx)
+    _gate_secrets(ctx, f"{g.remote_ref(target)}..HEAD")
     reviews = _review(ctx, info, branch)
     tests = _gate_tests(ctx)
 
@@ -675,6 +725,7 @@ def hotfix_finish(ctx: Ctx) -> None:
                        hint="Cierra el hotfix a mano (MR a main, etiqueta y MR de vuelta a development) o usa forge = github.")
     g.require_clean()
     g.fetch()
+    _gate_plan(ctx, info)
     frag_path = ctx.path("changes") / branches.fragment_name(info)
     if frag_path.exists():
         _require_synced(ctx, cfg.main)

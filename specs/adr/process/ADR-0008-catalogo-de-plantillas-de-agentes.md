@@ -16,6 +16,7 @@
 - Determinismo (§2): lo que puede hacer el código no se delega en un modelo. Mínimo privilegio (§2): un revisor no escribe; un trabajador no toca la historia.
 - Las mejoras del catálogo deben llegar sin que los repos pierdan lo añadido.
 - [ADR-0002](ADR-0002-niveles-de-modelo.md) saca el modelo del frontmatter de los agentes compartidos.
+- Matizado por [ADR-0021](ADR-0021-planes-acordados-antes-de-desarrollar.md): `planificador` se suma a `verificador` y `documentador` como agente del plugin en `agents/`.
 
 ## Decisión
 
