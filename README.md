@@ -157,6 +157,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
 | Ningún fichero supera `limits.max_file_lines` sin excepción con techo y motivo; solo hacerlo crecer bloquea | `mth trace` (`[limits]`). Ver [ADR-0016](specs/adr/process/ADR-0016-limite-de-lineas-por-fichero.md) |
+| Ningún secreto nuevo llega a `development`: `gitleaks` escanea la rama antes de subirla; los hallazgos viejos se aceptan de forma explícita y se rotan | `mth integrate` con `[secrets]` (`secrets.mode = "block"`) y `mth secrets [--history [--accept]]`. Ver [ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md) |
 | Cada test lleva etiqueta (`verifies:`, `regression:` o `unit:`); aviso de los AC con un único test | `mth trace` (`trace.test_patterns`; en ficheros legados, aviso). Ver [ADR-0015](specs/adr/process/ADR-0015-triangulacion-y-motivo-declarado-de-cada-test.md) |
 | Specs y ADR con `- Formato: compacto`: criterios en EARS, `FM-NN` únicos y referenciados, campos fijos del ADR | `mth trace` (los documentos sin la marca no se validan). Ver [ADR-0014](specs/adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) |
 | Conventional Commits + cuerpo + `Refs:` | `mth commit`, hook `commit-msg`, revalidación en `mth integrate` |

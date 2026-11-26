@@ -112,6 +112,13 @@ exclude = ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generate
 # reason = "tabla de transiciones que se lee entera"
 # refs = "ADR-NNNN"    # opcional
 
+[secrets]
+# Gate de secretos en el historial (gitleaks). "" = sin decidir (mth update lo señala), "off" = desactivado,
+# "block" = mth integrate no sube una rama con secretos nuevos. mth secrets lo ejecuta a mano.
+mode = ""
+# Hallazgos aceptados que ya estaban en el historial (mth secrets --history --accept). Rota esos secretos.
+baseline = ".gitleaks-baseline.json"
+
 [release]
 github_release = true
 sign_tags = false

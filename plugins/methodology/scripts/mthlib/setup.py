@@ -9,7 +9,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-from . import adoption, agents, changelog, commits, forge, lang, survey, versions, work
+from . import adoption, agents, changelog, commits, forge, lang, secretgate, survey, versions, work
 from .files import atomic_write
 from .config import CONFIG_PATH, load, parse
 from .ids import IdRegistry
@@ -547,6 +547,12 @@ def doctor(start: Path) -> int:
         from . import smoke  # lazy: smoke builds on setup (SPEC-0014)
         for notice in smoke.warnings(git, True, explain_unknown=True):
             report(False, notice, blocking=False)
+    mode = cfg["secrets"]["mode"]
+    if mode == "block":
+        report(secretgate.is_installed(), "gitleaks instalado (secrets.mode = block)")
+    else:
+        report(False, "secrets.mode " + ("sin decidir" if mode == "" else "= off")
+               + ": no se buscan secretos al integrar (mth update --plan)", blocking=False)
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)
