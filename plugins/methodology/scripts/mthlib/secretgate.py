@@ -6,6 +6,7 @@ never prints a secret value and removes the temporary report whatever happens.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ MODES = ("", "off", "block")
 TOGGLES = ("", "off", "on")  # secrets.hook and secrets.ci (SPEC-0024)
 EXIT_LEAKS = 2  # passed as --exit-code so a tool failure (1) is not read as a finding
 SCAN_TIMEOUT = 600  # seconds: nothing waits forever; a timeout blocks like any other failure (SPEC-0022/AC-15)
+MIN_VERSION = (8, 19, 0)  # the release that replaced `protect` and `detect` by `git` (SPEC-0024)
 INSTALL_HINT = "Instala gitleaks (https://github.com/gitleaks/gitleaks#installing) o pon secrets.mode = \"off\"."
 ACCEPT_WARNING = ("Los secretos aceptados siguen en el historial: rótalos en su servicio. "
                   "Aceptarlos no los invalida.")
@@ -72,6 +74,18 @@ def baseline_path(root: Path, section: dict[str, Any]) -> Path:
 
 def is_installed() -> bool:
     return shutil.which(TOOL) is not None
+
+
+def version() -> tuple[int, int, int] | None:
+    """Installed ``gitleaks`` version, or None when the tool is absent or its output is not recognised."""
+    if not is_installed():
+        return None
+    try:
+        out = run([TOOL, "version"], check=False, timeout=30).stdout
+    except MthError:
+        return None
+    found = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+    return (int(found[1]), int(found[2]), int(found[3])) if found else None
 
 
 def parse_report(text: str) -> list[Finding]:

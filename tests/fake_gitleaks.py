@@ -10,6 +10,9 @@ import sys
 import time
 
 argv = sys.argv[1:]
+if argv[:1] == ["version"]:  # the tool version, not a scan: not logged
+    print(os.environ.get("FAKE_GITLEAKS_VERSION", "8.30.1"))
+    sys.exit(0)
 mode = os.environ.get("FAKE_GITLEAKS_MODE", "clean")
 report = argv[argv.index("--report-path") + 1] if "--report-path" in argv else ""
 with open(os.environ["FAKE_GITLEAKS_LOG"], "a") as log:

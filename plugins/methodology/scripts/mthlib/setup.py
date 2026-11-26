@@ -548,6 +548,34 @@ def _report_work(report, status: work.Status) -> None:
         report(False, f"{name}: {'; '.join(gaps)} (lo prepara la próxima sesión)", blocking=False)
 
 
+def _doctor_secrets_pieces(git: Git, cfg: Config, report) -> None:
+    """Hook, workflow and tool version of the secrets gate: warnings, never blocking (SPEC-0024/AC-14)."""
+    switch = cfg["secrets"]["hook"]
+    if switch == "":
+        report(False, "secrets.hook sin decidir: no se escanea lo preparado antes de cada commit (mth update --plan)",
+               blocking=False)
+    elif switch == "on":
+        try:
+            state = hook_state(git, cfg["hooks"]["pre_commit"], PRE_COMMIT)
+        except OSError as exc:
+            state = f"ilegible ({exc})"
+        report(state == "current", f"Hook pre-commit de secretos: {state}", blocking=False)
+    if cfg["secrets"]["ci"] == "":
+        if cfg.forge == forge.GITHUB and cfg["ci"]["required"]:
+            report(False, "secrets.ci sin decidir: la CI no escanea secretos en cada PR (mth update --plan)",
+                   blocking=False)
+    elif cfg["secrets"]["ci"] == "on" and secrets_workflow_applies(cfg):
+        state = secretci.state(git.root, cfg["secrets"]["baseline"])
+        report(state == "current", f"Workflow de secretos: {state}", blocking=False)
+    if cfg["secrets"]["mode"] == "block" or switch == "on":
+        found = secretgate.version()
+        if secretgate.is_installed():
+            minimum = ".".join(map(str, secretgate.MIN_VERSION))
+            report(found is not None and found >= secretgate.MIN_VERSION,
+                   f"gitleaks {'.'.join(map(str, found)) if found else 'de versión no reconocida'} (mínima {minimum})",
+                   blocking=False)
+
+
 def doctor(start: Path) -> int:
     """Check the repository adoption. Returns the number of blocking problems."""
     problems = 0
@@ -627,6 +655,7 @@ def doctor(start: Path) -> int:
     else:
         report(False, "secrets.mode " + ("sin decidir" if mode == "" else "= off")
                + ": no se buscan secretos al integrar (mth update --plan)", blocking=False)
+    _doctor_secrets_pieces(git, cfg, report)
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)
