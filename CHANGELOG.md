@@ -6,6 +6,23 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.16.0] - 2026-11-26
+
+### Añadido
+- Toda idea `feat`, `fix` o `hotfix` necesita un plan acordado con la persona antes de crear la rama. El plan es un fichero local `.work/plans/PLAN-NNNN-slug.md` que no se commitea. (SPEC-0023)
+- `mth plan new`, `agree`, `list`, `show` y `done` gestionan los planes acordados. `mth branch --plan PLAN-NNNN` crea la rama contra un plan acordado y `mth integrate` y `mth hotfix finish` exigen que la rama figure en un plan en curso. (SPEC-0023)
+- Sección `[plans]` (`required_for`, por defecto `feat`, `fix` y `hotfix`) y clave `[roles].planner` en `.claude/methodology.toml`. (SPEC-0023)
+- Agente del plugin `planificador` (siempre Opus, solo lectura): redacta el plan y recomienda los agentes del catálogo que conviene instalar. (SPEC-0023)
+- Skill `mth-plan` para redactar, discutir y acordar el plan; el ciclo de `mth-develop` y las reglas base incluyen el paso «plan acordado». (SPEC-0023)
+- El `orquestador` (1.1.0) instala los agentes del catálogo que el plan recomienda y reparte el trabajo según el plan. El `verificador` avisa si el diff se sale del plan. (SPEC-0023)
+- Gate de secretos en el historial: con `secrets.mode = "block"`, `mth integrate` escanea con `gitleaks` los commits de la rama antes de subirla y bloquea ante un hallazgo nuevo. Los hallazgos se muestran sin el valor del secreto y el informe temporal se borra siempre. (SPEC-0022)
+- `mth secrets` escanea la rama o, con `--history`, todo el historial; `--history --accept` acepta los hallazgos ya existentes en una línea base (`secrets.baseline`) y recuerda que hay que rotarlos. (SPEC-0022)
+- `mth update --plan` señala la brecha `secretos` (decisión) mientras `secrets.mode` esté sin decidir; `mth doctor` avisa del modo y de la falta de `gitleaks`. Nunca se activa en silencio. (SPEC-0022)
+- `revisor-seguridad` 1.1.0 vigila los cambios de `secrets.mode` y de la línea base. (SPEC-0022)
+
+### Corregido
+- Las skills, `PRINCIPLES.md` y los mensajes de `mth` ya no citan specs ni ADR de claude-methodology: en otro repo esos números no existen o significan otra cosa y confundían al modelo. Un test impide que vuelvan.
+
 ## [0.15.0] - 2026-11-26
 
 ### Añadido
