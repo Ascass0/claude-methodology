@@ -17,7 +17,7 @@ from .git import Git
 WORK_DIR = ".work"
 DEFAULT_DIRS = ("plans", "merge-request", "security-report", "reviews", "notes", "tmp")
 EXCLUDE_LINE = f"/{WORK_DIR}/"
-EXCLUDE_COMMENT = "# claude-methodology: directorio de trabajo local (SPEC-0010)"
+EXCLUDE_COMMENT = "# claude-methodology: directorio de trabajo local"
 _EXCLUDING = {WORK_DIR, f"{WORK_DIR}/", f"/{WORK_DIR}", EXCLUDE_LINE}
 _NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 

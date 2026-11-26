@@ -71,7 +71,7 @@ Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, par
 - Docs actualizadas en la misma rama.
 - Commits temáticos durante el trabajo → skill `mth-commit`.
 
-## 5b. Tests: triangulación y etiqueta (PRINCIPLES §6, ADR-0015)
+## 5b. Tests: triangulación y etiqueta (PRINCIPLES §6)
 
 Ciclo por cada AC con entrada variable, tú o el agente `dev-*`:
 

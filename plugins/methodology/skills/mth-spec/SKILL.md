@@ -16,7 +16,7 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
 
 ## Contenido de una spec
 
-Plantillas en formato compacto (`- Formato: compacto`, ADR-0014): una regla por línea, tablas en lugar de párrafos, referencias por ID, sin introducción ni resumen final. `mth trace` valida el formato; los documentos sin la marca no se validan.
+Plantillas en formato compacto (`- Formato: compacto`): una regla por línea, tablas en lugar de párrafos, referencias por ID, sin introducción ni resumen final. `mth trace` valida el formato; los documentos sin la marca no se validan.
 
 - **Criterios de aceptación** `- **AC-01**: …` en EARS, una línea cada uno y verificable por un test automático: `CUANDO <disparador>, <sistema> DEBE …` · `SI <condición>, ENTONCES <sistema> DEBE …` · `MIENTRAS <estado>, <sistema> DEBE …` · `<sistema> DEBE …`. Si no se puede automatizar, reformúlalo.
 - **Modos de fallo**: tabla `| ID | Causa | Respuesta | Cubierto por |` con `FM-NN` únicos (referencia: `SPEC-NNNN/FM-NN`). Cada fila genera al menos un test.
