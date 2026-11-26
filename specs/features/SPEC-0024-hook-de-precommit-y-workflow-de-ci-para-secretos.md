@@ -1,6 +1,6 @@
 # SPEC-0024 · Hook de precommit y workflow de CI para secretos
 
-- Estado: borrador
+- Estado: implementada
 - Fecha: 2026-11-26
 - Formato: compacto
 - ADRs: [ADR-0022](../adr/security/ADR-0022-hook-de-precommit-y-workflow-de-ci-para-secretos.md)
