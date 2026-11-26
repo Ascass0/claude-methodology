@@ -1,6 +1,6 @@
 # SPEC-0022 · Gate de secretos en el historial
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-26
 - Formato: compacto
 - ADRs: [ADR-0020](../adr/security/ADR-0020-gate-de-secretos-en-el-historial.md)

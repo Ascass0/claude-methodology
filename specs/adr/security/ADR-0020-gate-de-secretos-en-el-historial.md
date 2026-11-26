@@ -15,7 +15,7 @@
 
 ## Decisión
 
-1. `mth integrate` DEBE escanear los commits de la rama con `gitleaks` antes de subirla cuando `secrets.mode = "block"`. Un hallazgo no aceptado bloquea y no se sube nada. [script: `mthlib/secrets.py`, `mthlib/flow.py`]
+1. `mth integrate` DEBE escanear los commits de la rama con `gitleaks` antes de subirla cuando `secrets.mode = "block"`. Un hallazgo no aceptado bloquea y no se sube nada. [script: `mthlib/secretgate.py`, `mthlib/flow.py`]
 2. `secrets.mode` admite `""` (sin decidir, valor por defecto), `"off"` y `"block"`. Sin decidir es una brecha de clase `decision` en `mth update`; la elección se registra en el ADR de adopción o de actualización. Nunca se activa en silencio.
 3. `mth secrets` escanea la rama sobre su destino; `--history` escanea todo el historial. Con la herramienta ausente o fallando devuelve error: falla cerrado, no se da por limpio.
 4. Los hallazgos se imprimen con regla, fichero, línea y commit corto; nunca el valor. El informe temporal de la herramienta se pide con `--redact` y se borra siempre.
@@ -43,5 +43,5 @@
 
 ## Impone
 
-- [script] `mthlib/secrets.py` (escaneo, informe y línea base), `mthlib/flow.py` (gate de `mth integrate`), `mthlib/config.py` (`[secrets]`), `mthlib/update.py` (brecha `secretos`), `mthlib/setup.py` (`mth doctor`).
+- [script] `mthlib/secretgate.py` (escaneo, informe y línea base), `mthlib/flow.py` (gate de `mth integrate`), `mthlib/config.py` (`[secrets]`), `mthlib/update.py` (brecha `secretos`), `mthlib/setup.py` (`mth doctor`).
 - [criterio] `revisor-seguridad` mira los cambios de `secrets.baseline` y de `secrets.mode`.
