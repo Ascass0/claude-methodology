@@ -10,12 +10,14 @@ description: Crea ramas de trabajo (feat, fix, chore, hotfix, prefijos del repo,
 ## Primer nivel
 
 ```
-mth branch feat <slug> [--spec SPEC-NNNN] # desde development
-mth branch fix <slug> [--spec SPEC-NNNN]  # desde development
+mth branch feat <slug> --plan PLAN-NNNN [--spec SPEC-NNNN] # desde development
+mth branch fix <slug> --plan PLAN-NNNN [--spec SPEC-NNNN]  # desde development
 mth branch chore <slug>                   # desde development
-mth branch hotfix <slug> [--spec ...]     # desde main
+mth branch hotfix <slug> --plan PLAN-NNNN [--spec ...]     # desde main
 mth branch <prefijo-extra> <slug>         # según [branches.extra]
 ```
+
+`--plan` es obligatorio en los tipos de `plans.required_for` (por defecto `feat`, `fix` y `hotfix`): el plan debe estar `acordado` (skill `mth-plan`). La rama se registra en el plan, en `.work/plans/` (local). Sin plan acordado, `mth branch` no crea la rama; `mth integrate` y `mth hotfix finish` exigen además que la rama figure en un plan en curso.
 
 Slug: minúsculas, dígitos y guiones (`ephemeral-runner`). Crea la rama sincronizada con su base, la sube al remoto y, para `feat`, `fix` y `hotfix`, crea el fragmento `changes/<tipo>-<slug>.md` que completarás antes de integrar. Si la spec de la feature aún no existe, créala en la rama con la skill `mth-spec`: se enlaza sola al fragmento.
 

@@ -102,7 +102,7 @@ class GateFlowTests(unittest.TestCase):
         self.assertIn("«abandonado»", self.mth("plan", "done", "PLAN-0002", "--abandon"))
         self.mth("plan", "show", "PLAN-0009", ok=False)
         self.mth("plan", "new", ok=False)
-        self.mth("plan", "check", "SPEC-9999", ok=False)  # the actions of a spec's work plan keep their own meaning
+        self.mth("plan", "check", "SPEC-" + "9999", ok=False)  # the actions of a spec's work plan keep their own meaning (an ID that does not exist)
         self.assertIn("No hay datos", self.mth("plan", "stats"))
 
     def test_a_branch_of_a_required_kind_needs_an_agreed_plan(self):
@@ -200,6 +200,22 @@ class GateFlowTests(unittest.TestCase):
         cfg = self.work / ".claude/methodology.toml"
         cfg.write_text(cfg.read_text().replace('planner = "planificador"', 'planner = "no-existe"'))
         self.assertIn("✗ Rol planner → no-existe", self.mth("doctor", ok=False))
+
+
+class DocsTests(unittest.TestCase):
+    def test_the_cycle_and_the_docs_include_the_agreed_plan(self):
+        # verifies: SPEC-0023/AC-19
+        root = HERE.parent
+        plugin = root / "plugins" / "methodology"
+        expected = {
+            plugin / "context" / "core.md": "mth-plan",
+            plugin / "skills" / "mth-develop" / "SKILL.md": "mth-plan",
+            plugin / "skills" / "mth-branch" / "SKILL.md": "--plan",
+            root / "README.md": "planificador",
+            root / "docs" / "catalogo-de-agentes.md": "planificador",
+        }
+        for path, needle in expected.items():
+            self.assertIn(needle, path.read_text(encoding="utf-8"), path.name)
 
 
 class UpdateGapTests(UpdateTestCase):

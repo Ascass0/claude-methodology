@@ -17,19 +17,23 @@ description: Ciclo autónomo de desarrollo dirigido por specs, de la spec a la v
 | Estructural | `feat/` o `chore/` | sí + **ADR aceptado antes de implementar** | sí | sí |
 | Bug en producción (main) | `hotfix/` | referencia | sí (patch) | sí |
 
-## 2. Rama → skill `mth-branch`
+## 2. Plan acordado → skill `mth-plan`
 
-`mth branch feat <slug>` (añade `--spec SPEC-NNNN` si la spec ya existe). Para trabajo separable dentro de la feature, ramas hijas (`--child`), solo si se justifica.
+Para `feat`, `fix` y `hotfix` (`plans.required_for`), antes de crear la rama: `mth plan new`, el agente `planificador` redacta el borrador, la persona lo discute y da su visto bueno y `mth plan agree PLAN-NNNN` lo fija. El plan es un fichero local de `.work/plans/` (nunca se commitea) y no lo cita ningún documento versionado. `chore` y `docs` no lo necesitan. Al terminar el trabajo: `mth plan done PLAN-NNNN`.
 
-## 3. Spec y decisiones → skill `mth-spec`
+## 3. Rama → skill `mth-branch`
+
+`mth branch feat <slug> --plan PLAN-NNNN` (añade `--spec SPEC-NNNN` si la spec ya existe). Para trabajo separable dentro de la feature, ramas hijas (`--child`), solo si se justifica.
+
+## 4. Spec y decisiones → skill `mth-spec`
 
 Antes de planificar una feature o un cambio estructural, si el repo tiene instalado el agente `explorador-specs` (catálogo del plugin, `mth agents list`), pídele qué specs, criterios, modos de fallo y ADR aplican a la tarea y qué falta por decidir: devuelve IDs y rutas, no el contenido.
 
 Si la spec no existe, escríbela en la propia rama como primer commit: contexto, objetivo, fuera de alcance, comportamiento, **modos de fallo** y **criterios de aceptación verificables**. Pásala a `aprobada` cuando sea coherente con los principios y los ADR vigentes. Toda decisión estructural va en un ADR aceptado antes de implementarla. `mth integrate` rechaza una feature cuyo fragmento no referencie su spec.
 
-## 4. Implementa (orquestas, los agentes `dev-*` implementan)
+## 5. Implementa (orquestas, los agentes `dev-*` implementan)
 
-Tú mantienes la spec, el plan y las decisiones. La implementación especializada la delegas en los agentes `dev-*` del repo (`.claude/agents/`) cuyo ámbito cubra la tarea; su `description` dice cuál. Si ninguno encaja, implementas tú.
+Tú mantienes la spec, el plan acordado y las decisiones; el reparto parte del plan acordado y las desviaciones se anotan en su «Registro de ejecución». La implementación especializada la delegas en los agentes `dev-*` del repo (`.claude/agents/`) cuyo ámbito cubra la tarea; su `description` dice cuál. Si ninguno encaja, implementas tú.
 
 Delegar tiene un coste de coordinación: si el trabajo es pequeño, implementa tú. Si delegas dos o más tareas, el reparto va en la spec:
 
@@ -67,7 +71,7 @@ Principios activos en todo momento: Design for Failure, fail-safe/fail-fast, par
 - Docs actualizadas en la misma rama.
 - Commits temáticos durante el trabajo → skill `mth-commit`.
 
-## 4b. Tests: triangulación y etiqueta (PRINCIPLES §6, ADR-0015)
+## 5b. Tests: triangulación y etiqueta (PRINCIPLES §6, ADR-0015)
 
 Ciclo por cada AC con entrada variable, tú o el agente `dev-*`:
 
@@ -82,7 +86,7 @@ Se impone el estado final, no el orden. Un AC sin entrada variable (`SI falta X,
 
 Cada test lleva una etiqueta en su comentario: `verifies: SPEC-NNNN/AC-NN` o `/FM-NN`, `regression: <referencia>` (bug corregido, falla sin el fix) o `unit: <símbolo público>`. Sin etiqueta `mth trace` falla y `mth integrate` no avanza. `mth trace --single` lista los AC con un único test para que valores si triangular.
 
-## 5. Cierra la rama
+## 6. Cierra la rama
 
 1. **Documentación:** delega en el agente de `roles.documenter` (por defecto `documentador`, incluido en el plugin), con el modelo `models.documenter`, con la rama, el comando del diff y las specs afectadas. Actualiza docs, fragmento de changelog y los registros documentales que exija el repo. Revisa sus cambios y haz el commit `docs`.
 2. Feature: pon la spec en `implementada` solo si todos sus criterios están implementados y probados.
@@ -91,7 +95,7 @@ Cada test lleva una etiqueta en su comentario: `verifies: SPEC-NNNN/AC-NN` o `/F
 5. Revisión → skill `mth-review` (sobre el HEAD final; el `verificador` va primero).
 6. Integración → skill `mth-integrate`. Si la rama cambia `.claude/` (hooks, agentes, ajustes), es normal que el modo automático de Claude Code no te deje integrar cambios sobre tus propias salvaguardas: deja la rama lista y pide a la persona que ejecute `mth integrate`.
 
-## 6. Versión → skill `mth-release`
+## 7. Versión → skill `mth-release`
 
 Tras integrar en `development`, decide si publicar y con qué nivel con `mth release --plan` (solo lee; lo calcula `mth`, no tú): `publicar` → `mth release`; `esperar` → sigues con el trabajo abierto y vuelves a decidir al integrarlo; `no publicar` → el mantenimiento sin fragmento no versiona; `bloqueado` → corriges el nivel del fragmento, o avisas a la persona si es `1.0.0`. El detalle está en la skill `mth-release`.
 

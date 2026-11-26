@@ -1,6 +1,6 @@
 # SPEC-0023 · Planes acordados antes de desarrollar
 
-- Estado: aprobada
+- Estado: implementada
 - Fecha: 2026-11-26
 - Formato: compacto
 - ADRs: [ADR-0021](../adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md)
@@ -31,7 +31,7 @@
 | Clave | Por defecto | Significa |
 |---|---|---|
 | `plans.required_for` | `["feat", "fix", "hotfix"]` | Tipos de rama que necesitan plan acordado |
-| `roles.planner` | `"planificador"` | Agente del plugin que redacta los planes |
+| `roles.planner` | `""` (la plantilla trae `"planificador"`, como los demás roles) | Agente del plugin que redacta los planes |
 
 ### Fichero de plan
 
