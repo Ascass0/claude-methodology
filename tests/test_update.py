@@ -35,7 +35,8 @@ LEGACY = "# SPEC-0002 · T\n\n- Estado: aprobada\n"
 
 
 class UpdateTestCase(unittest.TestCase):
-    config_text = support.template_with_agents().replace('mode = ""', 'mode = "off"', 1)  # SPEC-0022: decided
+    config_text = (support.template_with_agents().replace('mode = ""', 'mode = "off"', 1)  # SPEC-0022: decided
+                   .replace('\nhook = ""', '\nhook = "off"', 1).replace('\nci = ""', '\nci = "off"', 1))  # SPEC-0024
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()

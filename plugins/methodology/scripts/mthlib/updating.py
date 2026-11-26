@@ -193,6 +193,9 @@ def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> 
         setup.upsert_claude_md(root, cfg["paths"], cfg.vocab)
     if "hook" in ids:
         setup.install_hook(git, cfg["hooks"]["commit_msg"])
+        setup.sync_secrets_hook(git, cfg)
+    if "secretos-workflow" in ids:
+        setup.sync_secrets_workflow(root, cfg)
 
 
 def _agent_files(name: str) -> list[Path]:
