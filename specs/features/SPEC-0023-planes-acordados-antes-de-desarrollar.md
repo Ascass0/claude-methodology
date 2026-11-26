@@ -70,8 +70,9 @@
 
 ### Agentes y skill
 
-- `agents/planificador.md`: agente del plugin de solo lectura, sin `model` en la cabecera. Lee el catálogo con `mth agents list`, asigna solo agentes del catálogo, recomienda instalar en `Agentes a instalar` los que el repo no tiene, no asigna los de requisitos sin cumplir y deja como preguntas abiertas lo que no sabe.
-- Skill `mth-plan`: reúne el contexto, lanza el planificador con `model: opus`, presenta el borrador, lo itera con la persona y ejecuta `mth plan agree` solo con su visto bueno.
+- `agents/planificador.md`: agente del plugin de solo lectura, sin `model` en la cabecera. Lee el catálogo con `mth agents list`, asigna solo agentes del catálogo, recomienda instalar en `Agentes a instalar` los que el repo no tiene, no asigna los de requisitos sin cumplir y deja como preguntas abiertas lo que no sabe. Solo se lanza con `model: "opus"`: si el encargo no declara «Modelo: opus», lo avisa en su respuesta sin cambiar el formato del plan. `mth-develop` recoge la misma regla.
+- `mth models` muestra la línea «Planificador: opus (fijo)», que no sale de `[models]`.
+- Skill `mth-plan`: reúne el contexto, lanza el planificador con `model: opus` y declara «Modelo: opus» en el encargo, presenta el borrador, lo itera con la persona y ejecuta `mth plan agree` solo con su visto bueno.
 - Orquestador (catálogo): lee el plan acordado de la rama, no empieza sin él, instala con `mth agents add` los agentes del catálogo que el plan recomienda (y solo esos), sigue oleadas y dependencias, pasa el plan y la tarea en cada encargo y anota desviaciones en el `Registro de ejecución`.
 - Verificador: recibe el plan acordado y avisa como hallazgo (en `HALLAZGOS`, sin secciones nuevas) si el diff se sale de él.
 
@@ -116,6 +117,8 @@
 - **AC-18**: Las claves `[plans]` y `[roles].planner` DEBEN llegar a un repo adoptado por el gap `config` de `mth update` sin una brecha nueva.
 - **AC-20**: `mth` DEBE registrar en su traza cada transición de plan y cada denegación del gate de integración.
 - **AC-19**: El ciclo de `context/core.md`, `mth-develop`, `mth-branch`, el README y el catálogo de agentes DEBEN incluir el plan acordado y el planificador.
+- **AC-21**: `mth models` DEBE imprimir «Planificador: opus (fijo)» aunque `[models]` esté personalizado.
+- **AC-22**: El texto de `agents/planificador.md` y de `mth-develop` DEBE exigir lanzar al planificador solo con `model: "opus"`; el del agente DEBE avisar si el encargo no declara «Modelo: opus», y la plantilla de encargo de `mth-plan` DEBE declararlo. La cabecera del agente sigue sin `model`.
 
 ## Notas
 
