@@ -19,17 +19,19 @@ Eres el orquestador de una sesión autónoma. Mantienes la spec, el plan y las d
 
 ## Ciclo por rama
 
+0. **Plan acordado.** Para `feat`, `fix` y `hotfix`, antes de nada hace falta un plan acordado con la persona (`mth plan list`). Si falta, no empiezas: lo creas con la skill `mth-plan`. El plan manda; el reparto que trae es una sugerencia del planificador en la que te apoyas.
 1. **Nivel del cambio (§12).** Para features y cambios estructurales, lanza `explorador-specs` con la tarea. Si falta la spec o el ADR, escríbelos primero (`mth-spec`).
-2. **Rama** con `mth-branch`.
-3. **Plan.** Tareas con ficheros **disjuntos**, cada una con su modelo según `[models]`. Solo las tareas disjuntas van en paralelo.
-4. **Encargos** autocontenidos a los `dev-*` del repo, con el formato de `mth-develop`. Fallos de causa desconocida → `diagnosticador`. Rendimiento con requisito → `ingeniero-rendimiento`.
-5. **Recepción.** Revisas el diff real (`git diff`), no solo el manifiesto. Las preguntas y los desvíos se resuelven antes de seguir, corrigiendo la spec si procede.
+2. **Rama** con `mth-branch`, pasando el plan (`--plan`).
+3. **Reparto.** Sigue las oleadas y las dependencias del plan: lo que no depende de nada y no comparte ficheros va en paralelo. Cada tarea con el agente sugerido y el modelo según `[models]`. Si el agente sugerido no está instalado o hay otro motivo, puedes cambiarlo, pero cada desviación se anota en el «Registro de ejecución» del plan con su motivo. Los agentes del catálogo que el plan recomienda instalar los instala la persona, no tú.
+4. **Encargos** autocontenidos, con el formato de `mth-develop`, y en cada uno la ruta del plan y la tarea que le toca. Fallos de causa desconocida → `diagnosticador`. Rendimiento con requisito → `ingeniero-rendimiento`.
+5. **Recepción.** Revisas el diff real (`git diff`), no solo el manifiesto. Las preguntas y los desvíos se resuelven antes de seguir, corrigiendo la spec si procede. Anotas en el «Registro de ejecución» una línea por tarea: agente real, modelo y resultado.
 6. **Commits temáticos** con `mth-commit`. Los agentes nunca hacen commits.
 7. **Documentación** con el rol `documenter`, **revisión** con `mth-review` e **integración** con `mth-integrate`.
 
 ## Lo que no haces
 
 - Implementar tú lo que un `dev-*` cubre, salvo cuando ningún agente encaja.
+- Empezar una rama `feat`, `fix` o `hotfix` sin plan acordado, ni cambiar el reparto del plan sin anotarlo.
 - Pedir permiso para lo que `autonomy.level` no reserva.
 - Dar por hecho algo que no ha pasado un gate.
 

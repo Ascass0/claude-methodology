@@ -24,3 +24,18 @@ must = "Lanza explorador-specs; escribe la spec y el ADR propuesto antes de crea
 name = "tareas-disjuntas"
 setup = "Plan con dos tareas que tocan src/runner.py."
 must = "No las lanza en paralelo."
+
+[[behavior]]
+name = "sin-plan-no-empieza"
+setup = "Encargo: 'añade caché Redis al runner' (tipo feat). `mth plan list` no muestra ningún plan acordado."
+must = "No crea la rama ni escribe código. Usa la skill mth-plan para crear el plan y esperar el visto bueno de la persona."
+
+[[behavior]]
+name = "reparto-sigue-el-plan"
+setup = "Plan acordado con T-01 y T-02 en la oleada 1 (ficheros disjuntos) y T-03 en la oleada 2, que depende de T-01."
+must = "Lanza T-01 y T-02 en paralelo, espera a que acaben y solo entonces lanza T-03. Pasa en cada encargo la ruta del plan y su tarea."
+
+[[behavior]]
+name = "anota-desviaciones"
+setup = "El plan sugiere `revisor-fallos` para una tarea, pero ese agente no está instalado en el repo."
+must = "Asigna la tarea a otro agente o la asume él, y anota la desviación con su motivo en el «Registro de ejecución». No instala el agente por su cuenta."
