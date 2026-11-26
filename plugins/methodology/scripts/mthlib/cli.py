@@ -320,6 +320,7 @@ def _cmd_models(_: argparse.Namespace) -> int:
     for role, label in (("task", "Tareas del plan sin modelo"), ("review", "Revisores"),
                         ("documenter", "Documentador")):
         print(f"{label}: {models[role]}")
+    print("Planificador: opus (fijo)")
     return 0
 
 

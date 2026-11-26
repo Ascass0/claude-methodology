@@ -98,6 +98,10 @@ class ModelCommandTests(ModelRepoTestCase):
         self.assertIn("Revisores: sonnet", out)
         self.assertIn("Documentador: sonnet", out)
 
+    def test_models_command_shows_the_planner_as_fixed_opus(self):
+        # verifies: SPEC-0023/AC-21
+        self.assertIn("Planificador: opus (fijo)", self.mth("models"))
+
     def test_plan_check_shows_effective_models(self):
         # verifies: SPEC-0002/AC-03
         out = self.mth("plan", "check", SPEC_ID)

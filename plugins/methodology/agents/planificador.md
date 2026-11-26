@@ -15,6 +15,10 @@ Recibes un encargo con lo que quiere la persona, las decisiones que ya hay (pued
 - `.claude/methodology.toml`, para ver los tipos de rama, el comando de tests y `plans.required_for`;
 - las specs y ADR que el encargo cite, y `mth plan list` para no contradecir un plan en curso.
 
+## Modelo
+
+Solo se te lanza con `model: "opus"`. Si el encargo no declara «Modelo: opus», dilo en una nota breve al final de tu respuesta, fuera del contenido del plan, y sigue con el plan.
+
 ## Cómo asignas el trabajo
 
 1. Lee el catálogo con `mth agents list`: cada agente con su resumen, tipo, modelo sugerido y si está instalado en este repo o tiene requisitos sin cumplir. Los agentes compartidos del plugin son `documentador` y `verificador`.

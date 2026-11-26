@@ -42,6 +42,18 @@ class PlanSkillTests(unittest.TestCase):
             self.assertIn(needle, body)
 
 
+class PlannerOpusRuleTests(unittest.TestCase):
+    def test_agent_skill_and_develop_require_opus(self):
+        # verifies: SPEC-0023/AC-22
+        _, agent = split(AGENT.read_text(encoding="utf-8"))
+        self.assertIn('model: "opus"', agent)
+        self.assertIn("Modelo: opus", agent)
+        _, plan_skill = split((PLUGIN / "skills" / "mth-plan" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn("Modelo: opus", plan_skill)
+        _, develop = split((PLUGIN / "skills" / "mth-develop" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn('model: "opus"', develop)
+
+
 class PlanReadersTests(unittest.TestCase):
     def test_orchestrator_and_verifier_work_from_the_plan(self):
         # verifies: SPEC-0023/AC-17
