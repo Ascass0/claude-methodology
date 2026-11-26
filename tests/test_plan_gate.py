@@ -1,6 +1,7 @@
 """Tests of the agreed-plans commands and gate (SPEC-0023, ADR-0021) on a repo with a local remote."""
 from __future__ import annotations
 
+import os
 import re
 import sys
 import unittest
@@ -130,6 +131,36 @@ class GateFlowTests(unittest.TestCase):
         self.assertIn("- Estado: en curso", plan)
         self.assertIn("- Rama: `feat/x`", plan)
         self.mth("branch", "chore", "free")  # chore needs no plan
+
+    def test_the_branch_is_registered_before_it_is_created(self):
+        # verifies: SPEC-0023/AC-09
+        # verifies: SPEC-0023/FM-10
+        if os.geteuid() == 0:
+            self.skipTest("a read-only directory does not stop root")
+        plan_id = self.agreed_plan()
+        self.plans.chmod(0o500)
+        try:  # tearDown runs before cleanups: restore the permissions here
+            out = self.mth("branch", "feat", "x", "--plan", plan_id, ok=False)
+        finally:
+            self.plans.chmod(0o700)
+        self.assertIn("No se pudo escribir", out)
+        self.assertEqual(self.git("branch", "--list", "feat/x"), "")
+        self.assertEqual(self.git("ls-remote", "--heads", "origin", "feat/x"), "")
+
+    def test_transitions_and_gate_denials_are_traced(self):
+        # verifies: SPEC-0023/AC-20
+        plan_id = self.agreed_plan()
+        self.mth("branch", "feat", "x", "--plan", plan_id)
+        (self.work / "x.txt").write_text("x")
+        self.git("add", "-A")
+        self.mth("commit", "--type", "chore", "--summary", "add x", "--body", "A file.", "--refs", "n/a")
+        plan = self.plans / "PLAN-0001-demo.md"
+        plan.write_text(plan.read_text().replace("- Rama: `feat/x`", "- Rama: —"))
+        self.mth("integrate", "--title", "feat(x): add x", "--summary", "x", ok=False)
+        self.mth("plan", "done", plan_id)
+        trace = (self.work / ".git" / "mth" / "trace.jsonl").read_text()
+        self.assertIn('"plan.transition"', trace)
+        self.assertIn('"plan.denied"', trace)
 
     def test_integration_needs_a_running_plan_that_lists_the_branch(self):
         # verifies: SPEC-0023/AC-10

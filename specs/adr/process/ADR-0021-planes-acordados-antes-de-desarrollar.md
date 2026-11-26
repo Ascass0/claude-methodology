@@ -49,5 +49,5 @@
 
 ## Impone
 
-- [script] `mthlib/plans.py` (formato, estados, validación), `mthlib/flow.py` y `mthlib/branches.py` (gate), `mthlib/cli.py` (`mth plan`), `mthlib/config.py` (`[plans]`, `[roles].planner`), `mthlib/session.py` (estado) y `mthlib/setup.py` (`mth doctor`).
-- [criterio] `revisor-adr` comprueba que el diff de una rama `feat`, `fix` o `hotfix` cita un plan y que el reparto del plan sigue el catálogo.
+- [script] `mthlib/plans.py` (formato, estados, validación), `mthlib/flow.py` (gate), `mthlib/cli.py` (`mth plan`), `mthlib/config.py` (`[plans]`, `[roles].planner`), `mthlib/session.py` (estado). `mth doctor` comprueba el rol `planner` con su bucle genérico de roles.
+- [criterio] `verificador` compara el diff con el plan acordado de la rama.

@@ -31,6 +31,8 @@ ROADMAP_SECTIONS = ("Idea", "Decisiones acordadas", "Fases", "Fuera de alcance",
 TASK_COLUMNS = ("Tarea", "Oleada", "Agente sugerido", "Depende de", "Ficheros", "Hecho cuando")
 MAX_TASKS = 50
 MAX_NUMBER_TRIES = 20
+MAX_BYTES = 256 * 1024  # a plan is a short working document: anything bigger is not read
+MAX_TITLE = 120
 
 _FILE = re.compile(r"^PLAN-(\d{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$")
 _ID = re.compile(r"^PLAN-\d{4}$")
@@ -88,15 +90,22 @@ class Plan:
 
 @dataclass(frozen=True)
 class Problem:
-    line: int  # 0 = the plan as a whole
+    """A plan error. ``line`` is the line of the plan, or 0 when it concerns the plan as a whole."""
+
+    line: int
     message: str
 
     def __str__(self) -> str:
         return f"línea {self.line}: {self.message}" if self.line else self.message
 
 
+def _header(text: str) -> str:
+    """The lines before the first section: the only place a header field is read from."""
+    return text.split("\n## ", 1)[0]
+
+
 def _field(text: str, name: str) -> str | None:
-    found = re.search(rf"^- {re.escape(name)}:[ \t]*(.*)$", text, re.MULTILINE)
+    found = re.search(rf"^- {re.escape(name)}:[ \t]*(.*)$", _header(text), re.MULTILINE)
     return found.group(1).strip() if found else None
 
 
@@ -175,6 +184,23 @@ def _tasks(rows: list[tuple[int, list[str]]], problems: list[Problem]) -> list[_
     return tasks
 
 
+def _cycle_problems(by_id: dict[str, _Task]) -> list[Problem]:
+    problems: list[Problem] = []
+    seen: set[str] = set()
+
+    def visit(ident: str, path: tuple[str, ...]) -> None:
+        if ident in path:
+            problems.append(Problem(by_id[ident].line, "ciclo de dependencias: " + " → ".join((*path[path.index(ident):], ident))))
+        elif ident not in seen and ident in by_id:
+            seen.add(ident)
+            for dep in by_id[ident].deps:
+                visit(dep, (*path, ident))
+
+    for ident in by_id:
+        visit(ident, ())
+    return problems
+
+
 def _graph_problems(tasks: list[_Task]) -> list[Problem]:
     problems: list[Problem] = []
     by_id: dict[str, _Task] = {}
@@ -189,18 +215,7 @@ def _graph_problems(tasks: list[_Task]) -> list[Problem]:
             elif by_id[dep].wave >= task.wave:
                 problems.append(Problem(task.line, f"{task.ident} (oleada {task.wave}) depende de {dep} "
                                                     f"(oleada {by_id[dep].wave}): debe ir en una oleada posterior"))
-    seen: set[str] = set()
-
-    def visit(ident: str, path: tuple[str, ...]) -> None:
-        if ident in path:
-            problems.append(Problem(by_id[ident].line, "ciclo de dependencias: " + " → ".join((*path[path.index(ident):], ident))))
-        elif ident not in seen and ident in by_id:
-            seen.add(ident)
-            for dep in by_id[ident].deps:
-                visit(dep, (*path, ident))
-
-    for task in tasks:
-        visit(task.ident, ())
+    problems += _cycle_problems(by_id)
     for i, a in enumerate(tasks):
         for b in tasks[i + 1:]:
             if a.wave == b.wave and any(spec_plan.overlaps(x, y) for x in a.files for y in b.files):
@@ -208,47 +223,70 @@ def _graph_problems(tasks: list[_Task]) -> list[Problem]:
     return problems
 
 
-def check(text: str) -> list[Problem]:
-    """Every problem that keeps a plan from being agreed (empty when it is valid)."""
-    problems: list[Problem] = []
-    sections = _sections(text)
-    expected = ROADMAP_SECTIONS if "Fases" in sections and "Tareas" not in sections else SECTIONS
-    for name in expected:
-        if name not in sections:
-            problems.append(Problem(0, f"falta la sección «{name}»"))
+def _section_problems(sections: dict, expected: tuple[str, ...]) -> list[Problem]:
+    problems = [Problem(0, f"falta la sección «{name}»") for name in expected if name not in sections]
     if not problems and [name for name in sections if name in expected] != list(expected):
         problems.append(Problem(0, "las secciones no siguen el orden: " + ", ".join(expected)))
+    return problems
+
+
+def _question_problems(start: int, rows: list[tuple[int, str]]) -> list[Problem]:
+    pending = [(n, s.strip()) for n, s in rows if s.strip()]
+    if not pending:
+        return [Problem(start, "«Preguntas abiertas» está vacía: escribe «Ninguna.» o las preguntas")]
+    if pending[0][1].lower().startswith("ninguna"):
+        return []
+    return [Problem(n, f"pregunta abierta sin resolver: {s}") for n, s in pending]
+
+
+def _task_table_problems(start: int, rows: list[tuple[int, str]]) -> list[Problem]:
+    header, body = _table(rows)
+    if tuple(header) != TASK_COLUMNS:
+        return [Problem(start, "la tabla de tareas debe tener las columnas: " + " | ".join(TASK_COLUMNS))]
+    problems: list[Problem] = []
+    tasks = _tasks(body, problems)
+    if not tasks:
+        problems.append(Problem(start, "el plan no tiene tareas"))
+    if len(tasks) > MAX_TASKS:
+        problems.append(Problem(start, f"más de {MAX_TASKS} tareas"))
+    return problems + _graph_problems(tasks)
+
+
+def check(text: str) -> list[Problem]:
+    """Every problem that keeps a plan from being agreed (empty when it is valid)."""
+    sections = _sections(text)
+    expected = ROADMAP_SECTIONS if "Fases" in sections and "Tareas" not in sections else SECTIONS
+    problems = _section_problems(sections, expected)
     if "Preguntas abiertas" in sections:
-        pending = [(n, s.strip()) for n, s in sections["Preguntas abiertas"][1] if s.strip()]
-        if not pending:
-            problems.append(Problem(sections["Preguntas abiertas"][0], "«Preguntas abiertas» está vacía: escribe «Ninguna.» o las preguntas"))
-        elif not pending[0][1].lower().startswith("ninguna"):
-            problems += [Problem(n, f"pregunta abierta sin resolver: {s}") for n, s in pending]
+        problems += _question_problems(sections["Preguntas abiertas"][0], sections["Preguntas abiertas"][1])
     if "Tareas" in sections:
-        header, rows = _table(sections["Tareas"][1])
-        if tuple(header) != TASK_COLUMNS:
-            problems.append(Problem(sections["Tareas"][0], "la tabla de tareas debe tener las columnas: " + " | ".join(TASK_COLUMNS)))
-        else:
-            tasks = _tasks(rows, problems)
-            if not tasks:
-                problems.append(Problem(sections["Tareas"][0], "el plan no tiene tareas"))
-            if len(tasks) > MAX_TASKS:
-                problems.append(Problem(sections["Tareas"][0], f"más de {MAX_TASKS} tareas"))
-            problems += _graph_problems(tasks)
+        problems += _task_table_problems(sections["Tareas"][0], sections["Tareas"][1])
     return problems
 
 
 # -- files --------------------------------------------------------------------
+def raw(path: Path) -> str:
+    """The text of a plan file, whatever its format.
+
+    Raises:
+        MthError: The file cannot be read, is not UTF-8 or is bigger than ``MAX_BYTES``.
+    """
+    try:
+        if path.stat().st_size > MAX_BYTES:
+            raise MthError(f"El plan {path.name} pesa más de {MAX_BYTES // 1024} KB: no se lee.",
+                           hint="Un plan es un documento corto: reduce su contenido.")
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MthError(f"No se puede leer el plan {path.name}: {exc}.", hint="Corrige el fichero o créalo de nuevo.") from exc
+
+
 def read(path: Path) -> tuple[Plan, str]:
     """A plan and its text.
 
     Raises:
         MthError: The file cannot be read or does not follow the format.
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise MthError(f"No se puede leer el plan {path.name}: {exc}.", hint="Corrige el fichero o créalo de nuevo.") from exc
+    text = raw(path)
     return parse(text, path), text
 
 
@@ -263,6 +301,9 @@ def find(directory: Path, ident: str) -> Path:
     found = sorted(directory.glob(f"{ident}-*.md")) if directory.is_dir() else []
     if not found:
         raise MthError(f"No existe {ident} en {directory}.", hint="Créalo con `mth plan new <slug>` (skill mth-plan).")
+    if len(found) > 1:
+        raise MthError(f"{ident} está en más de un fichero: {', '.join(p.name for p in found)}.",
+                       hint="Deja un solo fichero por número de plan.")
     return found[0]
 
 
@@ -286,6 +327,9 @@ def create(directory: Path, slug: str, title: str, today: date | None = None) ->
     """
     if not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
         raise MthError(f"Slug inválido: '{slug}'.", hint="Minúsculas, dígitos y guiones (ejemplo: planes-acordados).")
+    if not title.strip() or len(title) > MAX_TITLE or any(ord(c) < 32 or ord(c) == 127 for c in title):
+        raise MthError(f"Título inválido: una sola línea de hasta {MAX_TITLE} caracteres, sin saltos de línea ni caracteres de control.",
+                       hint="Un título con saltos de línea podría inyectar campos de cabecera en el plan.")
     directory.mkdir(parents=True, exist_ok=True)
     numbers = [int(m.group(1)) for p in directory.glob("PLAN-*.md") if (m := _FILE.match(p.name))]
     number = max(numbers, default=0) + 1
@@ -360,6 +404,11 @@ def for_start(directory: Path, ident: str | None, kind: str) -> Path:
     return path
 
 
+def running_for(found: list[Plan], top_branch: str) -> Plan | None:
+    """The ``en curso`` plan that lists ``top_branch``, among already read plans."""
+    return next((p for p in found if p.state == "en curso" and top_branch in p.branches), None)
+
+
 def for_branch(directory: Path, top_branch: str) -> Plan:
     """The ``en curso`` plan that lists ``top_branch``.
 
@@ -367,9 +416,8 @@ def for_branch(directory: Path, top_branch: str) -> Plan:
         MthError: No readable plan lists the branch; names any plan file it could not read.
     """
     plans, broken = listing(directory)
-    for plan in plans:
-        if plan.state == "en curso" and top_branch in plan.branches:
-            return plan
+    if (plan := running_for(plans, top_branch)) is not None:
+        return plan
     unreadable = f" Planes ilegibles: {', '.join(p.name for p in broken)}." if broken else ""
     raise MthError(f"La rama {top_branch} no tiene un plan «en curso» que la liste.{unreadable}",
                    hint="Crea la rama con `mth branch <tipo> <slug> --plan PLAN-NNNN` o añade la rama a `- Rama:` de su plan acordado.")

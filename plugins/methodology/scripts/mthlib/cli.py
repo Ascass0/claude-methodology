@@ -219,31 +219,45 @@ def _cmd_plan_stats(ctx: Ctx, spec: str | None) -> int:
 AGREED_ACTIONS = ("new", "agree", "list", "show", "done")  # SPEC-0023: plans agreed with the person
 
 
-def _cmd_agreed_plan(ctx: Ctx, args: argparse.Namespace) -> int:
-    directory = flow.plans_dir(ctx)
-    if args.action == "list":
-        found, broken = plans.listing(directory)
-        for p in found:
-            print(f"{p.ident} · {p.state} · {p.title}" + (f" · {', '.join(p.branches)}" if p.branches else ""))
-        for path in broken:
-            warn(f"{path.name}: ilegible o sin el formato de un plan")
-        if not found and not broken:
-            say("No hay planes en .work/plans/.")
-        return 0
-    if not args.spec:
-        raise MthError(f"plan {args.action} necesita {'el slug' if args.action == 'new' else 'el ID del plan (PLAN-NNNN)'}.")
-    if args.action == "new":
-        path = plans.create(directory, args.spec, args.title or args.spec.replace("-", " ").capitalize())
-        say(f"✓ Plan creado: {path.relative_to(ctx.root)} (en borrador; redáctalo con la skill mth-plan)")
-        return 0
-    path = plans.find(directory, args.spec)
-    if args.action == "show":
-        print(path.read_text(encoding="utf-8"), end="")
-        return 0
-    state = "acordado" if args.action == "agree" else ("abandonado" if args.abandon else "ejecutado")
-    plan = plans.transition(path, state)
+def _plan_list(ctx: Ctx) -> int:
+    found, broken = plans.listing(flow.plans_dir(ctx))
+    for p in found:
+        print(f"{p.ident} · {p.state} · {p.title}" + (f" · {', '.join(p.branches)}" if p.branches else ""))
+    for path in broken:
+        warn(f"{path.name}: ilegible o sin el formato de un plan")
+    if not found and not broken:
+        say("No hay planes en .work/plans/.")
+    return 0
+
+
+def _plan_new(ctx: Ctx, slug: str, title: str | None) -> int:
+    path = plans.create(flow.plans_dir(ctx), slug, title or slug.replace("-", " ").capitalize())
+    say(f"✓ Plan creado: {path.relative_to(ctx.root)} (en borrador; redáctalo con la skill mth-plan)")
+    return 0
+
+
+def _plan_transition(ctx: Ctx, ident: str, state: str) -> int:
+    plan = plans.transition(plans.find(flow.plans_dir(ctx), ident), state)
+    ctx.tracer.event("plan.transition", plan=plan.ident, state=plan.state)
     say(f"✓ {plan.ident} pasa a «{plan.state}»")
     return 0
+
+
+def _cmd_agreed_plan(ctx: Ctx, args: argparse.Namespace) -> int:
+    """The actions of SPEC-0023; ``args.target`` is the slug of ``new`` or the PLAN-NNNN of the others."""
+    action = args.action
+    if action == "list":
+        return _plan_list(ctx)
+    if not args.target:
+        raise MthError(f"plan {action} necesita {'el slug' if action == 'new' else 'el ID del plan (PLAN-NNNN)'}.")
+    if action == "new":
+        return _plan_new(ctx, args.target, args.title)
+    if action == "show":
+        print(plans.raw(plans.find(flow.plans_dir(ctx), args.target)), end="")
+        return 0
+    if action == "agree":
+        return _plan_transition(ctx, args.target, "acordado")
+    return _plan_transition(ctx, args.target, "abandonado" if args.abandon else "ejecutado")
 
 
 def _cmd_plan(args: argparse.Namespace) -> int:
@@ -252,22 +266,22 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         return _cmd_agreed_plan(ctx, args)
     models = ctx.cfg["models"]
     if args.action == "stats":
-        if args.spec:
+        if args.target:
             raise MthError("plan stats no admite una spec posicional.", hint="Usa --spec SPEC-NNNN.")
         return _cmd_plan_stats(ctx, args.only_spec)
-    if not args.spec:
+    if not args.target:
         raise MthError(f"plan {args.action} necesita el ID de la spec.")
-    _, tasks = _plan_tasks(ctx, args.spec)
+    _, tasks = _plan_tasks(ctx, args.target)
     if args.action == "check":
         by_wave = plan.waves(tasks)
-        say(f"✓ Plan de {args.spec} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
+        say(f"✓ Plan de {args.target} válido: {len(tasks)} tareas en {len(by_wave)} oleadas")
         for wave, items in by_wave.items():
             print(f"  Oleada {wave}: " + ", ".join(f"{t.id} ({t.effective_model(models['task'])})" for t in items))
         return 0
     if args.action == "model":
         task = next((t for t in tasks if t.id == args.task), None)
         if task is None:
-            raise MthError(f"{args.task or '(sin tarea)'} no es una tarea del plan de {args.spec}.")
+            raise MthError(f"{args.task or '(sin tarea)'} no es una tarea del plan de {args.target}.")
         model = task.effective_model(models["task"])
         print(plan.next_model(models["ladder"], model) if args.retry else model)
         return 0
@@ -285,18 +299,18 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     errors += result.errors
     for task_id, (outcome, digest) in sorted(result.outcomes.items()):
         model = overrides.get(task_id) or in_wave[task_id].effective_model(models["task"])
-        ctx.tracer.event("plan.task", spec=args.spec, task=task_id, wave=args.wave, model=model,
+        ctx.tracer.event("plan.task", spec=args.target, task=task_id, wave=args.wave, model=model,
                          result=outcome, manifest=digest)
     for w in result.warnings:
         warn(w)
     for e in errors:
         print(f"✗ {e}")
-    ctx.tracer.event("plan.verify", spec=args.spec, wave=args.wave, errors=len(errors), warnings=len(result.warnings))
+    ctx.tracer.event("plan.verify", spec=args.target, wave=args.wave, errors=len(errors), warnings=len(result.warnings))
     if errors:
-        say(f"Oleada {args.wave} de {args.spec} rechazada: {len(errors)} errores")
+        say(f"Oleada {args.wave} de {args.target} rechazada: {len(errors)} errores")
         return EXIT_ERROR
     suffix = f" ({len(result.warnings)} desvíos por resolver)" if result.warnings else ""
-    say(f"✓ Oleada {args.wave} de {args.spec} verificada{suffix}")
+    say(f"✓ Oleada {args.wave} de {args.target} verificada{suffix}")
     return 0
 
 
@@ -454,7 +468,7 @@ def _parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("plan", help="plan de trabajo: validar, verificar una oleada, modelo de una tarea, métricas")
     s.add_argument("action", choices=["check", "verify", "model", "stats", *AGREED_ACTIONS])
-    s.add_argument("spec", nargs="?", help="ID de la spec (SPEC-NNNN); en new el slug del plan y en agree, show y done su PLAN-NNNN")
+    s.add_argument("target", nargs="?", help="ID de la spec (SPEC-NNNN); en new el slug del plan y en agree, show y done su PLAN-NNNN")
     s.add_argument("task", nargs="?", help="ID de la tarea (plan model)")
     s.add_argument("--wave", type=int, help="oleada a verificar")
     s.add_argument("--manifest", action="append", help="manifiesto JSON de una tarea (repetible)")

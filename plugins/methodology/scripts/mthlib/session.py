@@ -52,7 +52,7 @@ def _plan_lines(git: Git, cfg: Config, info: branches.BranchInfo) -> list[str]:
         lines.append("Planes abiertos (.work/plans/): " + "; ".join(f"{p.ident} {p.state}: {p.title}" for p in open_) + ".")
     if broken:
         lines.append(f"⚠ Planes ilegibles en .work/plans/: {', '.join(p.name for p in broken)}.")
-    if info.kind in cfg["plans"]["required_for"] and not any(p.state == "en curso" and info.top in p.branches for p in found):
+    if info.kind in cfg["plans"]["required_for"] and plans.running_for(found, info.top) is None:
         lines.append(f"⚠ La rama {info.top} no tiene un plan «en curso» que la liste: sin él no se integra (skill mth-plan).")
     return lines
 

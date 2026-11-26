@@ -13,6 +13,7 @@
 - Un reintento con el mismo modelo que ya falló suele volver a fallar.
 - Los niveles se ajustan con datos (PRINCIPLES §2).
 - Los alias (`haiku`, `sonnet`, `opus`, `fable`) los entiende la herramienta Agent de Claude Code, que los resuelve a la versión vigente.
+- Matizado por [ADR-0021](ADR-0021-planes-acordados-antes-de-desarrollar.md): el planificador siempre usa `opus`, fijado por la skill que lo lanza y no por su cabecera ni por la configuración.
 
 ## Decisión
 

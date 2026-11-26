@@ -191,7 +191,12 @@ def plans_dir(ctx: Ctx) -> Path:
 def _gate_plan(ctx: Ctx, info: branches.BranchInfo) -> None:
     """ADR-0021: a branch of a required kind needs a running plan that lists its top-level branch."""
     if info.kind in ctx.cfg["plans"]["required_for"]:
-        say(f"· Plan: {plans.for_branch(plans_dir(ctx), info.top).ident}")
+        try:
+            plan = plans.for_branch(plans_dir(ctx), info.top)
+        except MthError:
+            ctx.tracer.event("plan.denied", branch=info.top)
+            raise
+        say(f"· Plan: {plan.ident}")
 
 
 def _gate_tests(ctx: Ctx) -> str:
@@ -342,6 +347,8 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None, plan: s
     if g.remote_has(name) or g.local_has(name):
         raise MthError(f"La rama {name} ya existe.")
     plan_path = plans.for_start(plans_dir(ctx), plan, kind) if plan or kind in cfg["plans"]["required_for"] else None
+    if plan_path is not None:  # the first change: if the plan cannot be written, no branch is created (SPEC-0023/FM-10)
+        say(f"· Plan {plans.add_branch(plan_path, name).ident}: rama {name} registrada")
     g.checkout_synced(base)
     g.out("checkout", "-b", name)
     if kind in cfg["changes"]["required_for"]:
@@ -350,9 +357,7 @@ def start(ctx: Ctx, kind: str, slug: str, child: bool, spec: str | None, plan: s
         frag_path.write_text(changelog.template(kind, refs, cfg.vocab), encoding="utf-8")
         say(f"· Fragmento creado: {frag_path.relative_to(ctx.root)} (complétalo antes de integrar)")
     g.push(name)
-    if plan_path is not None:
-        say(f"· Plan {plans.add_branch(plan_path, name).ident}: rama {name} registrada")
-    ctx.tracer.event("branch.start", branch=name, base=base, spec=spec)
+    ctx.tracer.event("branch.start", branch=name, base=base, spec=spec, plan=plan_path.name[:9] if plan_path else None)
     say(f"✓ Rama {name} creada desde {base}")
     return name
 

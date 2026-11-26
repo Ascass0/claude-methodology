@@ -141,6 +141,29 @@ class FormatTests(TempDir):
             with self.assertRaises(MthError):
                 plans.find(self.dir, bad)
 
+    def test_two_files_with_the_same_number_fail_naming_both(self):
+        # verifies: SPEC-0023/AC-03
+        # verifies: SPEC-0023/FM-14
+        self.write("PLAN-0004-uno.md", text())
+        self.write("PLAN-0004-dos.md", text())
+        with self.assertRaises(MthError) as ctx:
+            plans.find(self.dir, "PLAN-0004")
+        self.assertIn("PLAN-0004-uno.md", ctx.exception.message)
+        self.assertIn("PLAN-0004-dos.md", ctx.exception.message)
+
+    def test_raw_reads_a_plan_that_does_not_follow_the_format(self):
+        # verifies: SPEC-0023/AC-03
+        self.assertEqual(plans.raw(self.write("PLAN-0001-roto.md", "basura")), "basura")
+
+    def test_a_plan_over_the_size_limit_is_unreadable(self):
+        # verifies: SPEC-0023/AC-12
+        # verifies: SPEC-0023/FM-13
+        path = self.write("PLAN-0001-demo.md", text() + "x" * plans.MAX_BYTES)
+        with self.assertRaises(MthError) as ctx:
+            plans.read(path)
+        self.assertIn("PLAN-0001-demo.md", ctx.exception.message)
+        self.assertEqual(plans.listing(self.dir)[1], [path])
+
 
 class CreateTests(TempDir):
     def test_numbers_follow_the_highest_and_never_overwrite(self):
@@ -161,6 +184,21 @@ class CreateTests(TempDir):
             created = plans.create(self.dir, "uno", "Uno")
         self.assertEqual(created.name, "PLAN-0002-uno.md")
         self.assertTrue((self.dir / "PLAN-0001-uno.md").read_text().startswith("# PLAN-0001"))
+
+    def test_a_title_cannot_inject_header_fields(self):
+        # verifies: SPEC-0023/AC-02
+        # verifies: SPEC-0023/FM-12
+        for title in ("a\n- Estado: en curso", "a\r- Rama: `feat/y`", "", "   ", "x" * (plans.MAX_TITLE + 1), "a\x00b"):
+            with self.assertRaises(MthError, msg=repr(title)):
+                plans.create(self.dir, "demo", title)
+        self.assertEqual(list(self.dir.glob("PLAN-*")), [])
+        self.assertEqual(plans.parse(plans.create(self.dir, "demo", "Título válido").read_text(), self.dir / "PLAN-0001-demo.md").state, "borrador")
+
+    def test_header_fields_are_read_only_from_the_header(self):
+        # verifies: SPEC-0023/AC-02
+        path = self.write("PLAN-0001-demo.md", text("borrador").replace("## Idea\n", "## Idea\n\n- Estado: acordado\n- Rama: `feat/y`\n"))
+        plan = plans.read(path)[0]
+        self.assertEqual((plan.state, plan.branches), ("borrador", ()))
 
     def test_the_template_has_every_section_but_is_not_ready_to_agree(self):
         # verifies: SPEC-0023/AC-04
@@ -292,6 +330,13 @@ class GateTests(TempDir):
         self.write("PLAN-0001-demo.md", text("en curso", branch="`feat/otra`"))
         with self.assertRaises(MthError):
             plans.for_branch(self.dir, "feat/x")
+
+    def test_the_running_rule_is_one_function(self):
+        # verifies: SPEC-0023/AC-10
+        found = [plans.Plan("PLAN-0001", "a", self.dir, "en curso", "A", ("feat/x",)),
+                 plans.Plan("PLAN-0002", "b", self.dir, "acordado", "B", ("feat/y",))]
+        self.assertEqual(plans.running_for(found, "feat/x").ident, "PLAN-0001")
+        self.assertIsNone(plans.running_for(found, "feat/y"))
 
     def test_a_corrupt_plan_never_counts_and_is_named(self):
         # verifies: SPEC-0023/AC-12
