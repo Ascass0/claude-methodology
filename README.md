@@ -113,7 +113,7 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 | `review.agents` / `required_for` | Agentes revisores del repo (en orden de precedencia) y ramas que exigen revisión |
 | `roles.*` | Agentes del repo para coder, documentador, verificador y planificador (`roles.planner`, por defecto `planificador`) |
 | `plans.required_for` | Tipos de rama que necesitan un plan acordado antes de crearse y de integrarse (por defecto `feat`, `fix` y `hotfix`). El plan es un fichero local de `.work/plans/`, nunca se commitea. Ver [SPEC-0023](specs/features/SPEC-0023-planes-acordados-antes-de-desarrollar.md) y [ADR-0021](specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md) |
-| `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra |
+| `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra y, además, indica que el planificador va fijo en `opus` (no es configurable) |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
 | `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
 | `trace.legacy_base` | Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde él son avisos y `mth trace --legacy` los lista. Ver [SPEC-0005](specs/features/SPEC-0005-modo-legado-en-la-trazabilidad.md) |
