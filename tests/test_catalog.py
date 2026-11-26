@@ -1,6 +1,7 @@
 """Tests of the agent catalog and its deterministic rendering (SPEC-0012)."""
 from __future__ import annotations
 
+import re
 import shutil
 import tempfile
 import tomllib
@@ -20,6 +21,9 @@ MODEL_ROLES = {"review", "task", "documenter", "none"}
 
 def _evals(name: str) -> dict:
     return tomllib.loads((CATALOG / name / "evals.toml").read_text(encoding="utf-8"))
+
+
+_INTERNAL_ID = re.compile(r"\b(?:SPEC|ADR)-\d{4}")
 
 
 class CatalogStructureTests(unittest.TestCase):
@@ -130,6 +134,16 @@ class RenderTests(unittest.TestCase):
                 self.assertNotIn("{{", first.agent_md + first.guard_toml)
                 tomllib.loads(first.guard_toml)
 
+    def test_rendering_is_deterministic_without_optional_variables(self):
+        # verifies: SPEC-0012/AC-01
+        bare = parse(Path("/nonexistent"), support.template_with_agents("")).data
+        for name in catalog.names(CATALOG):
+            if catalog.missing_requirements(catalog.load_meta(CATALOG, name), bare):
+                continue
+            first = catalog.render(CATALOG, name, bare)
+            with self.subTest(agent=name):
+                self.assertEqual(first, catalog.render(CATALOG, name, bare))
+
     def test_header_and_reviewer_output(self):
         # unit: catalog.render
         for name in catalog.names(CATALOG):
@@ -141,6 +155,16 @@ class RenderTests(unittest.TestCase):
                                  catalog.Installed(name, r.version, False))
                 if r.review is not None:
                     self.assertIn("BLOQUEANTES: <n>", r.agent_md)
+
+    def test_installed_files_carry_no_plugin_internal_ids(self):
+        # verifies: SPEC-0012/AC-28
+        for shared in (CATALOG / "_shared").glob("*"):
+            with self.subTest(shared=shared.name):
+                self.assertIsNone(_INTERNAL_ID.search(shared.read_text(encoding="utf-8")))
+        for name in catalog.names(CATALOG):
+            r = catalog.render(CATALOG, name, self.config)
+            with self.subTest(agent=name):
+                self.assertIsNone(_INTERNAL_ID.search(r.agent_md + (r.guard_toml or "")))
 
     def test_unknown_variable_aborts(self):
         # verifies: SPEC-0012/AC-02
@@ -214,6 +238,12 @@ class AgentsConfigTests(unittest.TestCase):
         with self.assertRaises(MthError) as ctx:
             self.parse('[agents.lector-estado]\ndatabase = { a = "a.db" }\n')
         self.assertIn("agents.lector-estado.database", ctx.exception.message)
+
+    def test_unknown_variable_of_an_agent_without_variables_is_an_error_naming_the_key(self):
+        # verifies: SPEC-0012/AC-19
+        with self.assertRaises(MthError) as ctx:
+            self.parse('[agents.diagnosticador]\nmax_rows = 5\n')
+        self.assertIn("agents.diagnosticador.max_rows", ctx.exception.message)
 
     def test_unknown_agent_and_wrong_type_are_errors(self):
         # unit: config.parse

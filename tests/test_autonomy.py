@@ -55,6 +55,21 @@ class ConfirmationTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIsNone(guard.confirmation(command, "supervised"))
 
+    def test_confirmation_sees_through_prefixes_and_shell_grouping(self):
+        # verifies: SPEC-0007/AC-03
+        for command in ("sudo git push origin x", "(git commit -m x)", "env GIT_TRACE=1 git push", "sudo mth integrate",
+                        "(mth release)", "git status && \\\ngit push"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(guard.confirmation(command, "supervised"))
+        self.assertIsNone(guard.confirmation("sudo ls", "supervised"))
+
+    def test_invalid_levels_are_rejected_exactly(self):
+        # verifies: SPEC-0007/AC-06
+        for level in ("FULL", "", "until_pr"):
+            with self.subTest(level=level), self.assertRaises(MthError) as ctx:
+                parse(Path("."), CONFIG + f'[autonomy]\nlevel = "{level}"\n')
+            self.assertIn("debe ser uno de full, until-pr, supervised", ctx.exception.message)
+
     def test_session_rules_describe_the_level(self):
         # verifies: SPEC-0007/AC-05
         for level, expected in (("full", "Trabajas de forma **autónoma** sobre las specs"),
@@ -81,6 +96,20 @@ class GuardHookTests(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
             code = guard.main(json.dumps({"tool_input": {"command": command}, "cwd": str(self.root)}))
         return code, out.getvalue()
+
+    def test_no_autonomy_table_never_asks_through_the_hook(self):
+        # verifies: SPEC-0007/AC-01
+        for command in ("$MTH integrate --title x", 'git commit -m "x"'):
+            with self.subTest(command=command):
+                self.assertEqual(self.run_guard(command, CONFIG), (0, ""))
+
+    def test_other_blocked_commands_stay_blocked(self):
+        # verifies: SPEC-0007/AC-04
+        for command in ("git rebase origin/main", 'git commit --no-verify -m "x"'):
+            for level in ("full", "supervised"):
+                with self.subTest(command=command, level=level):
+                    code, out = self.run_guard(command, CONFIG + f'[autonomy]\nlevel = "{level}"\n')
+                    self.assertEqual((code, out), (guard.BLOCK, ""))
 
     def test_blocked_commands_stay_blocked(self):
         # verifies: SPEC-0007/AC-04

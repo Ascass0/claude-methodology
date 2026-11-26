@@ -1,6 +1,11 @@
 """Tests of the version files rewritten on release (SPEC-0003)."""
 from __future__ import annotations
 
+import contextlib
+import io
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,7 +16,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
 import test_mth  # noqa: E402  (module import: its test classes are not collected twice)
-from mthlib import versions  # noqa: E402
+from mthlib import setup, versions  # noqa: E402
 from mthlib.config import parse  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 
@@ -47,6 +52,12 @@ class VersionFileConfigTests(unittest.TestCase):
                 with self.assertRaises(MthError) as ctx:
                     parse(Path("."), _config(body))
                 self.assertIn(expected.strip(), ctx.exception.message)
+
+    def test_valid_nested_entry_is_accepted(self):
+        # verifies: SPEC-0003/AC-02
+        body = '[[release.version_files]]\npath = "sub/dir/a.json"\npattern = "v(.+)"\n'
+        items = parse(Path("."), _config(body))["release"]["version_files"]
+        self.assertEqual([i["path"] for i in items], ["sub/dir/a.json"])
 
 
 class VersionFileWriteTests(unittest.TestCase):
@@ -84,6 +95,13 @@ class VersionFileWriteTests(unittest.TestCase):
         versions.write(self.root, self.items, "1.4.0")
         self.assertEqual((self.root / "package.json").read_bytes(), crlf.replace(b'"0.0.0"', b'"1.4.0"'))
 
+    def test_mixed_line_endings_are_kept(self):
+        # verifies: SPEC-0003/AC-07
+        mixed = b'{\r\n  "name": "demo",\n  "version": "0.0.0",\r\n  "deps": {}'  # no final newline
+        (self.root / "package.json").write_bytes(mixed)
+        versions.write(self.root, self.items, "1.4.0")
+        self.assertEqual((self.root / "package.json").read_bytes(), mixed.replace(b'"0.0.0"', b'"1.4.0"'))
+
     def test_capture_group_must_take_part_in_the_match(self):
         # verifies: SPEC-0003/AC-08
         (self.root / "lib.py").write_text('__version__ = ""\n', encoding="utf-8")
@@ -94,6 +112,37 @@ class VersionFileWriteTests(unittest.TestCase):
             self.assertIn("no captura nada", ctx.exception.message)
         self.assertEqual((self.root / "lib.py").read_text(encoding="utf-8"), '__version__ = ""\n')
         self.assertEqual((self.root / "package.json").read_text(encoding="utf-8"), PACKAGE)
+
+    def test_unmatched_alternative_leaves_the_group_empty(self):
+        # verifies: SPEC-0003/AC-08
+        (self.root / "VERSION").write_text("release\n", encoding="utf-8")
+        items = self.items + versions.from_config([{"path": "VERSION", "pattern": r"(\d+\.\d+\.\d+)|release"}])
+        with self.assertRaises(MthError) as ctx:
+            versions.write(self.root, items, "1.4.0")
+        self.assertIn("no captura nada", ctx.exception.message)
+        self.assertEqual((self.root / "VERSION").read_text(encoding="utf-8"), "release\n")
+        self.assertEqual((self.root / "package.json").read_text(encoding="utf-8"), PACKAGE)
+
+
+class VersionFileDoctorTests(unittest.TestCase):
+    def test_each_file_is_judged_on_its_own(self):
+        # verifies: SPEC-0003/AC-06
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        env = {**os.environ, **test_mth.GIT_ENV}
+        for args in (("init", "-q", "-b", "main"), ("commit", "-q", "--allow-empty", "-m", "init"),
+                     ("tag", "v1.2.0")):
+            subprocess.run(["git", *args], cwd=root, env=env, check=True, capture_output=True)
+        test_mth._write(root / ".claude/methodology.toml", _config(
+            '[[release.version_files]]\npath = "a.txt"\npattern = "v(.+)"\n'
+            '[[release.version_files]]\npath = "b.txt"\npattern = "v(.+)"\n'))
+        test_mth._write(root / "a.txt", "v1.2.0\n")
+        test_mth._write(root / "b.txt", "v1.1.0\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            setup.doctor(root)
+        self.assertIn("✓ Fichero de versión a.txt: 1.2.0", out.getvalue())
+        self.assertIn("⚠ Fichero de versión b.txt: 1.1.0 (última etiqueta: 1.2.0)", out.getvalue())
 
 
 class VersionFileFlowTests(unittest.TestCase):

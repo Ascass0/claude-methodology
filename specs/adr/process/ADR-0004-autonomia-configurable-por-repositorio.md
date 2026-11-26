@@ -3,34 +3,36 @@
 - Estado: aceptado
 - Fecha: 2026-11-18
 - Categoría: process
-
-<!-- Estados: propuesto → aceptado → sustituido por ADR-NNNN | obsoleto. Formato basado en MADR. -->
+- Formato: compacto
 
 ## Contexto
 
-PRINCIPLES §11 establece la autonomía completa: Claude crea ramas, hace commits, integra y publica sin pedir permiso, y la supervisión que necesite un repo se añade con un hook propio de ese repo. En la práctica, casi ningún repo escribe ese hook, y la adopción guiada ([SPEC-0004](../../features/SPEC-0004-adopcion-guiada.md)) tiene que ofrecer niveles intermedios a equipos que no están dispuestos a la autonomía completa desde el primer día.
-
-Fuerzas en juego:
-
-- **La autonomía se apoya en gates deterministas.** Pedir confirmación no sustituye a los gates; se añade a ellos.
-- **Claude Code ya sabe pedir confirmación.** Un hook `PreToolUse` puede responder `ask`, y Claude Code muestra la petición a la persona. En una sesión no interactiva, `ask` equivale a denegar.
-- **El guard ya inspecciona cada comando Bash** para bloquear lo que se salta el flujo.
+- PRINCIPLES §11 fija la autonomía completa y deja la supervisión a un hook propio de cada repo; casi ningún repo lo escribe.
+- La adopción guiada ([SPEC-0004](../../features/SPEC-0004-adopcion-guiada.md)) debe ofrecer niveles intermedios a equipos que no aceptan la autonomía completa desde el primer día.
+- La autonomía se apoya en gates deterministas; pedir confirmación se suma a ellos, no los sustituye.
+- Un hook `PreToolUse` puede responder `ask` y Claude Code lo muestra a la persona; en sesión no interactiva, `ask` equivale a denegar.
+- El guard ya inspecciona cada comando Bash.
 
 ## Decisión
 
-1. Tres niveles en `[autonomy] level`: `full` (por defecto, como hasta ahora), `until-pr` (se confirma integrar y publicar) y `supervised` (además, cada commit, cada rama nueva y cada push).
-2. Lo aplica el guard existente con la decisión `ask` de Claude Code, no instrucciones en el contexto: una instrucción se puede olvidar; un hook no.
-3. Si el guard no puede leer la configuración, pide confirmación como en `supervised` (fail-safe), en vez de dejar pasar sin confirmar. Sigue dejando pasar sin bloquear (fail-open) los comandos que no reconoce, como hasta ahora.
-4. PRINCIPLES §11 describe los tres niveles. El resto de reglas de autonomía (cuándo detenerse, gates obligatorios) no cambia.
+1. `[autonomy] level` DEBE admitir tres niveles: `full` (por defecto), `until-pr` (confirma integrar y publicar) y `supervised` (además, cada commit, rama nueva y push).
+2. Lo DEBE aplicar el guard existente con la decisión `ask`, no instrucciones de contexto: una instrucción se olvida, un hook no.
+3. SI el guard no puede leer la configuración, ENTONCES DEBE pedir confirmación como en `supervised` (fail-safe). Los comandos que no reconoce los deja pasar (fail-open), como hasta ahora.
+4. PRINCIPLES §11 DEBE describir los tres niveles; el resto de reglas de autonomía no cambia.
 
-## Alternativas consideradas
+## Rechazado
 
-- **Solo instrucciones en las reglas de sesión** ("pregunta antes de integrar"): no es verificable y se pierde al compactar el contexto.
-- **Un hook de ejemplo para que cada repo lo copie:** cada repo acabaría con una variante distinta, y la adopción guiada no podría configurarlo.
-- **Permisos de Claude Code (`permissions.ask`) en `.claude/settings.json`:** casan por prefijo de comando y no reconocen las distintas formas de invocar `mth` (`$MTH`, la ruta completa, `python mth.py`).
+- Solo instrucciones en las reglas de sesión: no es verificable y se pierde al compactar el contexto.
+- Hook de ejemplo para copiar: cada repo acabaría con una variante y la adopción no podría configurarlo.
+- `permissions.ask` de `.claude/settings.json`: casa por prefijo y no reconoce las formas de invocar `mth` (`$MTH`, ruta completa, `python mth.py`).
 
 ## Consecuencias
 
-- **Positivas:** un equipo puede adoptar con supervisión y relajarla cambiando una clave. La adopción guiada lo pregunta.
-- **Negativas:** en `supervised`, la sesión se interrumpe a menudo. Es el precio que elige quien lo configura.
-- **Riesgo aceptado:** el guard reconoce invocaciones de `mth` por su forma. Una invocación muy indirecta (un script propio que llame a `mth`) no pedirá confirmación. El guard es una barrera para el agente, no una frontera de seguridad: las reglas de GitHub siguen protegiendo las ramas compartidas.
+- **+** Un equipo adopta con supervisión y la relaja cambiando una clave; la adopción guiada lo pregunta.
+- **−** En `supervised` la sesión se interrumpe a menudo: es el precio de quien lo elige.
+- **riesgo** El guard reconoce `mth` por su forma; una invocación muy indirecta (script propio) no pide confirmación → el guard es barrera para el agente, no frontera de seguridad; las reglas de GitHub protegen las ramas compartidas.
+
+## Impone
+
+- [script] `mthlib/guard.py`: decisión `ask` por nivel y fail-safe sin configuración; `mthlib/config.py`: `AUTONOMY_LEVELS`.
+- [criterio] PRINCIPLES §11 y `revisor-adr`: el nivel sale de la configuración, no del contexto.

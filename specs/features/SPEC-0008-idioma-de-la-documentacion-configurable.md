@@ -2,15 +2,17 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0005
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0008/AC-NN`. -->
 
 ## Contexto
 
-La metodología escribe el código y los commits en inglés, y la documentación, las specs, el changelog y los PR en español. Las plantillas están en español y `mth` reconoce palabras clave en español: el estado de una spec (`- Estado: implementada`), la sección `## Plan de trabajo` y sus columnas, y las secciones del changelog (`Añadido`, `Corregido`…). Un repo con documentación en inglés no puede adoptar la metodología sin mezclar dos idiomas. [ADR-0005](../adr/process/ADR-0005-idioma-de-la-documentacion-configurable.md) recoge la decisión.
+- Código y commits en inglés; documentación, specs, changelog y PR en español.
+- Las plantillas están en español y `mth` reconoce palabras clave en español: el estado de una spec (`- Estado: implementada`), `## Plan de trabajo` y sus columnas, las secciones del changelog (`Añadido`, `Corregido`…).
+- Un repo con documentación en inglés no puede adoptar la metodología sin mezclar idiomas.
+- Decisión: [ADR-0005](../adr/process/ADR-0005-idioma-de-la-documentacion-configurable.md).
 
 ## Objetivo
 
@@ -38,22 +40,22 @@ Tabla nueva `[language]`, con la clave `docs`: `es` (por defecto) o `en`. Cada i
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Idioma desconocido | Carga de la configuración | Fail-fast |
-| Fragmento con una sección de otro idioma | `mth changes check`, gates | Error con las secciones válidas del idioma |
-| Spec con el estado en otro idioma | `mth trace` | No se reconoce como implementada, igual que hoy con un estado mal escrito |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Idioma desconocido | Fail-fast al cargar la configuración | AC-02 |
+| FM-02 | Fragmento con una sección de otro idioma | `mth changes check` y gates: error con las secciones válidas del idioma | AC-04 |
+| FM-03 | Spec con el estado en otro idioma | `mth trace`: no se reconoce como implementada, igual que con un estado mal escrito | AC-05 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Sin la tabla `[language]`, todo funciona como hasta ahora, en español.
-- **AC-02**: La carga de la configuración rechaza un idioma distinto de `es` o `en`.
-- **AC-03**: Con `en`, `mth doc spec` y `mth doc adr` crean documentos con las plantillas en inglés.
-- **AC-04**: Con `en`, los fragmentos se validan con las secciones en inglés, se rechaza una sección en español y la publicación las escribe en inglés.
-- **AC-05**: Con `en`, `mth trace` exige tests para los criterios de una spec con `- Status: implemented`.
-- **AC-06**: Con `en`, `mth plan check` reconoce `## Work plan` con sus columnas en inglés.
-- **AC-07**: Las reglas de sesión indican el idioma configurado de la documentación.
-- **AC-08**: Con `en`, `mth init` escribe el CHANGELOG y el bloque de CLAUDE.md en inglés, y `mth branch` crea el fragmento en inglés.
+- **AC-01**: MIENTRAS no exista la tabla `[language]`, `mth` DEBE funcionar en español como hasta ahora.
+- **AC-02**: SI `language.docs` no es `es` ni `en`, ENTONCES la carga de la configuración DEBE rechazarlo.
+- **AC-03**: MIENTRAS `language.docs = "en"`, `mth doc spec` y `mth doc adr` DEBEN crear documentos con las plantillas en inglés.
+- **AC-04**: MIENTRAS `language.docs = "en"`, `mth` DEBE validar los fragmentos con las secciones en inglés, rechazar una sección en español y escribirlas en inglés al publicar.
+- **AC-05**: MIENTRAS `language.docs = "en"`, `mth trace` DEBE exigir tests para los criterios de una spec con `- Status: implemented`.
+- **AC-06**: MIENTRAS `language.docs = "en"`, `mth plan check` DEBE reconocer `## Work plan` con sus columnas en inglés.
+- **AC-07**: Las reglas de sesión DEBEN indicar el idioma configurado de la documentación.
+- **AC-08**: MIENTRAS `language.docs = "en"`, `mth init` DEBE escribir el CHANGELOG y el bloque de CLAUDE.md en inglés y `mth branch` DEBE crear el fragmento en inglés.
 
 ## Notas
 

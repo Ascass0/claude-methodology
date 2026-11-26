@@ -2,22 +2,21 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: —
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0003/AC-NN`. -->
 
 ## Contexto
 
-`mth release` y `mth hotfix finish` calculan la versión, crean la etiqueta y actualizan el CHANGELOG, pero no tocan los ficheros en los que el proyecto declara su propia versión: un `package.json`, un `pyproject.toml` o, en este repo, `plugin.json`, `marketplace.json` y `mthlib/__init__.py`. Esos ficheros se actualizaban a mano.
-
-En la 0.5.0 nadie lo hizo. Se publicó declarando 0.4.0, y como Claude Code actualiza los plugins por versión, quien ya tenía el plugin instalado no recibió la actualización. La v0.5.1 corrigió los ficheros, pero no la causa: la próxima versión fallaría igual.
+- `mth release` y `mth hotfix finish` calculan la versión, crean la etiqueta y actualizan el CHANGELOG, pero no tocan los ficheros donde el proyecto declara su versión (`package.json`, `pyproject.toml`; en este repo `plugin.json`, `marketplace.json` y `mthlib/__init__.py`); se actualizaban a mano.
+- En la 0.5.0 nadie lo hizo: se publicó declarando 0.4.0 y, como Claude Code actualiza plugins por versión, quien ya lo tenía no recibió la actualización.
+- La v0.5.1 corrigió los ficheros pero no la causa.
 
 ## Objetivo
 
 1. El repo declara en su configuración qué ficheros contienen la versión y dónde.
-2. Publicar una versión (normal o hotfix) actualiza esos ficheros en el mismo commit que el CHANGELOG.
+2. Publicar una versión (normal o hotfix) los actualiza en el mismo commit que el CHANGELOG.
 3. Una declaración rota o desfasada se detecta antes de publicar, no después.
 
 ## Fuera de alcance
@@ -59,24 +58,24 @@ En el commit `chore(release): vX.Y.Z`, cada captura se sustituye por la versión
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Entrada sin `path` o `pattern`, con claves de más, ruta absoluta o con `..`, regex inválida, sin grupo o con varios, o duplicada | Carga de la configuración | Fail-fast: ningún comando se ejecuta; el error nombra la entrada |
-| El fichero no existe | `mth release`, `mth hotfix finish`, `mth doctor` | Publicación: error antes de crear rama o commit. Doctor: ✗ |
-| El patrón no aparece o aparece más de una vez | `mth release`, `mth hotfix finish`, `mth doctor` | Lo mismo, indicando cuántas coincidencias hay |
-| El grupo de captura es opcional y no participa en la coincidencia | `mth release`, `mth hotfix finish`, `mth doctor` | Lo mismo que un patrón que no aparece: error antes de modificar nada; doctor: ✗ |
-| La versión declarada no coincide con la última etiqueta | `mth doctor` | ⚠ con las dos versiones; no bloquea, porque entre versiones es un aviso |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Entrada sin `path` o `pattern`, con claves de más, ruta absoluta o con `..`, regex inválida, sin grupo o con varios, o duplicada | Fail-fast al cargar la configuración: ningún comando se ejecuta; el error nombra la entrada | AC-02 |
+| FM-02 | El fichero no existe | Publicación: error antes de crear rama o commit. Doctor: ✗ | AC-05, AC-06 |
+| FM-03 | El patrón no aparece o aparece más de una vez | Lo mismo, indicando cuántas coincidencias hay | AC-05, AC-06 |
+| FM-04 | El grupo de captura es opcional y no participa en la coincidencia | Como un patrón que no aparece: error antes de modificar nada; doctor: ✗ | AC-08 |
+| FM-05 | La versión declarada no coincide con la última etiqueta | `mth doctor`: ⚠ con las dos versiones; no bloquea (entre versiones es un aviso) | AC-06 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Sin `release.version_files`, la configuración tiene una lista vacía y publicar no toca ningún fichero aparte del CHANGELOG.
-- **AC-02**: La carga de la configuración rechaza una entrada sin `path` o sin `pattern`, con claves desconocidas, con ruta absoluta o con `..`, con una regex inválida o sin exactamente un grupo, y una entrada duplicada.
-- **AC-03**: `mth release` sustituye la captura de cada fichero declarado por la versión nueva en el commit `chore(release)`, deja intacto el resto del fichero y lista los ficheros en el cuerpo del commit.
-- **AC-04**: `mth hotfix finish` actualiza los ficheros declarados con la versión patch en su commit `chore(release)`.
-- **AC-05**: Si un fichero declarado no existe o su patrón aparece cero o más de una vez, `mth release` falla antes de crear la rama de release y no modifica ningún fichero.
-- **AC-06**: `mth doctor` marca con ✓ cada fichero cuya versión coincide con la última etiqueta, con ⚠ uno desfasado y con ✗ uno que no existe o cuyo patrón no aparece exactamente una vez.
-- **AC-07**: Al sustituir la versión, el resto del fichero se conserva byte a byte, incluidos los finales de línea CRLF.
-- **AC-08**: Si el grupo de captura no participa en la coincidencia, leer o escribir los ficheros de versión falla sin modificar ninguno.
+- **AC-01**: MIENTRAS no se declare `release.version_files`, la configuración DEBE tener una lista vacía y publicar NO DEBE tocar ningún fichero aparte del CHANGELOG.
+- **AC-02**: SI una entrada de `release.version_files` carece de `path` o `pattern`, tiene claves desconocidas, ruta absoluta o con `..`, una regex inválida o sin exactamente un grupo, o está duplicada, ENTONCES la carga de la configuración DEBE rechazarla.
+- **AC-03**: CUANDO se ejecuta `mth release`, `mth` DEBE sustituir la captura de cada fichero declarado por la versión nueva en el commit `chore(release)`, dejar intacto el resto y listar los ficheros en el cuerpo del commit.
+- **AC-04**: CUANDO se ejecuta `mth hotfix finish`, `mth` DEBE actualizar los ficheros declarados con la versión patch en su commit `chore(release)`.
+- **AC-05**: SI un fichero declarado no existe o su patrón aparece cero o más de una vez, ENTONCES `mth release` DEBE fallar antes de crear la rama de release sin modificar ningún fichero.
+- **AC-06**: CUANDO se ejecuta `mth doctor`, `mth` DEBE marcar con ✓ cada fichero cuya versión coincide con la última etiqueta, con ⚠ uno desfasado y con ✗ uno inexistente o cuyo patrón no aparece exactamente una vez.
+- **AC-07**: CUANDO se sustituye la versión, `mth` DEBE conservar el resto del fichero byte a byte, incluidos los finales de línea CRLF.
+- **AC-08**: SI el grupo de captura no participa en la coincidencia, ENTONCES leer o escribir los ficheros de versión DEBE fallar sin modificar ninguno.
 
 ## Notas
 

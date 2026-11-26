@@ -6,6 +6,19 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.15.0] - 2026-11-26
+
+### Añadido
+- `mth update --plan` lista las brechas entre un repo adoptado y lo que exige el plugin instalado (configuración, agentes del catálogo, bloque de CLAUDE.md, hook, formato de specs y ADR). (SPEC-0021, ADR-0017)
+- `mth update` aplica en `chore/update-methodology` las brechas deterministas sin cambiar ninguna decisión ya tomada y deja un ADR de actualización. (SPEC-0021, ADR-0017)
+- Skill `mth-update`: la persona la invoca cuando el plugin se ha actualizado; conduce las decisiones y migraciones y se integra por PR. (SPEC-0021, ADR-0017)
+
+### Corregido
+- **Catálogo de agentes**: los agentes, los guards y el shim que instala `mth agents add` ya no citan specs ni ADR internos del plugin (SPEC-0012, ADR-0008, ADR-0015…). Un repo adoptado no los define, así que `mth trace` fallaba y bloqueaba su integración. Si ya tienes agentes instalados, `mth agents sync` los actualiza. (SPEC-0012)
+- **Adopción y reestructuración**: los ADR que genera `mth init` y `mth reconfigure` usan ya el formato compacto (campos Contexto, Decisión, Rechazado, Consecuencias e Impone), como exige el resto de ADR del repo. (SPEC-0004, SPEC-0011)
+- **Guard**: el bloqueo de los merges a mano ya no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo como `sudo` o `env`, ni con una petición de `gh api` / `glab api` que pueda escribir en un endpoint de merge o una mutación GraphQL de merge. Los merges siguen haciéndose con `mth integrate`, `mth release` o `mth hotfix finish`. (SPEC-0016)
+- **Guard**: la petición de confirmación del nivel de autonomía (`until-pr`, `supervised`) ve ahora los mismos comandos que el bloqueo: con prefijos (`sudo git push`), agrupaciones de shell (`(git commit …)`) y continuaciones de línea. El bloqueo de merges a mano también cubre `$(gh pr merge …)` al inicio de un comando, y el guard bloquea los comandos `glab` y los lanzados en segundo plano con `&`. Un fallo interno del guard indica ahora el tipo de excepción. (SPEC-0007, SPEC-0016)
+
 ## [0.14.0] - 2026-11-25
 
 ### Añadido

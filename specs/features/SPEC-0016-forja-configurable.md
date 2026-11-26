@@ -2,15 +2,16 @@
 
 - Estado: implementada
 - Fecha: 2026-11-24
+- Formato: compacto
 - ADRs: [ADR-0012](../adr/process/ADR-0012-forja-configurable.md), [ADR-0011](../adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md)
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0016/AC-NN`. -->
 
 ## Contexto
 
-El plugin da por hecho GitHub. En un repo alojado en GitLab, `mth release` falla en el paso de GitHub, la CI de la metodología no se ejecuta y `mth doctor` pide workflows que no tienen sentido. [SPEC-0015](SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md) lo trató de forma provisional (un remoto que no era `github.com` desactivaba `mth integrate` y `mth release`). [ADR-0012](../adr/process/ADR-0012-forja-configurable.md) lo sustituye por una clave de configuración.
+- El plugin da por hecho GitHub: en GitLab `mth release` falla en el paso de GitHub, la CI de la metodología no se ejecuta y `mth doctor` pide workflows sin sentido.
+- [SPEC-0015](SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md) lo trató de forma provisional (un remoto que no era `github.com` desactivaba `mth integrate` y `mth release`).
+- [ADR-0012](../adr/process/ADR-0012-forja-configurable.md) lo sustituye por una clave de configuración.
 
 ## Objetivo
 
@@ -82,35 +83,38 @@ Falla antes de modificar nada, con un error que nombra `forge` y explica que el 
 ### Guard, doctor y plantilla
 
 - El guard bloquea `glab mr merge …` y su alias `glab mr accept …` con el mismo mensaje que `gh pr merge`; otros subcomandos de `glab` pasan.
+- El bloqueo no se esquiva con opciones globales (`gh -R owner/repo pr merge`), con un prefijo con o sin opciones (`sudo -u root`, `env -i`, `nice -n 5`…) ni con `gh api` / `glab api` que no sea una lectura simple de un endpoint `…/merge` o `…/merges`, o una mutación GraphQL de merge. Es una barrera contra errores, no un sandbox: `bash -c "…"`, `eval`, un alias, una sustitución `$(…)` dentro de los argumentos de otro comando o un prefijo que no esté en su lista siguen fuera de su alcance.
 - `mth doctor` con `gitlab` o `none` no comprueba `gh` ni avisa de `ci.required`; con `github`, igual que antes.
 - La plantilla `methodology.toml` documenta `forge`.
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| `forge` con un valor desconocido | Carga de la configuración | Error que nombra `forge` y los valores válidos; ningún comando corre |
-| Remoto ilegible o sin remoto | `mth survey` | `forge = none`: se deniega la parte de la forja, no se relaja |
-| `mth hotfix finish` con `gitlab` o `none` | `mth hotfix finish` | Error antes de modificar nada |
-| `gh` no está instalado y `forge` no es `github` | `mth integrate`, `mth release` | No se usa: los comandos funcionan igual |
-| Versión ya publicada a mano sin rama de release | `mth release` | Los gates y el cálculo de versión son los de siempre: la persona decide qué hacer con la etiqueta existente |
-| Etiqueta ya existente al retomar | `mth release` | El paso 2 se marca como hecho y no se vuelve a crear, pero solo si la etiqueta está en el remoto y apunta a un commit de `main`; una etiqueta solo local o puesta en otro commit no cuenta y no se borra la rama |
-| `main` trae una versión anterior a la última etiqueta, o sin etiqueta histórica | `mth release` | Es historia, no una publicación pendiente: no retiene una release nueva |
-| La forja borra la rama de release al fusionar el MR | `mth release` | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development`, y retoma esa publicación sin calcular otra versión. Mientras `main` no haya vuelto a `development` (o la etiqueta no exista), no se calcula una versión nueva: la salida es hacer los pasos que lista |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | `forge` con un valor desconocido | Error de configuración que nombra `forge` y los valores válidos; ningún comando corre | AC-01 |
+| FM-02 | Remoto ilegible o sin remoto | `mth survey`: `forge = none`; se deniega la parte de la forja, no se relaja | AC-02 |
+| FM-03 | `mth hotfix finish` con `gitlab` o `none` | Error antes de modificar nada | AC-08 |
+| FM-04 | `gh` no está instalado y `forge` no es `github` | No se usa: los comandos funcionan igual | AC-05, AC-06, AC-10 |
+| FM-05 | Versión ya publicada a mano sin rama de release | Los gates y el cálculo de versión son los de siempre; la persona decide qué hacer con la etiqueta existente | AC-06 |
+| FM-06 | Etiqueta ya existente al retomar | El paso 2 se marca hecho y no se vuelve a crear, solo si la etiqueta está en el remoto y apunta a un commit de `main`; una solo local o en otro commit no cuenta y no se borra la rama | AC-07 |
+| FM-07 | `main` trae una versión anterior a la última etiqueta, o sin etiqueta histórica | Es historia, no una publicación pendiente: no retiene una release nueva | AC-07 |
+| FM-08 | La forja borra la rama de release al fusionar el MR | Sin rama pendiente, `mth` detecta en `main` una versión con la etiqueta sin publicar o sin volver a `development` y retoma esa publicación sin calcular otra versión; mientras `main` no haya vuelto a `development` (o la etiqueta no exista) no se calcula versión nueva: la salida es hacer los pasos que lista | AC-07 |
+| FM-09 | Un merge a mano con una opción global, un prefijo o la API de la forja | El guard lo bloquea igual que `gh pr merge`; ante la duda (método no GET, cuerpo, mutación de merge) bloquea. Un intérprete (`bash -c`), un alias, una sustitución `$(…)` dentro de otro comando o un prefijo desconocido quedan fuera: riesgo aceptado, el guard no es un sandbox | AC-12 |
 
 ## Criterios de aceptación
 
-- **AC-01**: `forge` acepta `github` (por defecto), `gitlab` y `none`, y rechaza cualquier otro valor nombrando la clave.
-- **AC-02**: La señal `forge` es `github` para `github.com`, `gitlab` para `gitlab.com` y para hosts con primera etiqueta `gitlab`, y `none` para cualquier otro remoto o ninguno, con las formas `https://`, `ssh://` y `git@host:ruta`, sin revelar usuario ni contraseña de la URL.
-- **AC-03**: La pregunta `forja` está siempre en el inventario como `deducida`, `mth init --answers` escribe `forge` (y una respuesta explícita lo sustituye) y `mth init` sin respuestas escribe la forja deducida.
-- **AC-04**: Con `forge` distinto de `github`, `ci` es `deducida` (`sin-ci`) y `ci: crear` se rechaza; `versiones` es `deducida` (`continuar`) con etiquetas con prefijo y sin herramienta de publicación, y se pregunta en otro caso; el plan previo marca `mth integrate` y `mth release` como activas solo en su parte local.
-- **AC-05**: Con `gitlab` o `none`, `mth integrate` supera los mismos gates, sube la rama, escribe el título y la descripción en `.work/merge-request/`, muestra los pasos manuales, no llama a `gh` ni fusiona, y al repetirse con la rama ya fusionada limpia.
-- **AC-06**: Con `gitlab` o `none`, `mth release` crea la rama de release con el `CHANGELOG.md` y los ficheros de versión, la sube, escribe las notas en `.work/merge-request/`, muestra los pasos manuales con su estado y no llama a `gh`.
-- **AC-07**: Al repetir `mth release` con `gitlab` o `none`, marca como hechos los pasos que git confirma y, con todos hechos, borra la rama de release y sincroniza `development`.
-- **AC-08**: Con `gitlab` o `none`, `mth hotfix finish` falla antes de modificar nada.
-- **AC-09**: El guard bloquea `glab mr merge` y deja pasar otros subcomandos de `glab`; `gh pr merge` sigue bloqueado.
-- **AC-10**: `mth doctor` con `gitlab` o `none` no comprueba `gh` ni avisa de `ci.required`, y con `github` conserva ambas comprobaciones.
-- **AC-11**: Con `github` el flujo de integración, publicación y hotfix no cambia (el test de extremo a extremo existente sigue pasando); con un remoto GitLab, `mth release` genera el `CHANGELOG.md` y la rama de release sin llamar a `gh` y termina con los pasos manuales.
+- **AC-01**: `forge` DEBE aceptar `github` (por defecto), `gitlab` y `none`, y rechazar cualquier otro valor nombrando la clave.
+- **AC-02**: La señal `forge` DEBE ser `github` para `github.com`, `gitlab` para `gitlab.com` y hosts con primera etiqueta `gitlab`, y `none` para cualquier otro remoto o ninguno, con las formas `https://`, `ssh://` y `git@host:ruta`, sin revelar usuario ni contraseña de la URL.
+- **AC-03**: La pregunta `forja` DEBE estar siempre en el inventario como `deducida`; `mth init --answers` DEBE escribir `forge` (una respuesta explícita lo sustituye) y `mth init` sin respuestas DEBE escribir la forja deducida.
+- **AC-04**: SI `forge` no es `github`, ENTONCES `ci` DEBE ser `deducida` (`sin-ci`) y `ci: crear` DEBE rechazarse; `versiones` DEBE ser `deducida` (`continuar`) con etiquetas con prefijo y sin herramienta de publicación y preguntarse en otro caso; el plan previo DEBE marcar `mth integrate` y `mth release` como activas solo en su parte local.
+- **AC-05**: MIENTRAS `forge` sea `gitlab` o `none`, `mth integrate` DEBE superar los mismos gates, subir la rama, escribir el título y la descripción en `.work/merge-request/` y mostrar los pasos manuales, sin llamar a `gh` ni fusionar; CUANDO se repite con la rama ya fusionada, DEBE limpiarla.
+- **AC-06**: MIENTRAS `forge` sea `gitlab` o `none`, `mth release` DEBE crear la rama de release con el `CHANGELOG.md` y los ficheros de versión, subirla, escribir las notas en `.work/merge-request/` y mostrar los pasos manuales con su estado, sin llamar a `gh`.
+- **AC-07**: CUANDO se repite `mth release` con `gitlab` o `none`, `mth` DEBE marcar como hechos los pasos que git confirma y, con todos hechos, borrar la rama de release y sincronizar `development`.
+- **AC-08**: MIENTRAS `forge` sea `gitlab` o `none`, `mth hotfix finish` DEBE fallar antes de modificar nada.
+- **AC-09**: El guard DEBE bloquear `glab mr merge` y dejar pasar otros subcomandos de `glab`; `gh pr merge` DEBE seguir bloqueado.
+- **AC-10**: MIENTRAS `forge` sea `gitlab` o `none`, `mth doctor` NO DEBE comprobar `gh` ni avisar de `ci.required`; con `github` DEBE conservar ambas comprobaciones.
+- **AC-11**: MIENTRAS `forge` sea `github`, el flujo de integración, publicación y hotfix NO DEBE cambiar (el test de extremo a extremo existente sigue pasando); con un remoto GitLab, `mth release` DEBE generar el `CHANGELOG.md` y la rama de release sin llamar a `gh` y terminar con los pasos manuales.
+- **AC-12**: El guard DEBE bloquear el merge a mano aunque lleve opciones globales de `gh`/`glab` (`-R`, `--repo`, `--hostname`), un prefijo de ejecución (`sudo`, `env`, `command`) o una petición de `gh api` / `glab api` a un endpoint `…/merge` o `…/merges` que no sea una lectura simple (o una mutación GraphQL de merge); las lecturas y los demás subcomandos DEBEN pasar.
 
 ## Notas
 

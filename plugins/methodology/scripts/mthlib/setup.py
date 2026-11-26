@@ -26,8 +26,9 @@ BLOCK_START = "<!-- claude-methodology:start -->"
 BLOCK_END = "<!-- claude-methodology:end -->"
 ADOPT_BRANCH = "chore/adopt-methodology"
 RECONFIGURE_BRANCH = "chore/reconfigure-methodology"  # SPEC-0011
+ADR_SUBDIR = "methodology"  # generated adoption, reconfiguration and update ADRs live under <paths.adr>/
 RECONFIGURED_HEADER = "# claude-methodology · regenerado por `mth reconfigure` (ver el ADR de reestructuración).\n"
-_METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration)-(de|of)-claude-methodology\.md$")
+METHODOLOGY_ADR = re.compile(r"-(adopcion|adoption|reestructuracion|reconfiguration|actualizacion|update)-(de|of)-claude-methodology\.md$")
 MARKETPLACE = "claude-methodology"
 PLUGIN = "methodology"
 
@@ -108,6 +109,17 @@ def install_hook(git: Git, mode: str = "own") -> str:
     return status
 
 
+def hook_state(git: Git, mode: str = "own") -> str:
+    """Read-only state of the commit-msg hook: ``current``, ``stale`` (ours, outdated), ``foreign`` or ``absent``."""
+    path = git.hooks_dir() / "commit-msg"
+    if not path.exists():
+        return "absent"
+    current = path.read_text(encoding="utf-8", errors="replace")
+    if HOOK_MARK not in current:
+        return "foreign"
+    return "current" if current == hook_script(chain=mode == "chain") else "stale"
+
+
 LAUNCHER = Path("mth") / "launcher"
 MTH_PY = MTH.parent / "mth.py"
 
@@ -132,6 +144,19 @@ def _claude_block(paths: dict, vocab: lang.Vocabulary) -> str:
     for key, value in paths.items():
         text = text.replace("{{" + key.upper() + "}}", str(value))
     return text.strip()
+
+
+def claude_block_state(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> str:
+    """Read-only state of the methodology block in ``paths.claude_md``: ``current``, ``stale`` or ``absent``."""
+    path = root / paths["claude_md"]
+    try:
+        current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MthError(f"No se puede leer {path.name}: {exc}.", hint="Corrige el fichero o su codificación (UTF-8).") from exc
+    if BLOCK_START not in current or BLOCK_END not in current:
+        return "absent"
+    block = BLOCK_START + current.split(BLOCK_START, 1)[1].split(BLOCK_END, 1)[0] + BLOCK_END
+    return "current" if block == _claude_block(paths, vocab) else "stale"
 
 
 def upsert_claude_md(root: Path, paths: dict, vocab: lang.Vocabulary = lang.ES) -> None:
@@ -312,7 +337,7 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
 # -- GitHub settings ------------------------------------------------------------
 def _write_adoption_adr(root: Path, cfg, git: Git, inventory: survey.Survey, plan: adoption.Plan) -> None:
     ident = IdRegistry(cfg, git.files()).next_id(cfg["trace"]["adr_kind"])
-    folder = root / cfg["paths"]["adr"] / "methodology"
+    folder = root / cfg["paths"]["adr"] / ADR_SUBDIR
     folder.mkdir(parents=True, exist_ok=True)
     slug = "adopcion-de-claude-methodology" if cfg.vocab.code == "es" else "adoption-of-claude-methodology"
     (folder / f"{ident}-{slug}.md").write_text(adoption.adr_text(ident, inventory, plan, cfg.vocab), encoding="utf-8")
@@ -373,10 +398,10 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     git.checkout_synced(cfg.development)
     git.out("checkout", "-b", RECONFIGURE_BRANCH)
     (root / CONFIG_PATH).write_text(config_text, encoding="utf-8")
-    previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / "methodology").glob("*.md")
-                      if (m := _METHODOLOGY_ADR.search(p.name)))
+    previous = sorted(p.name[:m.start()] for p in (root / cfg["paths"]["adr"] / ADR_SUBDIR).glob("*.md")
+                      if (m := METHODOLOGY_ADR.search(p.name)))
     ident = IdRegistry(new_cfg, git.files()).next_id(new_cfg["trace"]["adr_kind"])
-    folder = root / new_cfg["paths"]["adr"] / "methodology"
+    folder = root / new_cfg["paths"]["adr"] / ADR_SUBDIR
     folder.mkdir(parents=True, exist_ok=True)
     slug = "reestructuracion-de-claude-methodology" if new_cfg.vocab.code == "es" else "reconfiguration-of-claude-methodology"
     adr = folder / f"{ident}-{slug}.md"

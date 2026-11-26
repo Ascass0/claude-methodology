@@ -110,6 +110,17 @@ class FailClosedTests(GuardTestCase):
             rc = agent_guard.main(json.dumps(self.repo.payload("revisor-diseno", command="git log")), {})
         self.assertEqual(rc, 2)
 
+    def test_unusable_stdin_and_ill_typed_identity_are_blocked(self):
+        # verifies: SPEC-0012/AC-08
+        self.assertEqual(self.repo.guard(""), 2)
+        self.assertEqual(self.repo.guard("null"), 2)
+        payload = self.repo.payload("revisor-diseno", command="git log")
+        payload["tool_input"] = "git log"
+        self.assertEqual(self.repo.guard(payload), 2)
+        payload = self.repo.payload("revisor-diseno", command="git log")
+        payload["agent_type"] = 7
+        self.assertEqual(self.repo.guard(payload), 2)
+
     def test_invalid_rules_and_unexpected_tools_are_blocked(self):
         # unit: agent_guard.main
         self.repo.write(".claude/mth/agents/revisor-adr.guard.toml", "[bash\n")
@@ -129,6 +140,13 @@ class DispatchTests(GuardTestCase):
         self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", **push)), 2)
         self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", command="git log --oneline")), 0)
         self.assertEqual(self.repo.guard(self.repo.payload("orquestador", **push)), 0)  # delegate = "global"
+
+    def test_non_catalog_agents_are_not_restricted_on_file_tools_either(self):
+        # verifies: SPEC-0012/AC-16
+        outside = str(self.repo.tmp / "fuera.txt")
+        self.assertEqual(self.repo.guard(self.repo.payload("Explore", "Write", file_path=outside, content="x")), 0)
+        self.assertEqual(self.repo.guard(self.repo.payload("revisor-seguridad", "Write", file_path=outside,
+                                                           content="x")), 2)
 
     def test_messages_reach_the_model_on_stderr(self):
         # unit: agent_guard.main
@@ -156,6 +174,15 @@ class WorktreeWriteTests(GuardTestCase):
         other.mkdir()
         _git(other, "init", "-q")
         self.assertEqual(self.write_call(other, str(other / "x.py")), 2)
+
+    def test_in_worktree_agents_are_bound_on_edit_too(self):
+        # verifies: SPEC-0012/AC-18
+        wt = self.repo.worktree
+        edit = lambda cwd, path: self.repo.guard(self.repo.payload("diagnosticador", "Edit", cwd, file_path=path,
+                                                                   old_string="a", new_string="b"))
+        self.assertEqual(edit(wt, str(wt / "README.md")), 0)
+        self.assertEqual(edit(wt, str(self.repo.root / "README.md")), 2)
+        self.assertEqual(edit(self.repo.root, "README.md"), 2)
 
     def test_non_worktree_writers_keep_their_globs(self):
         # unit: agent_guard.main

@@ -1,5 +1,5 @@
 name = "diagnosticador"
-version = "1.0.0"
+version = "1.0.1"
 kind = "trabajador"
 profiles = ["base"]
 summary = "Reproduce un fallo de causa desconocida, aísla la causa raíz y propone el fix y su test de regresión; no lo aplica."

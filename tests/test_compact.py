@@ -125,6 +125,14 @@ class AdrFieldTests(unittest.TestCase):
         self.assertEqual(findings({"specs/adr/p/ADR-0001-x.md": full}), "")
 
 
+    def test_missing_fields_are_reported_in_english(self):
+        # verifies: SPEC-0018/AC-04
+        adr = "# ADR-0001 · X\n- Status: accepted\n- Format: compact\n"
+        found = findings({"specs/adr/p/ADR-0001-x.md": adr}, EN_CONFIG)
+        for field in ("Context", "Decision", "Rejected", "Consequences", "Imposes"):
+            self.assertIn(f"falta el campo «{field}»", found)
+
+
 class FailureModeTests(unittest.TestCase):
     def test_duplicate_and_untagged_rows(self):
         # verifies: SPEC-0018/AC-05

@@ -2,27 +2,23 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0002
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0002/AC-NN`. -->
 
 ## Contexto
 
-Con [SPEC-0001](SPEC-0001-delegacion-verificable.md), la sesión principal reparte el trabajo en un plan y verifica cada oleada de forma determinista. Todas las tareas se delegan con el mismo modelo que la sesión principal, aunque su dificultad sea muy distinta. Hoy (precios de la API por millón de tokens de entrada/salida) Opus cuesta 4/20 $, Sonnet 2/10 $ y Haiku 0,10/0,50 $. Una tarea mecánica hecha con Opus cuesta unas 40 veces lo que costaría con Haiku.
-
-Que un modelo más barato falle es aceptable porque `mth plan verify` lo detecta. Lo que falta es:
-
-- decidir el modelo de cada tarea cuando se planifica, que es cuando mejor se conoce su dificultad;
-- no repetir un intento fallido con el mismo modelo;
-- datos para saber qué nivel funciona en cada tipo de tarea, en vez de ajustarlo a ojo (PRINCIPLES §2, optimización con evidencia).
+- Con [SPEC-0001](SPEC-0001-delegacion-verificable.md) la sesión principal reparte el trabajo en un plan y verifica cada oleada; todas las tareas se delegan con el modelo de la sesión principal aunque su dificultad difiera mucho.
+- Precios de la API por millón de tokens (entrada/salida): Opus 4/20 $, Sonnet 2/10 $, Haiku 0,10/0,50 $; una tarea mecánica con Opus cuesta unas 40 veces lo que con Haiku.
+- Que un modelo barato falle es aceptable: `mth plan verify` lo detecta.
+- Falta decidir el modelo de cada tarea al planificar (cuando mejor se conoce su dificultad), no repetir un intento fallido con el mismo modelo, y tener datos por nivel en lugar de ajustar a ojo (PRINCIPLES §2).
 
 ## Objetivo
 
-1. Cada tarea del plan tiene un **nivel de modelo**, declarado en el plan o tomado de la configuración del repo.
+1. Cada tarea del plan tiene un **nivel de modelo**, declarado en el plan o tomado de la configuración.
 2. El reintento de una tarea fallida usa el **nivel siguiente** de una escalera configurable.
-3. Cada verificación de oleada deja constancia del modelo y del resultado de cada tarea, y `mth` resume esas métricas por nivel.
+3. Cada verificación de oleada deja constancia del modelo y resultado de cada tarea, y `mth` resume las métricas por nivel.
 
 ## Fuera de alcance
 
@@ -90,26 +86,26 @@ La skill `mth-develop` lanza el primer intento con el primero y el único reinte
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| `[models]` inválida: escalera vacía o con repetidos, alias desconocido, rol fuera de la escalera, tipo erróneo | Carga de la configuración | Fail-fast: ningún comando se ejecuta; el error nombra la clave |
-| Celda `Modelo` con un alias fuera de la escalera | `mth plan check` / `mth trace` | Error del plan con su línea |
-| `plan model` de una tarea que no existe, o spec sin plan | `mth plan model` | Error; no se imprime ningún alias |
-| `--model` mal formado, con alias desconocido o de una tarea ajena a la oleada | `mth plan verify` | Error; no se verifica ni se registra nada |
-| Traza ausente | `mth plan stats` | Informa de que no hay datos (no es un error) |
-| Líneas de la traza corruptas o ajenas | `mth plan stats` | Se saltan, se cuentan en un aviso y el resumen sigue con las legibles |
-| Escritura de la traza imposible | `Tracer` | Aviso único y la operación sigue (fail-open documentado en `log.py`): las métricas son informativas |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | `[models]` inválida: escalera vacía o con repetidos, alias desconocido, rol fuera de la escalera, tipo erróneo | Fail-fast: ningún comando se ejecuta; el error nombra la clave | AC-02 |
+| FM-02 | Celda `Modelo` con un alias fuera de la escalera | `mth plan check` / `mth trace`: error del plan con su línea | AC-03 |
+| FM-03 | `plan model` de una tarea inexistente, o spec sin plan | Error; no se imprime ningún alias | AC-04 |
+| FM-04 | `--model` mal formado, con alias desconocido o de una tarea ajena a la oleada | `mth plan verify`: error; no se verifica ni registra nada | AC-06 |
+| FM-05 | Traza ausente | `mth plan stats` informa de que no hay datos (no es error) | AC-08 |
+| FM-06 | Líneas de la traza corruptas o ajenas | Se saltan, se cuentan en un aviso y el resumen sigue con las legibles | AC-08 |
+| FM-07 | Escritura de la traza imposible | `Tracer`: aviso único y la operación sigue (fail-open documentado en `log.py`); las métricas son informativas | AC-05 |
 
 ## Criterios de aceptación
 
-- **AC-01**: Sin tabla `[models]`, la configuración usa `ladder = ["haiku", "sonnet", "opus"]` y `sonnet` para `task`, `review` y `documenter`, y `mth models` lo muestra.
-- **AC-02**: La carga de la configuración rechaza una escalera vacía o con alias repetidos, un alias fuera de `haiku`, `sonnet`, `opus` y `fable`, y un `task`, `review` o `documenter` que no está en la escalera.
-- **AC-03**: `mth plan check` acepta la cabecera de cuatro columnas y la de cinco con `Modelo`, toma `models.task` para una celda vacía, muestra el nivel efectivo de cada tarea y rechaza, con su línea, un alias que no está en la escalera.
-- **AC-04**: `mth plan model` imprime solo el nivel efectivo de la tarea; con `--retry`, el siguiente de la escalera, o el último si ya lo es; y falla sin imprimir alias para una tarea inexistente.
-- **AC-05**: `mth plan verify` registra un evento `plan.task` por tarea de la oleada, con modelo (el de `--model` o el efectivo), resultado (`ok`, `not_run`, `not_completed` o `rejected`) y huella del manifiesto, también cuando rechaza la oleada.
-- **AC-06**: `mth plan verify` rechaza, sin verificar ni registrar, un `--model` mal formado, con alias fuera de la escalera o de una tarea que no pertenece a la oleada.
-- **AC-07**: `mth plan stats` resume por modelo los intentos, `ok`, fallidos y porcentaje de `ok`, cuenta una sola vez un intento repetido con la misma huella y filtra por spec con `--spec`.
-- **AC-08**: `mth plan stats` informa de que no hay datos si la traza no existe, y salta y cuenta en un aviso las líneas ilegibles.
+- **AC-01**: MIENTRAS no exista la tabla `[models]`, la configuración DEBE usar `ladder = ["haiku", "sonnet", "opus"]` y `sonnet` para `task`, `review` y `documenter`, y `mth models` DEBE mostrarlo.
+- **AC-02**: SI `[models]` tiene una escalera vacía o con alias repetidos, un alias fuera de `haiku`, `sonnet`, `opus` y `fable`, o un `task`, `review` o `documenter` fuera de la escalera, ENTONCES la carga de la configuración DEBE rechazarla.
+- **AC-03**: CUANDO se ejecuta `mth plan check`, `mth` DEBE aceptar la cabecera de cuatro columnas y la de cinco con `Modelo`, tomar `models.task` en una celda vacía y mostrar el nivel efectivo de cada tarea; SI un alias no está en la escalera, ENTONCES DEBE rechazarlo con su línea.
+- **AC-04**: CUANDO se ejecuta `mth plan model`, `mth` DEBE imprimir solo el nivel efectivo de la tarea (con `--retry`, el siguiente de la escalera o el último si ya lo es); SI la tarea no existe, ENTONCES DEBE fallar sin imprimir alias.
+- **AC-05**: CUANDO se ejecuta `mth plan verify`, `mth` DEBE registrar un evento `plan.task` por tarea de la oleada con el modelo (el de `--model` o el efectivo), el resultado (`ok`, `not_run`, `not_completed` o `rejected`) y la huella del manifiesto, también si rechaza la oleada.
+- **AC-06**: SI `--model` está mal formado, trae un alias fuera de la escalera o es de una tarea ajena a la oleada, ENTONCES `mth plan verify` DEBE rechazarlo sin verificar ni registrar nada.
+- **AC-07**: CUANDO se ejecuta `mth plan stats`, `mth` DEBE resumir por modelo intentos, `ok`, fallidos y porcentaje de `ok`, contar una sola vez un intento repetido con la misma huella y filtrar por spec con `--spec`.
+- **AC-08**: SI la traza no existe, ENTONCES `mth plan stats` DEBE informar de que no hay datos; SI hay líneas ilegibles, ENTONCES DEBE saltarlas y contarlas en un aviso.
 
 ## Notas
 

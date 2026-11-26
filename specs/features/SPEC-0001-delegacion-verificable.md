@@ -2,29 +2,27 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: ADR-0001
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0001/AC-NN`. -->
 
 ## Contexto
 
-`mth-develop` permite a la sesión principal dividir una spec en tareas con ficheros disjuntos y delegarlas en los agentes `dev-*`, que devuelven un manifiesto en prosa. Todo eso es criterio, no mecanismo:
-
-- el alcance de cada tarea ("puede tocar X") es texto: nada detecta que un agente edite otros ficheros ni que dos tareas paralelas se pisen;
-- el manifiesto no se puede validar: un agente que se cae, agota el tiempo o devuelve algo incompleto puede pasar por una tarea terminada;
-- lo mismo ocurre con los revisores: `mth review record` acepta el número de bloqueantes que escribe la sesión principal, también para un revisor que no llegó a terminar.
-
-El principio de determinismo (PRINCIPLES §2) exige que lo comprobable lo compruebe código. La idea se inspira en el estándar de *implementation readiness* de [elephant-goldfish-model](https://github.com/google/elephant-goldfish-model): una lista cerrada de ficheros por tarea, fases que dejan el repo estable y retornos estructurados de los workers.
+- `mth-develop` permite dividir una spec en tareas con ficheros disjuntos y delegarlas en agentes `dev-*`, que devuelven un manifiesto en prosa: todo ello es criterio, no mecanismo.
+- El alcance de cada tarea es texto: nada detecta que un agente edite otros ficheros ni que dos tareas paralelas se pisen.
+- El manifiesto no se valida: un agente caído, sin tiempo o incompleto puede pasar por tarea terminada.
+- Lo mismo con los revisores: `mth review record` aceptaba el número de bloqueantes que escribía la sesión principal, también de un revisor que no terminó.
+- PRINCIPLES §2 (determinismo): lo comprobable lo comprueba código.
+- Inspiración: el estándar de *implementation readiness* de [elephant-goldfish-model](https://github.com/google/elephant-goldfish-model): lista cerrada de ficheros por tarea, fases que dejan el repo estable, retornos estructurados.
 
 ## Objetivo
 
-Cuando la sesión principal delega:
+Al delegar la sesión principal:
 
-1. el reparto de trabajo es un **plan de trabajo** en la spec, validado por `mth` antes de lanzar nada: tareas, oleadas, ficheros permitidos y criterios, sin solapamientos dentro de una oleada;
-2. cada agente devuelve un **manifiesto JSON** que `mth` contrasta con el plan y con los cambios reales antes de aceptar la oleada;
-3. un agente (implementador o revisor) que no termina nunca cuenta como trabajo hecho ni como revisión aprobada.
+1. El reparto es un **plan de trabajo** en la spec, validado por `mth` antes de lanzar nada: tareas, oleadas, ficheros permitidos y criterios, sin solapamientos en una oleada.
+2. Cada agente devuelve un **manifiesto JSON** que `mth` contrasta con el plan y los cambios reales antes de aceptar la oleada.
+3. Un agente (implementador o revisor) que no termina nunca cuenta como trabajo hecho ni como revisión aprobada.
 
 ## Fuera de alcance
 
@@ -110,34 +108,34 @@ Informa de todos los problemas a la vez y termina con error si hay alguno. Los `
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Plan mal formado (cabecera, ID, oleada, ficheros vacíos, ruta fuera del repo, más de 50 tareas) | `mth plan check` / `mth trace` | Error con su línea; no se delega nada |
-| Dos tareas de la misma oleada pueden tocar el mismo fichero | `mth plan check` | Error que nombra ambas tareas; en caso de duda entre globs, se considera solapamiento |
-| Criterio inexistente o criterio de la spec sin tarea | `mth plan check` | Error |
-| Spec sin plan o ID no definido en `plan verify` | `mth plan verify` | Error; nada que verificar |
-| Agente caído, sin respuesta o fuera de tiempo (sin manifiesto) | `mth plan verify` | Tarea "no ejecutada"; la oleada no se acepta |
-| Manifiesto ilegible: JSON inválido, campos que faltan o sobran, tipos erróneos, más de 256 KiB, tarea ajena a la oleada o duplicada | `mth plan verify` | Error; la tarea cuenta como no ejecutada |
-| Agente bloqueado o fallido (`blocked`, `failed`, preguntas abiertas) | `mth plan verify` | Tarea "no completada"; la oleada no se acepta |
-| El agente tocó ficheros fuera de su alcance o hay cambios que nadie declara | `mth plan verify` | Error con cada fichero |
-| El manifiesto afirma cambios que no existen | `mth plan verify` | Error (afirmación falsa) |
-| Criterios sin cubrir, tests en rojo o sin tests | `mth plan verify` | Error |
-| Revisor caído o informe sin la línea `BLOQUEANTES: <n>` | `mth review record` | Se registra como fallida (SPEC-0013); la revisión no aprueba y `mth integrate` la rechaza |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Plan mal formado (cabecera, ID, oleada, ficheros vacíos, ruta fuera del repo, más de 50 tareas) | `mth plan check` / `mth trace`: error con su línea; no se delega nada | AC-02 |
+| FM-02 | Dos tareas de una oleada pueden tocar el mismo fichero | `mth plan check`: error que nombra ambas; con duda entre globs, solapamiento | AC-03 |
+| FM-03 | Criterio inexistente o criterio de la spec sin tarea | `mth plan check`: error | AC-04 |
+| FM-04 | Spec sin plan o ID no definido en `plan verify` | Error; nada que verificar | AC-06 |
+| FM-05 | Agente caído, sin respuesta o fuera de tiempo (sin manifiesto) | Tarea «no ejecutada»; la oleada no se acepta | AC-07 |
+| FM-06 | Manifiesto ilegible: JSON inválido, campos que faltan o sobran, tipos erróneos, más de 256 KiB, tarea ajena a la oleada o duplicada | Error; la tarea cuenta como no ejecutada | AC-08 |
+| FM-07 | Agente bloqueado o fallido (`blocked`, `failed`, preguntas abiertas) | Tarea «no completada»; la oleada no se acepta | AC-07, AC-10 |
+| FM-08 | El agente tocó ficheros fuera de su alcance o hay cambios sin declarar | Error con cada fichero | AC-09 |
+| FM-09 | El manifiesto afirma cambios que no existen | Error (afirmación falsa) | AC-09 |
+| FM-10 | Criterios sin cubrir, tests en rojo o sin tests | Error | AC-10 |
+| FM-11 | Revisor caído o informe sin la línea `BLOQUEANTES: <n>` | `mth review record`: registro fallido (SPEC-0013); la revisión no aprueba y `mth integrate` la rechaza | AC-12 |
 
 ## Criterios de aceptación
 
-- **AC-01**: `mth plan check` acepta un plan válido y lista sus tareas agrupadas por oleada.
-- **AC-02**: `mth plan check` rechaza, con su línea, un plan mal formado: cabecera distinta, tarea con ID inválido o repetido, oleada no entera o menor que 1, celda de ficheros vacía o con texto fuera de las comillas invertidas, ruta absoluta, con `..` o sin normalizar, y más de 50 tareas.
-- **AC-03**: `mth plan check` rechaza dos tareas de la misma oleada que comparten un fichero, por ruta exacta, por un glob que cubre una ruta o por dos globs con prefijos compatibles, y acepta el mismo fichero en oleadas distintas.
-- **AC-04**: `mth plan check` rechaza un criterio que la spec no declara y un criterio de la spec que ninguna tarea tiene asignado.
-- **AC-05**: `mth trace` informa de los errores del plan de cualquier spec que tenga la sección `Plan de trabajo` y no dice nada de las specs sin ella.
-- **AC-06**: `mth plan verify` acepta una oleada cuyos manifiestos son válidos, están completos y coinciden con los cambios del árbol de trabajo.
-- **AC-07**: `mth plan verify` marca como "no ejecutada" una tarea de la oleada sin manifiesto y como "no completada" una con `status` distinto de `done`, y rechaza la oleada.
-- **AC-08**: `mth plan verify` rechaza un manifiesto con JSON inválido, con campos que faltan o sobran, con tipos o valores no permitidos, de más de 256 KiB, de una tarea que no pertenece a la oleada o duplicado.
-- **AC-09**: `mth plan verify` rechaza un fichero declarado fuera de los permitidos de su tarea, un cambio del árbol de trabajo que ningún manifiesto declara y un fichero declarado sin cambios reales.
-- **AC-10**: `mth plan verify` rechaza un manifiesto `done` que no cubre todos los criterios de su tarea o declara otros, sin tests, con algún test en rojo o con preguntas abiertas.
-- **AC-11**: `mth plan verify` muestra los `deviations` como avisos y no rechaza la oleada por ellos.
-- **AC-12**: `mth review record` toma los bloqueantes de la última línea `BLOQUEANTES: <n>` del informe, y no registra nada (la revisión sigue pendiente) cuando el informe no existe, está vacío, supera 256 KiB o no termina en esa línea.
+- **AC-01**: CUANDO se ejecuta `mth plan check` sobre un plan válido, `mth` DEBE aceptarlo y listar sus tareas agrupadas por oleada.
+- **AC-02**: SI el plan está mal formado (cabecera distinta, ID de tarea inválido o repetido, oleada no entera o menor que 1, celda de ficheros vacía o con texto fuera de las comillas invertidas, ruta absoluta, con `..` o sin normalizar, más de 50 tareas), ENTONCES `mth plan check` DEBE rechazarlo indicando la línea.
+- **AC-03**: SI dos tareas de la misma oleada comparten un fichero (por ruta exacta, por un glob que cubre una ruta o por dos globs con prefijos compatibles), ENTONCES `mth plan check` DEBE rechazarlo; DEBE aceptar el mismo fichero en oleadas distintas.
+- **AC-04**: SI el plan cita un criterio que la spec no declara o un criterio de la spec no tiene tarea asignada, ENTONCES `mth plan check` DEBE rechazarlo.
+- **AC-05**: CUANDO una spec tiene la sección `Plan de trabajo`, `mth trace` DEBE informar de los errores de su plan; NO DEBE decir nada de las specs sin ella.
+- **AC-06**: CUANDO los manifiestos son válidos, están completos y coinciden con los cambios del árbol de trabajo, `mth plan verify` DEBE aceptar la oleada.
+- **AC-07**: SI una tarea de la oleada no tiene manifiesto o su `status` no es `done`, ENTONCES `mth plan verify` DEBE marcarla como «no ejecutada» o «no completada» respectivamente y rechazar la oleada.
+- **AC-08**: SI un manifiesto tiene JSON inválido, campos que faltan o sobran, tipos o valores no permitidos, más de 256 KiB, o es de una tarea ajena a la oleada o duplicado, ENTONCES `mth plan verify` DEBE rechazarlo.
+- **AC-09**: SI un manifiesto declara un fichero fuera de los permitidos de su tarea, un cambio del árbol de trabajo no está declarado por ningún manifiesto o un fichero declarado no tiene cambios reales, ENTONCES `mth plan verify` DEBE rechazar la oleada.
+- **AC-10**: SI un manifiesto `done` no cubre todos los criterios de su tarea, declara otros, no tiene tests, tiene algún test en rojo o preguntas abiertas, ENTONCES `mth plan verify` DEBE rechazarlo.
+- **AC-11**: CUANDO un manifiesto trae `deviations`, `mth plan verify` DEBE mostrarlas como avisos y NO DEBE rechazar la oleada por ellas.
+- **AC-12**: SI el informe de un revisor no existe, está vacío, supera 256 KiB o no termina en `BLOQUEANTES: <n>`, ENTONCES `mth review record` NO DEBE registrar la revisión como aprobada; CUANDO es válido, DEBE tomar los bloqueantes de esa última línea.
 
 ## Notas
 

@@ -103,6 +103,25 @@ class HookModeTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in managed.iterdir()), ["commit-msg"])
         self.assertEqual((managed / "commit-msg").read_text(), FOREIGN)
 
+    def test_absolute_hooks_path_inside_the_work_tree_is_left_alone(self):
+        # verifies: SPEC-0006/AC-05
+        managed = self.root / "tools" / "hooks"
+        managed.mkdir(parents=True)
+        (managed / "commit-msg").write_text(FOREIGN, encoding="utf-8")
+        self.run_git("config", "core.hooksPath", str(managed))
+        for mode in ("replace", "chain"):
+            with self.subTest(mode=mode), self.assertRaises(MthError) as ctx:
+                setup.install_hook(self.git, mode)
+            self.assertIn("está versionado", ctx.exception.message)
+        self.assertEqual(sorted(p.name for p in managed.iterdir()), ["commit-msg"])
+
+    def test_mode_names_are_exact(self):
+        # verifies: SPEC-0006/AC-06
+        for mode in ("CHAIN", "", "chain "):
+            with self.subTest(mode=mode), self.assertRaises(MthError) as ctx:
+                parse(self.root, CONFIG + f'[hooks]\ncommit_msg = "{mode}"\n')
+            self.assertIn("debe ser uno de own, replace, chain", ctx.exception.message)
+
     def test_unknown_mode_fails_fast(self):
         # verifies: SPEC-0006/AC-06
         with self.assertRaises(MthError) as ctx:

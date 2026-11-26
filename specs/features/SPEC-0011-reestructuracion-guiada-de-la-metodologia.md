@@ -2,15 +2,15 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: [ADR-0007](../adr/process/ADR-0007-reestructuracion-reutilizando-la-entrevista-de-adopcion.md)
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0011/AC-NN`. -->
 
 ## Contexto
 
-La entrevista de adopción ([SPEC-0004](SPEC-0004-adopcion-guiada.md)) explica cada decisión y la registra en un ADR, pero solo se puede hacer antes de adoptar. Quien quiere revisar la metodología después (reestructurarla entera, cambiar un bloque o una sola decisión) solo puede editar la configuración a mano ([ADR-0007](../adr/process/ADR-0007-reestructuracion-reutilizando-la-entrevista-de-adopcion.md)).
+- La entrevista de adopción ([SPEC-0004](SPEC-0004-adopcion-guiada.md)) explica cada decisión y la registra en un ADR, pero solo antes de adoptar.
+- Revisar la metodología después (entera, un bloque o una decisión) obligaba a editar la configuración a mano ([ADR-0007](../adr/process/ADR-0007-reestructuracion-reutilizando-la-entrevista-de-adopcion.md)).
 
 ## Objetivo
 
@@ -67,29 +67,29 @@ Con `autonomy.level = "supervised"`, el guard pide confirmación para `mth recon
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Repo sin adoptar | `mth survey --reconfigure`, `mth reconfigure` | Error que indica `mth-init`; nada cambia |
-| `--only` con un nombre desconocido o sin preguntas aplicables | Inventario | Error con los nombres válidos |
-| Respuestas que faltan, sobran o son inválidas | `mth reconfigure` | Error con cada problema; nada cambia |
-| La configuración resultante no es válida (por ejemplo, se quita un revisor con `review.paths`) | `mth reconfigure`, antes de crear la rama | Error de configuración; nada cambia |
-| `ramas: usar` con una rama que no existe en el remoto | `mth reconfigure` | Error; nada cambia |
-| `commits: encadenar` sin hook ajeno que encadenar | `mth reconfigure` | Error; nada cambia (el hook rechazaría todos los commits) |
-| Nada que cambiar | `mth reconfigure` | Error «nada que cambiar»; nada cambia |
-| Árbol sucio o la rama de reestructuración ya existe | `mth reconfigure` | Error; nada cambia |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Repo sin adoptar | `mth survey --reconfigure` y `mth reconfigure`: error que indica `mth-init`; nada cambia | AC-01 |
+| FM-02 | `--only` con un nombre desconocido o sin preguntas aplicables | Error con los nombres válidos | AC-03 |
+| FM-03 | Respuestas que faltan, sobran o son inválidas | Error con cada problema; nada cambia | AC-05 |
+| FM-04 | Configuración resultante inválida (p. ej. se quita un revisor con `review.paths`) | Error de configuración antes de crear la rama; nada cambia | AC-05 |
+| FM-05 | `ramas: usar` con una rama que no existe en el remoto | Error; nada cambia | AC-05 |
+| FM-06 | `commits: encadenar` sin hook ajeno que encadenar | Error; nada cambia (el hook rechazaría todos los commits) | AC-05 |
+| FM-07 | Nada que cambiar | Error «nada que cambiar»; nada cambia | AC-06 |
+| FM-08 | Árbol sucio o la rama de reestructuración ya existe | Error; nada cambia | AC-05 |
 
 ## Criterios de aceptación
 
-- **AC-01**: `mth survey --reconfigure` falla en un repo sin adoptar, y `mth survey` sin la opción sigue fallando en uno adoptado.
-- **AC-02**: En un repo adoptado, el inventario de reestructuración ofrece todas las preguntas del catálogo en orden (sin `colision` si no hay colisiones), cada una con `current`, y tiene el perfil `reconfigure`.
-- **AC-03**: `--only` acepta IDs y bloques, y rechaza un nombre desconocido o una selección sin preguntas aplicables. Los bloques cubren cada pregunta del catálogo exactamente una vez.
-- **AC-04**: `mth reconfigure` aplica las respuestas sobre la configuración actual: conserva las claves no preguntadas (por ejemplo `[ids]` propios, `review.paths` o `work.dirs`), crea `chore/reconfigure-methodology` con la configuración y el ADR en un único commit subido, y el ADR lista decisiones, cambios de configuración y la referencia al ADR de adopción.
-- **AC-05**: Respuestas que faltan, sobran o son inválidas, una configuración resultante inválida, `ramas: usar` con una rama inexistente, `commits: encadenar` sin hook ajeno, un árbol sucio o una rama ya existente fallan sin crear rama ni modificar ficheros.
-- **AC-06**: Unas respuestas que no cambian la configuración ni piden migraciones fallan con «nada que cambiar». Si piden una migración, la rama se crea y el ADR la lista como pendiente.
-- **AC-07**: `alcance: gradual` conserva el `trace.legacy_base` existente o, si no lo hay, lo fija en el commit de `development`; `completa` lo vacía; `revisores` sustituye la lista.
-- **AC-08**: Un cambio de `commits` reinstala el hook `commit-msg` con el modo nuevo.
-- **AC-09**: Con `autonomy.level = "supervised"`, el guard pide confirmación para `mth reconfigure`.
-- **AC-10**: La skill `mth-reconfigure` existe, documenta los cuatro bloques y los comandos `mth survey --reconfigure` y `mth reconfigure`, y `mth-init` remite a ella en un repo ya adoptado.
+- **AC-01**: SI el repo no está adoptado, ENTONCES `mth survey --reconfigure` DEBE fallar; SI está adoptado, ENTONCES `mth survey` sin la opción DEBE seguir fallando.
+- **AC-02**: CUANDO el repo está adoptado, el inventario de reestructuración DEBE ofrecer todas las preguntas del catálogo en orden (sin `colision` si no hay colisiones), cada una con `current`, con el perfil `reconfigure`.
+- **AC-03**: `--only` DEBE aceptar IDs y bloques y rechazar un nombre desconocido o una selección sin preguntas aplicables; los bloques DEBEN cubrir cada pregunta del catálogo exactamente una vez.
+- **AC-04**: CUANDO se ejecuta `mth reconfigure`, `mth` DEBE aplicar las respuestas sobre la configuración actual conservando las claves no preguntadas (p. ej. `[ids]` propios, `review.paths`, `work.dirs`) y crear `chore/reconfigure-methodology` con la configuración y el ADR en un único commit subido, con decisiones, cambios de configuración y la referencia al ADR de adopción.
+- **AC-05**: SI faltan, sobran o son inválidas las respuestas, la configuración resultante es inválida, `ramas: usar` apunta a una rama inexistente, `commits: encadenar` no tiene hook ajeno, el árbol está sucio o la rama ya existe, ENTONCES `mth reconfigure` DEBE fallar sin crear rama ni modificar ficheros.
+- **AC-06**: SI las respuestas no cambian la configuración ni piden migraciones, ENTONCES `mth reconfigure` DEBE fallar con «nada que cambiar»; SI piden una migración, ENTONCES DEBE crear la rama y el ADR DEBE listarla como pendiente.
+- **AC-07**: CUANDO `alcance` es `gradual`, `mth` DEBE conservar el `trace.legacy_base` existente o, si no hay, fijarlo en el commit de `development`; CUANDO es `completa`, DEBE vaciarlo; `revisores` DEBE sustituir la lista.
+- **AC-08**: CUANDO cambia `commits`, `mth` DEBE reinstalar el hook `commit-msg` con el modo nuevo.
+- **AC-09**: MIENTRAS `autonomy.level = "supervised"`, el guard DEBE pedir confirmación para `mth reconfigure`.
+- **AC-10**: La skill `mth-reconfigure` DEBE existir y documentar los cuatro bloques y los comandos `mth survey --reconfigure` y `mth reconfigure`, y `mth-init` DEBE remitir a ella en un repo ya adoptado.
 
 ## Notas
 

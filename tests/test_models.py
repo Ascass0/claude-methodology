@@ -43,6 +43,13 @@ class ModelConfigTests(unittest.TestCase):
                     parse(Path("."), BASE_CONFIG + "[models]\n" + body + "\n")
                 self.assertIn(expected, ctx.exception.message)
 
+    def test_valid_custom_ladder_is_accepted(self):
+        # verifies: SPEC-0002/AC-02
+        body = '[models]\nladder = ["fable", "opus"]\ntask = "opus"\nreview = "fable"\ndocumenter = "opus"\n'
+        models = parse(Path("."), BASE_CONFIG + body)["models"]
+        self.assertEqual(models, {"ladder": ["fable", "opus"], "task": "opus", "review": "fable",
+                                  "documenter": "opus"})
+
 
 class PlanModelColumnTests(unittest.TestCase):
     def test_model_column(self):
@@ -191,6 +198,16 @@ class VerifyRecordsTests(ModelRepoTestCase):
                 self.assertNotIn("verificada", out)
                 self.assertEqual(self.events(), [])
 
+    def test_one_invalid_override_among_valid_ones_aborts_everything(self):
+        # verifies: SPEC-0002/AC-06
+        args = ["plan", "verify", SPEC_ID, "--wave", "1", "--model", "T-01=sonnet", "--model", "T-02=fable"]
+        for m in self.wave_one():
+            args += ["--manifest", m]
+        out = self.mth(*args, ok=False)
+        self.assertIn("no está en models.ladder", out)
+        self.assertNotIn("verificada", out)
+        self.assertEqual(self.events(), [])
+
 
 class StatsTests(ModelRepoTestCase):
     def write_trace(self, lines: list[str]) -> None:
@@ -245,6 +262,13 @@ class StatsTests(ModelRepoTestCase):
         out = self.mth("plan", "stats")
         self.assertIn("3 líneas ilegibles de la traza ignoradas", out)
         self.assertIn("haiku", out)
+
+    def test_readable_trace_has_no_warning(self):
+        # verifies: SPEC-0002/AC-08
+        self.write_trace([self.event("T-01", "haiku", "ok", "a")])
+        out = self.mth("plan", "stats")
+        self.assertIn("haiku", out)
+        self.assertNotIn("ilegibles", out)
 
 
 if __name__ == "__main__":

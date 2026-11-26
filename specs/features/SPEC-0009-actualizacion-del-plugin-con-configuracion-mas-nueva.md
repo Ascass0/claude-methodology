@@ -2,17 +2,16 @@
 
 - Estado: implementada
 - Fecha: 2026-11-18
+- Formato: compacto
 - ADRs: —
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0009/AC-NN`. -->
 
 ## Contexto
 
-Cada versión del plugin añade claves a `.claude/methodology.toml` (la 0.6.0 añade `language`, `hooks`, `autonomy`, `trace.legacy_base` y `release.version_files`). Una clave que el plugin no conoce hace fallar la carga de la configuración. Es el comportamiento correcto: si un plugin antiguo ignorase `autonomy.level = "supervised"`, trabajaría sin supervisión.
-
-El fallo se ve en los equipos mixtos. Si alguien añade una clave nueva a la configuración, quien sigue con la versión anterior se queda bloqueado: su hook `commit-msg` rechaza todos los commits y ningún comando `mth` arranca. El error dice "Revisa la ortografía", cuando la solución es actualizar el plugin y abrir una sesión nueva. Tampoco hay ningún sitio que explique cómo se actualiza.
+- Cada versión del plugin añade claves a `.claude/methodology.toml` (la 0.6.0: `language`, `hooks`, `autonomy`, `trace.legacy_base`, `release.version_files`). Una clave desconocida hace fallar la carga: correcto, porque un plugin antiguo que ignorase `autonomy.level = "supervised"` trabajaría sin supervisión.
+- En equipos mixtos, quien conserva la versión anterior queda bloqueado: su `commit-msg` rechaza todos los commits y ningún `mth` arranca.
+- El error decía «Revisa la ortografía» cuando la solución es actualizar el plugin y abrir una sesión nueva; y no había dónde se explicara la actualización.
 
 ## Objetivo
 
@@ -35,16 +34,16 @@ El fallo se ve en los equipos mixtos. Si alguien añade una clave nueva a la con
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| La configuración usa una clave de una versión posterior del plugin | Carga de la configuración | Fail-fast, como hasta ahora: nada se ejecuta y el error dice qué versión la rechaza y cómo actualizar |
-| `mth doctor` con configuración inválida | `mth doctor` | ✗ con el mensaje y la pista |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | La configuración usa una clave de una versión posterior | Fail-fast: nada se ejecuta; el error dice qué versión la rechaza y cómo actualizar | AC-01 |
+| FM-02 | `mth doctor` con configuración inválida | ✗ con el mensaje y la pista | AC-03 |
 
 ## Criterios de aceptación
 
-- **AC-01**: El error de una clave desconocida, de primer nivel o anidada, nombra la clave y la versión del plugin, y su pista indica actualizar el plugin y abrir una sesión nueva.
-- **AC-02**: Una configuración que solo usa claves de la 0.5.x se carga con `language.docs = "es"`, `hooks.commit_msg = "own"`, `autonomy.level = "full"`, `trace.legacy_base = ""` y `release.version_files = []`.
-- **AC-03**: `mth doctor` con una configuración inválida muestra el mensaje y la pista del error.
+- **AC-01**: SI la configuración tiene una clave desconocida (de primer nivel o anidada), ENTONCES el error DEBE nombrar la clave y la versión del plugin, y su pista DEBE indicar actualizar el plugin y abrir una sesión nueva.
+- **AC-02**: CUANDO una configuración solo usa claves de la 0.5.x, `mth` DEBE cargarla con `language.docs = "es"`, `hooks.commit_msg = "own"`, `autonomy.level = "full"`, `trace.legacy_base = ""` y `release.version_files = []`.
+- **AC-03**: SI la configuración es inválida, ENTONCES `mth doctor` DEBE mostrar el mensaje y la pista del error.
 
 ## Notas
 

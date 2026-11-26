@@ -2,15 +2,15 @@
 
 - Estado: implementada
 - Fecha: 2026-11-24
+- Formato: compacto
 - ADRs: [ADR-0011](../adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md), [ADR-0003](../adr/process/ADR-0003-adopcion-guiada-por-perfiles-de-destino.md)
 - Sustituye a: —
 
-<!-- Estados: borrador → aprobada → implementada → sustituida.
-     "implementada" exige que cada AC tenga un test con `verifies: SPEC-0015/AC-NN`. -->
 
 ## Contexto
 
-La entrevista de [SPEC-0004](SPEC-0004-adopcion-guiada.md) pregunta todo lo que el perfil y las señales disparan. En una adopción real hizo 12 preguntas en 3 rondas y 8 eran deducibles; ofrecía opciones que fallaban con el inventario y no mostraba el resultado conjunto antes de escribir. [ADR-0011](../adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md) recoge la decisión.
+- La entrevista de [SPEC-0004](SPEC-0004-adopcion-guiada.md) pregunta todo lo que el perfil y las señales disparan. En una adopción real hizo 12 preguntas en 3 rondas y 8 eran deducibles; ofrecía opciones que fallaban con el inventario y no mostraba el resultado conjunto antes de escribir.
+- Decisión: [ADR-0011](../adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md).
 
 ## Objetivo
 
@@ -89,28 +89,28 @@ La tabla del ADR de adopción tiene una columna **Resultado** (`deducida`, `por_
 
 ## Modos de fallo
 
-| Fallo | Detección | Respuesta (estado seguro) |
-|---|---|---|
-| Opción no ofrecida por el inventario (por ejemplo, `ci: crear` sin GitHub) | `mth init --answers` | Error con la pregunta y las opciones ofrecidas; no se modifica nada |
-| Respuesta a una pregunta que no está en el inventario | `mth init --answers` | Error; no se modifica nada |
-| `review.paths` con un agente que no está en `agents`, que no es una lista de textos o que está vacía | `mth init --answers` | Error de validación de las respuestas o de la configuración; no se modifica nada |
-| Señal de ramas ilegible (`merge-base` falla) | `mth survey` | La rama no cuenta como salida de la candidata: la pregunta pasa a `decision` |
-| Más ramas de trabajo que el límite de inventario (50), o un error de git distinto de «no es ancestro» al comprobar una bifurcación | `mth survey` | Solo se examinan las 50 primeras y `working` es el total real; la regla no se confirma y `ramas` pasa a `decision`. Una comprobación fallida no cuenta como «sale de la candidata» |
-| `--plan` sin `--answers` | `mth init` | Error de uso |
+| ID | Causa | Respuesta (estado seguro) | Cubierto por |
+|---|---|---|---|
+| FM-01 | Opción no ofrecida por el inventario (p. ej. `ci: crear` sin GitHub) | `mth init --answers`: error con la pregunta y las opciones ofrecidas; no se modifica nada | AC-04, AC-07 |
+| FM-02 | Respuesta a una pregunta que no está en el inventario | Error; no se modifica nada | AC-07 |
+| FM-03 | `review.paths` con un agente que no está en `agents`, que no es una lista de textos o que está vacía | Error de validación de las respuestas o de la configuración; no se modifica nada | AC-10 |
+| FM-04 | Señal de ramas ilegible (`merge-base` falla) | `mth survey`: la rama no cuenta como salida de la candidata y la pregunta pasa a `decision` | AC-02 |
+| FM-05 | Más ramas de trabajo que el límite del inventario (50), o un error de git distinto de «no es ancestro» al comprobar una bifurcación | Solo se examinan las 50 primeras y `working` es el total real; la regla no se confirma y `ramas` pasa a `decision`; una comprobación fallida no cuenta como «sale de la candidata» | AC-02 |
+| FM-06 | `--plan` sin `--answers` | `mth init`: error de uso | AC-08 |
 
 ## Criterios de aceptación
 
-- **AC-01**: `mth survey --json` da a cada pregunta un `outcome` entre `deducida`, `por_defecto` y `decision`, con `answer` y `basis` en las no decididas, y `asked()` devuelve solo las `decision`, en el orden de dependencia (`instrucciones` y `autonomia` primero).
-- **AC-02**: `ramas` es `deducida` con una única candidata de la que salen todas las ramas de trabajo, `por_defecto` (`crear`) sin candidata y `decision` con varias candidatas o sin ramas de trabajo que la confirmen.
-- **AC-03**: Con un hook `commit-msg` ajeno, `commits` es `deducida` (`encadenar`), solo se ofrece `encadenar` y `sustituir` se rechaza.
-- **AC-04**: Con una forja que no es GitHub, `ci` es `deducida` (`sin-ci`) y `ci: crear` se rechaza; con GitHub se pregunta. La deducción de `versiones` sin GitHub la fija [SPEC-0016](SPEC-0016-forja-configurable.md).
-- **AC-05**: `tests` es `deducida` con un objetivo `test` en `Makefile` o `justfile` aunque haya más candidatos, y `decision` si no.
-- **AC-06**: `idioma` es `deducida` con idioma detectado (`es` o `en`) y `por_defecto` (`es`) con `unknown`; `modelos` es `por_defecto`; `alcance` es `deducida` (`gradual`) en `existing`, `methodology` y `fork`.
-- **AC-07**: `mth init --answers` exige respuesta solo a las `decision`, aplica el valor de las demás, deja que una respuesta explícita lo sustituya y rechaza una opción no ofrecida o una pregunta fuera del inventario.
-- **AC-08**: `mth init --answers --plan` imprime los cuatro bloques (deducido con evidencia, por defecto, decidido, capacidades activas y desactivadas con motivo) sin escribir nada, y la adopción imprime el mismo plan antes de escribir.
-- **AC-09**: La tabla del ADR de adopción tiene, por cada pregunta del inventario, su resultado (`deducida`, `por_defecto` o `decision`).
-- **AC-10**: Todas las opciones del catálogo de preguntas existen en `mth init --answers` y se aplican a la configuración, todos los comandos `mth` y todas las claves de configuración que nombran sus textos existen, y `revisores` acepta `paths` y lo escribe en `[review.paths]`, que el cálculo de revisores obligatorios respeta.
-- **AC-11**: Con el inventario del caso real (remoto en GitLab, única rama `dev` de la que salen las demás, hook `commit-msg` ajeno, `Makefile` con `test` y `pytest`, docs en español, 42 ADR, `CLAUDE.md`), la entrevista tiene como máximo 4 preguntas `decision`, la adopción con las respuestas de la persona genera un plan que lista `mth integrate` y `mth release` como desactivadas, y la skill documenta una sola ronda y el resumen antes de escribir.
+- **AC-01**: CUANDO se ejecuta `mth survey --json`, `mth` DEBE dar a cada pregunta un `outcome` entre `deducida`, `por_defecto` y `decision`, con `answer` y `basis` en las no decididas, y `asked()` DEBE devolver solo las `decision` en el orden de dependencia (`instrucciones` y `autonomia` primero).
+- **AC-02**: `ramas` DEBE ser `deducida` con una única candidata de la que salen todas las ramas de trabajo, `por_defecto` (`crear`) sin candidata y `decision` con varias candidatas o sin ramas de trabajo que la confirmen.
+- **AC-03**: SI hay un hook `commit-msg` ajeno, ENTONCES `commits` DEBE ser `deducida` (`encadenar`), solo DEBE ofrecerse `encadenar` y `sustituir` DEBE rechazarse.
+- **AC-04**: SI la forja no es GitHub, ENTONCES `ci` DEBE ser `deducida` (`sin-ci`) y `ci: crear` DEBE rechazarse; con GitHub DEBE preguntarse. La deducción de `versiones` sin GitHub la fija [SPEC-0016](SPEC-0016-forja-configurable.md).
+- **AC-05**: `tests` DEBE ser `deducida` con un objetivo `test` en `Makefile` o `justfile` aunque haya más candidatos, y `decision` si no.
+- **AC-06**: `idioma` DEBE ser `deducida` con idioma detectado (`es` o `en`) y `por_defecto` (`es`) con `unknown`; `modelos` DEBE ser `por_defecto`; `alcance` DEBE ser `deducida` (`gradual`) en `existing`, `methodology` y `fork`.
+- **AC-07**: `mth init --answers` DEBE exigir respuesta solo a las `decision`, aplicar el valor de las demás, dejar que una respuesta explícita lo sustituya y rechazar una opción no ofrecida o una pregunta fuera del inventario.
+- **AC-08**: CUANDO se ejecuta `mth init --answers --plan`, `mth` DEBE imprimir los cuatro bloques (deducido con evidencia, por defecto, decidido, capacidades activas y desactivadas con motivo) sin escribir nada; la adopción DEBE imprimir el mismo plan antes de escribir.
+- **AC-09**: La tabla del ADR de adopción DEBE tener, por cada pregunta del inventario, su resultado (`deducida`, `por_defecto` o `decision`).
+- **AC-10**: Todas las opciones del catálogo de preguntas DEBEN existir en `mth init --answers` y aplicarse a la configuración; todos los comandos `mth` y claves de configuración que nombran sus textos DEBEN existir; `revisores` DEBE aceptar `paths` y escribirlo en `[review.paths]`, que el cálculo de revisores obligatorios respeta.
+- **AC-11**: DADO el inventario del caso real (remoto en GitLab, única rama `dev` de la que salen las demás, hook `commit-msg` ajeno, `Makefile` con `test` y `pytest`, docs en español, 42 ADR, `CLAUDE.md`), la entrevista DEBE tener como máximo 4 preguntas `decision`, el plan de adopción DEBE listar `mth integrate` y `mth release` como desactivadas y la skill DEBE documentar una sola ronda y el resumen antes de escribir.
 
 ## Notas
 

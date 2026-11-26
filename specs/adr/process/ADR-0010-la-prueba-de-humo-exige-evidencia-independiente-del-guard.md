@@ -3,38 +3,44 @@
 - Estado: aceptado
 - Fecha: 2026-11-23
 - Categoría: process
-
-<!-- Estados: propuesto → aceptado → sustituido por ADR-NNNN | obsoleto. Formato basado en MADR. -->
+- Formato: compacto
 
 ## Contexto
 
-El guard por agente depende de un comportamiento de Claude Code que no controlamos: que los hooks de `.claude/settings.json` reciban `agent_id` y `agent_type` en las llamadas de los subagentes ([ADR-0008](ADR-0008-catalogo-de-plantillas-de-agentes.md)). La primera prueba real ya refutó un supuesto (los hooks del frontmatter no se aplican a los subagentes). Si una versión futura cambia ese comportamiento, el guard pasa a fallar abierto sin que nada lo avise: un agente «de solo lectura» escribe. Hasta ahora la comprobación era un procedimiento manual de `docs/catalogo-de-agentes.md`, que depende de que alguien se acuerde de repetirlo.
-
-Automatizarla tiene una trampa: en modo no interactivo, el sistema de permisos de Claude Code también puede impedir un comando. Una prueba que se limite a observar que el comando «no se ejecutó» da un falso positivo cuando lo impidió el sistema de permisos y no el guard. Además, la prueba depende de la CLI `claude`, de autenticación y de red, y gasta tokens: puede no llegar a concluir.
+- El guard por agente depende de algo que no controlamos: que los hooks de `.claude/settings.json` reciban `agent_id` y `agent_type` en las llamadas de subagentes ([ADR-0008](ADR-0008-catalogo-de-plantillas-de-agentes.md)). La primera prueba real ya refutó un supuesto.
+- Si una versión cambia ese comportamiento, el guard falla abierto sin aviso: un agente «de solo lectura» escribe.
+- La comprobación era un procedimiento manual de `docs/catalogo-de-agentes.md`, que depende de que alguien se acuerde.
+- Trampa al automatizar: en modo no interactivo el sistema de permisos de Claude Code también puede impedir un comando; «no se ejecutó» da un falso positivo si lo impidió ese sistema y no el guard.
+- Depende de la CLI `claude`, autenticación y red, y gasta tokens: puede no concluir.
 
 ## Decisión
 
-`mth smoke` ejecuta un subagente canario en un repositorio temporal y exige **evidencia independiente del propio guard**, con tres resultados: pasa, falla y no concluyente.
+`mth smoke` DEBE ejecutar un subagente canario en un repositorio temporal y exigir **evidencia independiente del propio guard**, con tres resultados:
 
-1. **Pasa** solo si coinciden: el registro del guard muestra una llamada a `Bash` del canario con `agent_type` bloqueada; el registro muestra una llamada a `Write` del mismo canario **permitida** (control positivo) y su efecto existe en disco; y el comando bloqueado no dejó efecto alguno. El control positivo demuestra que el subagente usa herramientas y que el hook está en su camino.
-2. **Falla** si hay prueba de que el guard no actuó: el efecto del comando bloqueado existe, o el efecto del control positivo existe sin una decisión del guard que lo respalde.
-3. **No concluyente** en cualquier otro caso (sin `claude`, sin autenticación o red, plazo agotado, el modelo no llamó a la herramienta, el sistema de permisos lo impidió). Un resultado no concluyente nunca registra la versión.
-4. La prueba corre en un repositorio temporal con su propio `.claude/settings.json`, con solo las fuentes de configuración del proyecto, y se limpia en todos los caminos. Usa un modelo barato fijo, un máximo de turnos, un tope de coste y un plazo.
-5. Al pasar, `mth` registra la salida de `claude --version` en `<git-common-dir>/mth/smoke`; `mth session` y `mth doctor` avisan cuando la versión de Claude Code que se usa difiere de la registrada. Un fallo borra el registro.
+1. **Pasa** solo si coinciden: el registro del guard muestra una llamada `Bash` del canario con `agent_type` bloqueada; muestra una llamada `Write` del mismo canario permitida (control positivo) con su efecto en disco; y el comando bloqueado no dejó efecto.
+2. **Falla** si hay prueba de que el guard no actuó: existe el efecto del comando bloqueado, o el del control positivo sin una decisión del guard que lo respalde.
+3. **No concluyente** en cualquier otro caso (sin `claude`, sin autenticación o red, plazo agotado, el modelo no llamó a la herramienta, lo impidió el sistema de permisos). NO DEBE registrar la versión.
+4. La prueba DEBE correr en un repositorio temporal con su propio `.claude/settings.json` y solo las fuentes de configuración del proyecto, limpiarse en todos los caminos y usar un modelo barato fijo, máximo de turnos, tope de coste y plazo.
+5. Al pasar, `mth` DEBE registrar la salida de `claude --version` en `<git-common-dir>/mth/smoke`; `mth session` y `mth doctor` DEBEN avisar si la versión en uso difiere. Un fallo DEBE borrar el registro.
 
 Detalle en [SPEC-0014](../../features/SPEC-0014-prueba-de-humo-de-los-agentes.md).
 
-## Alternativas consideradas
+## Rechazado
 
-- **Seguir con el procedimiento manual:** depende de la memoria de quien actualiza Claude Code; es el estado del que partimos.
-- **Una lista de versiones permitidas:** registra qué versiones conocemos, no verifica comportamiento; dos versiones iguales de fuera pueden comportarse distinto por configuración.
-- **Considerar que pasa si el comando no se ejecutó:** falso positivo cuando lo bloquea el sistema de permisos.
-- **Leer la transcripción de la sesión:** depende de un formato no documentado y no prueba que el hook se ejecutó.
-- **Ejecutarla en CI en cada cambio:** requiere credenciales y gasta tokens en cada commit; se deja como decisión de quien opera el repo.
+- Procedimiento manual: depende de la memoria de quien actualiza Claude Code.
+- Lista de versiones permitidas: registra versiones conocidas, no verifica comportamiento.
+- Dar por pasada la prueba si el comando no se ejecutó: falso positivo cuando lo bloquea el sistema de permisos.
+- Leer la transcripción de la sesión: formato no documentado y no prueba que el hook se ejecutó.
+- Ejecutarla en CI en cada cambio: credenciales y tokens en cada commit; lo decide quien opera el repo.
 
 ## Consecuencias
 
-- El riesgo del ADR-0008 pasa de «cuando alguien se acuerde» a «mth lo avisa cuando la versión cambia».
-- Cada prueba cuesta una llamada barata a un modelo y depende de la red: puede ser no concluyente, y no hay que tratarlo como un fallo ni como un pase.
-- La prueba verifica un canario, no cada agente: comprueba que el mecanismo (hook, `agent_type`, guard) funciona, no las reglas de cada plantilla (eso lo cubren los casos `[[guard]]`).
-- Riesgo aceptado: un cambio de Claude Code que solo afecte a un tipo de herramienta no probado (por ejemplo `Edit`) no se detecta; el canario ejerce `Bash` y `Write`.
+- **+** El riesgo del ADR-0008 pasa de «cuando alguien se acuerde» a «mth avisa cuando la versión cambia».
+- **−** Cada prueba cuesta una llamada barata y depende de la red: puede ser no concluyente, y no es ni fallo ni pase.
+- **−** Verifica un canario, no cada agente: el mecanismo (hook, `agent_type`, guard), no las reglas de cada plantilla (las cubren los casos `[[guard]]`).
+- **riesgo** Un cambio que solo afecte a una herramienta no probada (`Edit`) no se detecta; el canario ejerce `Bash` y `Write`.
+
+## Impone
+
+- [script] `mthlib/smoke.py` (`mth smoke`, registro de versión); `mthlib/session.py` y `mth doctor` avisan al cambiar la versión.
+- [criterio] Se repite al actualizar Claude Code y antes de cada versión del plugin (ADR-0008).

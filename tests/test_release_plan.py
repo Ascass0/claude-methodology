@@ -171,6 +171,15 @@ class ReleasePlanFlowTests(unittest.TestCase):
         self.assertEqual((plans[-1]["decision"], plans[-1]["version"]), ("publicar", "0.1.0"))
         self.assertTrue(plans[-1]["reasons"])
 
+    def test_release_publishes_a_patch_when_the_plan_proposes_one(self):
+        # verifies: SPEC-0017/AC-06
+        self.add_fragment("fix-leak", "patch", "Corregido")
+        proposed = [line for line in self.mth("release", "--plan").splitlines() if line.startswith("Nivel:")][0]
+        self.assertIn("patch → versión 0.0.1", proposed)
+        self.mth("release")
+        self.git("fetch", "-q", "--tags")
+        self.assertIn("v0.0.1", self.git("tag", "--list"))
+
 
 class ReleaseFailureModeTests(ReleasePlanFlowTests):
     """Failure modes of the decision; the base tests do not run again here."""
@@ -180,6 +189,7 @@ class ReleaseFailureModeTests(ReleasePlanFlowTests):
     test_plan_waits_for_open_work_and_skips_maintenance = None
     test_major_before_one_dot_zero_is_blocked_unless_allowed = None
     test_release_publishes_what_the_plan_proposed_and_traces_it = None
+    test_release_publishes_a_patch_when_the_plan_proposes_one = None
 
     def test_unreadable_remote_branches_are_not_a_reason_to_wait(self):
         # verifies: SPEC-0017/AC-04
