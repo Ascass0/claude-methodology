@@ -24,11 +24,13 @@ def modules_after(code: str) -> set[str]:
 
 class ImportCostTests(unittest.TestCase):
     def test_loading_the_configuration_does_not_load_the_network_stack(self):
+        # regression: config pulled urllib.request into every command
         loaded = modules_after("import mthlib.config")
         self.assertNotIn("urllib.request", loaded)
         self.assertNotIn("http.client", loaded)
 
     def test_the_guard_entry_point_skips_the_cli_and_the_configuration_for_a_plain_command(self):
+        # regression: the guard imported the whole CLI on every Bash call
         run = ("import io, runpy, sys\n"
                "sys.argv = ['mth.py', 'guard']\n"
                "sys.stdin = io.StringIO('{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"ls -la\"}, \"cwd\": \".\"}')\n"
@@ -39,6 +41,7 @@ class ImportCostTests(unittest.TestCase):
             self.assertNotIn(heavy, loaded)
 
     def test_the_guard_still_confirms_exactly_the_autonomy_levels_the_configuration_defines(self):
+        # unit: guard.CONFIRM
         self.assertEqual(set(guard.CONFIRM), set(config.AUTONOMY_LEVELS))
 
 
