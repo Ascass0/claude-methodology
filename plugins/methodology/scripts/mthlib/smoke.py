@@ -24,7 +24,7 @@ from .files import atomic_write
 from .git import Git
 from .log import Tracer
 from .agent_guard import redact
-from .setup import register_launcher
+from .hooks import register_launcher
 
 PASS, FAIL, NOT_RUN, INCONCLUSIVE = 0, 1, 2, 3  # exit codes; NOT_RUN: the test could not be prepared (or bad usage)
 CANARY = "mth-canary"

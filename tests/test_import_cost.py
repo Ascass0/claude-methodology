@@ -30,6 +30,12 @@ class ImportCostTests(unittest.TestCase):
         self.assertNotIn("urllib.request", loaded)
         self.assertNotIn("http.client", loaded)
 
+    def test_loading_the_configuration_does_not_load_the_tool_manager_or_the_archive_modules(self):
+        # regression: config reached tools through secretgate and pulled tarfile, zipfile, hashlib and platform into every command
+        loaded = modules_after("import mthlib.config")
+        for heavy in ("mthlib.tools", "tarfile", "zipfile", "hashlib", "platform"):
+            self.assertNotIn(heavy, loaded)
+
     def test_the_guard_entry_point_skips_the_cli_and_the_configuration_for_a_plain_command(self):
         # regression: the guard imported the whole CLI on every Bash call
         run = ("import io, runpy, sys\n"
@@ -51,6 +57,29 @@ class ImportCostTests(unittest.TestCase):
             loaded = modules_after(run, cwd=outside)
         for heavy in ("mthlib.cli", "urllib.request"):
             self.assertNotIn(heavy, loaded)
+
+    def session_modules(self, with_catalog_agent: bool) -> set[str]:
+        run = ("import runpy, sys\n"
+               "sys.argv = ['mth.py', 'session']\n"
+               f"try:\n    runpy.run_path({str(SCRIPTS / 'mth.py')!r}, run_name='__main__')\nexcept SystemExit:\n    pass\n")
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            (Path(repo) / ".claude").mkdir()
+            (Path(repo) / ".claude" / "methodology.toml").write_text('version = 1\n[commands]\ntest = ""\n', encoding="utf-8")
+            if with_catalog_agent:  # a rendered guard is what marks an agent of the catalog as installed
+                guards = Path(repo) / ".claude" / "mth" / "agents"
+                guards.mkdir(parents=True)
+                (guards / "explorador-specs.guard.toml").write_text("", encoding="utf-8")
+            return modules_after(run, cwd=repo)
+
+    def test_a_session_in_an_adopted_repository_does_not_load_the_adoption_machinery(self):
+        # regression: the session hook imported setup and, through it, adoption, survey, audit, tools and changelog
+        for with_catalog_agent in (False, True):
+            loaded = self.session_modules(with_catalog_agent)
+            for heavy in ("mthlib.cli", "mthlib.setup", "mthlib.adoption", "mthlib.survey", "mthlib.audit", "mthlib.tools",
+                          "mthlib.changelog", "mthlib.commits"):
+                self.assertNotIn(heavy, loaded, f"{heavy} (catalog agent: {with_catalog_agent})")
+            self.assertIn("mthlib.hooks", loaded)  # it still installs the hooks it always did
 
     def test_the_commit_msg_entry_point_skips_the_cli(self):
         # regression: every commit imported the whole CLI to validate one message
