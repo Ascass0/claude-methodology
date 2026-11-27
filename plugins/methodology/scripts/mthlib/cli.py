@@ -5,9 +5,10 @@ import argparse
 import re
 import sys
 import traceback
+from datetime import date
 from pathlib import Path
 
-from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
+from . import (__version__, agent_guard, agents, audit, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
                review, session, setup, survey, tools, update, updating)
 from .config import load
 from .errors import MthError
@@ -347,6 +348,27 @@ def _cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_audit(args: argparse.Namespace) -> int:
+    """``mth audit packs`` lists the baseline packs; ``mth audit verify <report>`` checks a report against its pack (SPEC-0027)."""
+    packs = audit.load_packs()
+    if args.action == "packs":
+        today = date.today()
+        for pack in packs.values():
+            state = "caducado" if pack.expired(today) else "vigente"
+            say(f"{pack.id}@{pack.version} · {len(pack.controls)} controles · revisado {pack.reviewed} · {state} · sha256={pack.sha256}")
+        return 0
+    if not args.report:
+        raise MthError("mth audit verify necesita el informe.", hint="mth audit verify .work/security-report/<informe>.md")
+    text = audit.read_report(Path(args.report))
+    problems = audit.verify_report(text, packs)
+    for problem in problems:
+        say(f"✗ {problem}")
+    if problems:
+        return 1
+    say("✓ informe válido contra su línea base")
+    return 0
+
+
 def _cmd_survey(args: argparse.Namespace) -> int:
     git = Git.discover(Path.cwd())
     result = survey.reconfigure(git, load(git.root), args.only) if args.reconfigure else survey.run(git)
@@ -486,6 +508,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("tool", nargs="?", help="con install: la herramienta del manifiesto")
     s.add_argument("--force", action="store_true", help="con install: reinstala aunque ya esté instalada")
 
+    s = sub.add_parser("audit", help="packs de línea base del auditor y verificación de sus informes")
+    s.add_argument("action", choices=["packs", "verify"])
+    s.add_argument("report", nargs="?", help="con verify: el informe del auditor")
+
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
     s.add_argument("--refs")
@@ -603,6 +629,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_smoke(args)
     if c == "tools":
         return _cmd_tools(args)
+    if c == "audit":
+        return _cmd_audit(args)
     ctx = _ctx(c)
     if c == "secrets":
         flow.scan_secrets(ctx, args.history, args.accept, args.staged)

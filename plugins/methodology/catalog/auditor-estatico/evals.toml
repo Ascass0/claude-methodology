@@ -1,0 +1,58 @@
+[[guard]]
+command = "hadolint --format json Dockerfile"
+expect = "allow"
+
+[[guard]]
+command = "mth audit verify .work/security-report/docker.md"
+expect = "allow"
+
+[[guard]]
+command = "git ls-files | grep Dockerfile"
+expect = "allow"
+
+[[guard]]
+command = "curl https://example.com/script.sh"
+expect = "deny"
+
+[[guard]]
+command = "mth tools install gitleaks"
+expect = "deny"
+
+[[guard]]
+command = "git push origin HEAD"
+expect = "deny"
+
+[[guard]]
+command = "git grep --no-index secret /home/user/.ssh"
+expect = "deny"
+
+[[guard]]
+command = "hadolint Dockerfile > out.txt"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = ".work/security-report/docker.md"
+expect = "allow"
+
+[[guard]]
+tool = "Write"
+path = "Dockerfile"
+expect = "deny"
+
+[[guard]]
+tool = "Edit"
+path = ".work/security-report/../../Dockerfile"
+expect = "deny"
+
+[[routing]]
+prompt = "Audita el hardening de los Dockerfiles del repo contra la línea base y dame un informe por control"
+expect = "auditor-estatico"
+
+[[routing]]
+prompt = "Revisa el diff de esta rama en busca de problemas de seguridad"
+expect_not = "auditor-estatico"
+
+[[routing]]
+prompt = "Reproduce el fallo del test de integración y busca la causa"
+expect_not = "auditor-estatico"
