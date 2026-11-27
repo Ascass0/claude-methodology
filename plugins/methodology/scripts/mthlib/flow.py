@@ -130,19 +130,21 @@ def run_trace(ctx: Ctx, checker: TraceChecker | None = None,
 
     ``checker`` and ``limit_result`` let a command that also reports warnings reuse what it already computed.
     """
-    findings = (checker or trace_checker(ctx)).run() + (limit_result or line_limits(ctx))[0]
+    checker = trace_checker(ctx) if checker is None else checker
+    limit_result = line_limits(ctx) if limit_result is None else limit_result
+    findings = checker.run() + limit_result[0]
     base = ctx.cfg["trace"]["legacy_base"]
     return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
 
 
-def limit_notes(ctx: Ctx, limit_result: tuple[list[Finding], list[Finding]] | None = None) -> list[Finding]:
+def limit_notes(limit_result: tuple[list[Finding], list[Finding]]) -> list[Finding]:
     """Files over the line limit that the branch does not make grow: a warning for `mth trace`."""
-    return (limit_result or line_limits(ctx))[1]
+    return limit_result[1]
 
 
-def single_test_notes(ctx: Ctx, checker: TraceChecker | None = None) -> list[Finding]:
+def single_test_notes(checker: TraceChecker) -> list[Finding]:
     """Acceptance criteria with a single test (ADR-0015): a warning for `mth trace`, never a gate."""
-    return (checker or trace_checker(ctx)).single_test()
+    return checker.single_test()
 
 
 def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:

@@ -4,22 +4,19 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import traceback
 from datetime import date
 from pathlib import Path
 
-from . import (__version__, agent_guard, agents, audit, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
+from . import (__version__, agent_guard, agents, audit, branches, catalog, changelog, commitcheck, commits, db_query, flow, guard, plan, plans,
                review, scan, session, setup, survey, tools, update, updating)
 from .config import load
-from .errors import MthError
+from .errors import EXIT_ERROR, MthError, run_guarded
 from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
                    start, sync)
 from .git import Git
 from .ids import IdRegistry
 from .log import Tracer, say, warn
 
-EXIT_ERROR = 1
-EXIT_BUG = 70
 
 
 def _ctx(command: str) -> Ctx:
@@ -42,7 +39,7 @@ def _text(value: str | None, file: str | None, name: str) -> str:
 
 
 def _cmd_check_msg(args: argparse.Namespace) -> int:
-    return commits.check_file(args.file)
+    return commitcheck.check_file(args.file)
 
 
 def _cmd_trace(args: argparse.Namespace) -> int:
@@ -56,12 +53,12 @@ def _cmd_trace(args: argparse.Namespace) -> int:
         say(flow.legacy_summary(ctx, legacy))
         for f in legacy if args.legacy else []:
             print(f"⚠ {f}")
-    single = flow.single_test_notes(ctx, checker)
+    single = flow.single_test_notes(checker)
     if single:
         say(f"⚠ {len(single)} criterios con un único test: mth trace --single los lista")
         for f in single if args.single else []:
             print(f"⚠ {f}")
-    long_files = flow.limit_notes(ctx, limit_result)
+    long_files = flow.limit_notes(limit_result)
     if long_files:
         say(f"⚠ {len(long_files)} ficheros por encima del límite de líneas: mth trace --limits los lista")
         for f in long_files if args.limits else []:
@@ -663,14 +660,4 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    try:
-        return _dispatch(args)
-    except MthError as exc:
-        exc.report()
-        return EXIT_ERROR
-    except KeyboardInterrupt:
-        return 130
-    except Exception:  # noqa: BLE001 — CLI boundary: unexpected errors are bugs.
-        print("✗ Error interno de claude-methodology (bug):", file=sys.stderr)
-        traceback.print_exc()
-        return EXIT_BUG
+    return run_guarded(lambda: _dispatch(args))

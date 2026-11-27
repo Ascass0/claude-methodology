@@ -12,11 +12,8 @@ Example::
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
 
-from .config import Config, load
-from .git import Git
+from .config import Config
 from .ids import IdRegistry
 
 TYPES = ("feat", "fix", "refactor", "perf", "docs", "test", "build", "ci", "chore", "revert")
@@ -136,20 +133,3 @@ def build(ctype: str, scope: str | None, summary: str, body: str,
     if breaking:
         trailers.append(f"BREAKING CHANGE: {breaking.strip()}")
     return f"{header}\n\n{body.strip()}\n\n" + "\n".join(trailers) + "\n"
-
-
-def check_file(message_file: str) -> int:
-    """The commit-msg hook: validate the message in ``message_file``; the exit code of ``mth check-msg``.
-
-    Raises:
-        MthError: Not a repository, or invalid configuration.
-    """
-    git = Git.discover(Path.cwd())
-    cfg = load(git.root)
-    errors = validate(Path(message_file).read_text(encoding="utf-8"), cfg, IdRegistry(cfg, git.files()))
-    if errors:
-        print("✗ Mensaje de commit inválido:", file=sys.stderr)
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
-        return 1
-    return 0
