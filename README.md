@@ -195,6 +195,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | Toda idea `feat`, `fix` o `hotfix` parte de un plan acordado con la persona, antes de la rama | `mth plan new/agree/list/show/done`; `mth branch --plan PLAN-NNNN` exige el plan acordado y `mth integrate` y `mth hotfix finish` exigen que la rama figure en un plan en curso (`[plans]`). Ver [ADR-0021](specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md) |
 | Toda feature parte de una spec | `mth integrate` exige que el fragmento de una `feat` referencie su spec |
 | Cada AC tiene test | `mth trace`: una spec `implementada` sin `verifies: SPEC/AC` falla |
+| Una spec que declara superficie de seguridad (`- Seguridad:` distinta de `ninguna`) tiene al menos un AC `[SEG]` | `mth trace` (formato compacto). Ver [SPEC-0026](specs/features/SPEC-0026-criterios-de-seguridad-en-las-specs.md) |
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
 | Ningún fichero supera `limits.max_file_lines` sin excepción con techo y motivo; solo hacerlo crecer bloquea | `mth trace` (`[limits]`). Ver [ADR-0016](specs/adr/process/ADR-0016-limite-de-lineas-por-fichero.md) |
