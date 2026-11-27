@@ -49,6 +49,20 @@ class SecurityHeaderTests(unittest.TestCase):
         self.assertIn("AC-02 no sigue ningún patrón EARS", broken)
         self.assertIn("[SEG]", broken)
 
+    def test_english_vocabulary_requires_the_sec_tag(self):
+        # verifies: SPEC-0026/AC-02
+        en = (SPEC.replace("Estado", "Status").replace("Formato: compacto", "Format: compact\n    - Security: external input")
+              .replace("Modos de fallo", "Failure modes").replace("Criterios de aceptación", "Acceptance criteria")
+              .replace("CUANDO pasa algo, el sistema DEBE responder", "WHEN something happens, the system SHALL answer"))
+        self.assertIn("[SEC]", findings({PATH: en}, EN_CONFIG))
+        tagged = "\n    - **AC-02** [SEC]: IF the input is invalid, THEN the system SHALL reject it."
+        self.assertEqual(findings({PATH: en + tagged}, EN_CONFIG), "")
+
+    def test_a_body_bullet_named_like_the_header_is_not_a_declaration(self):
+        # verifies: SPEC-0026/AC-05
+        body = "\n    ## Notas\n    - Seguridad: entrada externa"
+        self.assertEqual(findings({PATH: spec("- Seguridad: ninguna", body)}), "")
+
     def test_a_spec_without_the_header_is_not_checked(self):
         # verifies: SPEC-0026/AC-05
         self.assertEqual(findings({PATH: spec("")}), "")
@@ -57,7 +71,7 @@ class SecurityHeaderTests(unittest.TestCase):
 class TemplateAndDocsTests(unittest.TestCase):
     def test_templates_declare_none_in_each_language(self):
         # verifies: SPEC-0026/AC-06
-        for vocab, config in ((lang.ES, None), (lang.EN, EN_CONFIG)):
+        for vocab in (lang.ES, lang.EN):
             text = (vocab.templates / "spec.md").read_text(encoding="utf-8")
             self.assertIn(f"- {vocab.security_label}: {vocab.security_none}", text)
             self.assertEqual(compact.security_problems(text, vocab), [])

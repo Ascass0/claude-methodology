@@ -119,7 +119,9 @@ def local_failure_refs(text: str, defs: list[tuple[str, int]], spec_id_pattern: 
 
 def security_problems(text: str, vocab: Vocabulary) -> list[Problem]:
     """A declared security surface (header other than «none») needs at least one tagged criterion (SPEC-0026)."""
-    header = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", text, re.IGNORECASE | re.MULTILINE)
+    top = re.search(r"^##\s", text, re.MULTILINE)
+    block = text[:top.start()] if top else text  # the header block only: a body bullet is not the declaration
+    header = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
     if header is None or header.group(1).strip().lower() == vocab.security_none.lower():
         return []
     tagged = re.compile(rf"\*\*AC-\d{{2,3}}\*\*\s*\[{re.escape(vocab.security_tag)}\]\s*:\s*(.*)")
