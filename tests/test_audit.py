@@ -22,6 +22,8 @@ from mthlib import agent_guard, audit, cli, setup  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 
 PLUGIN = HERE.parent / "plugins" / "methodology"
+# Packs run by the execution auditor through `mth audit scan`, not by the static auditor's guard (SPEC-0028).
+NETWORK_PACKS = {"tls", "ssh"}
 PACK = b"""id = "demo"
 title = "Demo"
 version = "2"
@@ -184,7 +186,7 @@ class ShippedPacksTests(unittest.TestCase):
     def test_the_shipped_packs_are_valid_sourced_and_reviewed(self):
         # verifies: SPEC-0027/AC-10
         packs = audit.load_packs()
-        self.assertEqual(set(packs), {"comun", "docker", "kubernetes"})
+        self.assertEqual(set(packs), {"comun", "docker", "kubernetes", "tls", "ssh"})
         for p in packs.values():
             with self.subTest(pack=p.id):
                 self.assertTrue(p.source_url.startswith("https://"))
@@ -236,7 +238,7 @@ class AgentTests(unittest.TestCase):
     def test_every_tool_a_pack_names_is_allowed_by_the_agent_guard(self):
         # verifies: SPEC-0027/AC-11
         rules = self.guard_rules()
-        for p in audit.load_packs().values():
+        for p in (pack for name, pack in audit.load_packs().items() if name not in NETWORK_PACKS):
             for tool in sorted({c.tool for c in p.controls if c.tool}):
                 with self.subTest(pack=p.id, tool=tool):
                     agent_guard.check_bash(rules, tool)

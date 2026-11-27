@@ -1,0 +1,18 @@
+id = "ssh"
+title = "Servicios SSH (ssh-audit)"
+version = "1"
+reviewed = "2026-11-27"
+review_months = 6
+
+[source]
+name = "ssh-audit"
+version = "README de la rama master, 2026-11-27"
+url = "https://github.com/jtesta/ssh-audit"
+
+[[control]]
+id = "ssh.algoritmos-seguros"
+title = "Todos los algoritmos ofrecidos se consideran seguros (código de salida 0 de ssh-audit)"
+level = "minimo"
+url = "https://github.com/jtesta/ssh-audit"
+tool = "ssh-audit"
+rule = "exit-code"
