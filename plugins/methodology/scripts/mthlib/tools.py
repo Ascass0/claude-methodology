@@ -356,13 +356,14 @@ def _make_cache(folder: Path) -> None:
 
 
 def install(tool: Tool, root: Path | None = None, system: str | None = None, force: bool = False,
-            fetch: Fetch = download, sleep: Callable[[float], None] = time.sleep) -> str:
+            fetch: Fetch | None = None, sleep: Callable[[float], None] = time.sleep) -> str:
     """Download, verify and publish the managed copy of ``tool``. Returns ``instalada`` or ``ya instalada``.
 
     Raises:
         MthError: No entry for this platform, the cache is not writable, the download fails, the sum differs,
             the archive is unsafe or lacks the entry, or an existing copy was altered and ``force`` is not set.
     """
+    fetch = fetch or download
     key = system or platform_key()
     if key not in tool.platforms:
         raise MthError(f"{tool.name} {tool.version} no tiene entrada para la plataforma '{key}'.",
@@ -432,6 +433,14 @@ def prune(manifest: dict[str, Tool], root: Path | None = None) -> list[Path]:
         if keep is None and not any(tool_dir.iterdir()):
             tool_dir.rmdir()
     return removed
+
+
+def other_versions(tool: Tool, root: Path | None = None) -> list[str]:
+    """Versions of ``tool`` installed in the cache other than the one the manifest pins."""
+    folder = (root or cache_root()) / tool.name
+    if not folder.is_dir():
+        return []
+    return sorted(p.name for p in folder.iterdir() if p.name != tool.version and (p / META).is_file())
 
 
 def status(tool: Tool, root: Path | None = None) -> tuple[str, str]:
