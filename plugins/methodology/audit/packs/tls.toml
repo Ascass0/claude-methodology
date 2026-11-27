@@ -1,0 +1,74 @@
+id = "tls"
+title = "Servicios TLS (RFC 9325)"
+version = "1"
+reviewed = "2026-11-27"
+review_months = 6
+
+[source]
+name = "RFC 9325 — Recommendations for Secure Use of TLS and DTLS"
+version = "RFC 9325 (BCP 195), secciones 3.1.1, 3.2, 3.3, 3.5 y 4.1"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html"
+
+[[control]]
+id = "tls.sin-tls10-ni-tls11"
+title = "No se negocia TLS 1.0 ni TLS 1.1"
+level = "minimo"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.1.1"
+tool = "testssl"
+rule = "protocols"
+
+[[control]]
+id = "tls.tls12-soportado"
+title = "TLS 1.2 está soportado"
+level = "minimo"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.1.1"
+tool = "testssl"
+rule = "protocols"
+
+[[control]]
+id = "tls.tls13-soportado-y-preferido"
+title = "TLS 1.3 está soportado y se prefiere a versiones anteriores"
+level = "recomendado"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.1.1"
+tool = "testssl"
+rule = "protocols"
+
+[[control]]
+id = "tls.sin-compresion"
+title = "Sin compresión a nivel TLS en TLS 1.2"
+level = "recomendado"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.3"
+tool = "testssl"
+rule = "compression"
+
+[[control]]
+id = "tls.renegociacion-segura"
+title = "TLS 1.2 con renegotiation_info y extended_master_secret"
+level = "minimo"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.5"
+tool = "testssl"
+rule = "renegotiation"
+
+[[control]]
+id = "tls.sin-suites-debiles"
+title = "No se negocian suites NULL, RC4 ni de menos de 112 bits"
+level = "minimo"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-4.1"
+tool = "testssl"
+rule = "ciphers"
+
+[[control]]
+id = "tls.secreto-perfecto-adelante"
+title = "Se soportan y prefieren suites con secreto perfecto hacia adelante"
+level = "minimo"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-4.1"
+tool = "testssl"
+rule = "ciphers"
+
+[[control]]
+id = "tls.hsts"
+title = "Los servidores web envían HSTS"
+level = "recomendado"
+url = "https://www.rfc-editor.org/rfc/rfc9325.html#section-3.2"
+tool = "testssl"
+rule = "headers"

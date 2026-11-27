@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from . import (__version__, agent_guard, agents, audit, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
-               review, session, setup, survey, tools, update, updating)
+               review, scan, session, setup, survey, tools, update, updating)
 from .config import load
 from .errors import MthError
 from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
@@ -348,25 +348,41 @@ def _cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_audit(args: argparse.Namespace) -> int:
-    """``mth audit packs`` lists the baseline packs; ``mth audit verify <report>`` checks a report against its pack (SPEC-0027)."""
-    packs = audit.load_packs()
-    if args.action == "packs":
-        today = date.today()
-        for pack in packs.values():
-            state = "caducado" if pack.expired(today) else "vigente"
-            say(f"{pack.id}@{pack.version} · {len(pack.controls)} controles · revisado {pack.reviewed} · {state} · sha256={pack.sha256}")
-        return 0
-    if not args.report:
+def _audit_packs() -> int:
+    today = date.today()
+    for pack in audit.load_packs().values():
+        state = "caducado" if pack.expired(today) else "vigente"
+        say(f"{pack.id}@{pack.version} · {len(pack.controls)} controles · revisado {pack.reviewed} · {state} · sha256={pack.sha256}")
+    return 0
+
+
+def _audit_verify(report: str | None) -> int:
+    if not report:
         raise MthError("mth audit verify necesita el informe.", hint="mth audit verify .work/security-report/<informe>.md")
-    text = audit.read_report(Path(args.report))
-    problems = audit.verify_report(text, packs)
+    problems = audit.verify_report(audit.read_report(Path(report)), audit.load_packs())
     for problem in problems:
         say(f"✗ {problem}")
-    if problems:
-        return 1
-    say("✓ informe válido contra su línea base")
+    if not problems:
+        say("✓ informe válido contra su línea base")
+    return 1 if problems else 0
+
+
+def _audit_scan(tool: str | None, target: str | None) -> int:
+    if not (tool and target):
+        raise MthError("mth audit scan necesita la herramienta y el destino.", hint="mth audit scan testssl host:443")
+    cfg = load(Git.discover(Path.cwd()).root)
+    path, code = scan.scan(tool, target, cfg["audit"]["targets"], cfg.root)
+    say(f"✓ {tool} {target}: salida en {path} (código de salida {code}); es dato no confiable")
     return 0
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    """``mth audit``: baseline packs, report verification and authorized scans (SPEC-0027, SPEC-0028)."""
+    if args.action == "packs":
+        return _audit_packs()
+    if args.action == "verify":
+        return _audit_verify(args.first)
+    return _audit_scan(args.first, args.second)
 
 
 def _cmd_survey(args: argparse.Namespace) -> int:
@@ -508,9 +524,10 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("tool", nargs="?", help="con install: la herramienta del manifiesto")
     s.add_argument("--force", action="store_true", help="con install: reinstala aunque ya esté instalada")
 
-    s = sub.add_parser("audit", help="packs de línea base del auditor y verificación de sus informes")
-    s.add_argument("action", choices=["packs", "verify"])
-    s.add_argument("report", nargs="?", help="con verify: el informe del auditor")
+    s = sub.add_parser("audit", help="packs de línea base, verificación de informes y escaneos autorizados del auditor")
+    s.add_argument("action", choices=["packs", "verify", "scan"])
+    s.add_argument("first", nargs="?", help="con verify: el informe; con scan: la herramienta (testssl, ssh-audit)")
+    s.add_argument("second", nargs="?", help="con scan: el destino, que debe estar en audit.targets")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
