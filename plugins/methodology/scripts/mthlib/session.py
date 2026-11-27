@@ -14,7 +14,7 @@ from . import agents, branches, plans, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
-from .setup import install_hook, register_launcher, sync_secrets_hook
+from .hooks import install_hook, register_launcher, sync_secrets_hook
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 MTH = PLUGIN_ROOT / "scripts" / "mth"  # launcher: picks a Python >= 3.11

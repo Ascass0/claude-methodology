@@ -58,6 +58,21 @@ class ImportCostTests(unittest.TestCase):
         for heavy in ("mthlib.cli", "urllib.request"):
             self.assertNotIn(heavy, loaded)
 
+    def test_a_session_in_an_adopted_repository_does_not_load_the_adoption_machinery(self):
+        # regression: the session hook imported setup and, through it, adoption, survey, audit, tools and changelog
+        run = ("import runpy, sys\n"
+               "sys.argv = ['mth.py', 'session']\n"
+               f"try:\n    runpy.run_path({str(SCRIPTS / 'mth.py')!r}, run_name='__main__')\nexcept SystemExit:\n    pass\n")
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            (Path(repo) / ".claude").mkdir()
+            (Path(repo) / ".claude" / "methodology.toml").write_text('version = 1\n[commands]\ntest = ""\n', encoding="utf-8")
+            loaded = modules_after(run, cwd=repo)
+        for heavy in ("mthlib.cli", "mthlib.setup", "mthlib.adoption", "mthlib.survey", "mthlib.audit", "mthlib.tools",
+                      "mthlib.changelog", "mthlib.commits"):
+            self.assertNotIn(heavy, loaded)
+        self.assertIn("mthlib.hooks", loaded)  # it still installs the hooks it always did
+
     def test_the_commit_msg_entry_point_skips_the_cli(self):
         # regression: every commit imported the whole CLI to validate one message
         run = ("import runpy, sys\n"
