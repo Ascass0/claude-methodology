@@ -1,6 +1,6 @@
 # SPEC-0025 · Gestor de herramientas externas
 
-- Estado: borrador
+- Estado: implementada
 - Fecha: 2026-11-27
 - Formato: compacto
 - ADRs: [ADR-0023](../adr/security/ADR-0023-gestor-de-herramientas-externas.md)

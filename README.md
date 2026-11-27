@@ -131,11 +131,38 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 
 Además del gate de `mth integrate` ([ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md)), hay dos piezas opcionales ([SPEC-0024](specs/features/SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md), [ADR-0022](specs/adr/security/ADR-0022-hook-de-precommit-y-workflow-de-ci-para-secretos.md)). Ninguna se activa sola: nacen sin decidir y la decisión se toma en la adopción (pregunta `secretos`: `bloquear`, `integrar` o `ninguno`) o con `mth update`.
 
-- **`mth secrets --staged`:** escanea con `gitleaks` solo lo preparado y nunca imprime valores. Falla cerrado: sin `gitleaks`, con un error de la herramienta o al agotar el tiempo, termina con error. Requiere `gitleaks` 8.19.0 o posterior; `mth doctor` avisa de una versión anterior.
+- **`mth secrets --staged`:** escanea con `gitleaks` solo lo preparado y nunca imprime valores. Falla cerrado: sin `gitleaks`, con un error de la herramienta o al agotar el tiempo, termina con error. Requiere `gitleaks` 8.19.0 o posterior, en el `PATH` o instalado con `mth tools install gitleaks` (ver [Herramientas externas](#herramientas-externas-mth-tools)); `mth doctor` informa del origen y la versión, y avisa de una versión anterior o de una copia gestionada de otra versión que la del manifiesto.
 - **Hook `pre-commit`** (`secrets.hook = "on"`): ejecuta `mth secrets --staged` y rechaza el commit si hay secretos o si no encuentra `mth`. Convive con un hook ajeno según `hooks.pre_commit`; con el directorio de hooks versionado, `replace` y `chain` fallan sin tocar nada y piden añadir `mth secrets --staged` al gestor de hooks. `git commit --no-verify` lo salta: por eso existe la CI. Con `"off"`, `mth` retira su hook y no toca uno ajeno.
 - **Workflow `.github/workflows/secrets.yml`** (`secrets.ci = "on"`): solo con `forge = github` y `ci.required = true`. Escanea cada PR y cada push a `main` y `development` con un binario de `gitleaks` de versión y suma de comprobación fijadas, sin acciones de terceros para escanear. Lo escribe `mth` desde la plantilla, con `secrets.baseline` sustituida (solo letras, cifras, `.`, `_`, `-` y `/`). Lleva una marca en la primera línea: un fichero con ese nombre sin marca es ajeno y no se sobrescribe; `mth doctor` avisa.
 - **Protección de rama:** una rama puede editar o borrar el workflow en su propio PR. La protección de `main` y `development` debe exigir la comprobación del workflow, y la revisión debe mirar los cambios de `.github/workflows/**`.
 - **Brechas de `mth update`:** `secretos-hook` y `secretos-ci` (decisión, mientras la clave está sin decidir) y `secretos-workflow` (automática: escribe el workflow cuando falta o está desactualizado, una vez decidido). Con el hook activado, `mth update` también lo reinstala si falta.
+
+### Herramientas externas (`mth tools`)
+
+Los gates dependen de herramientas externas (hoy `gitleaks`). `mth` no las empaqueta ni las descarga por su cuenta: la descarga solo ocurre con una orden explícita. Ver [SPEC-0025](specs/features/SPEC-0025-gestor-de-herramientas-externas.md) y [ADR-0023](specs/adr/security/ADR-0023-gestor-de-herramientas-externas.md).
+
+| Orden | Hace |
+|---|---|
+| `mth tools` | Lista cada herramienta con la versión del manifiesto, su origen (`PATH`, `gestionada` o `ausente`) y la versión encontrada. No usa la red |
+| `mth tools install <herramienta> [--force]` | Descarga, verifica y publica la copia gestionada de la versión del manifiesto. Si ya está instalada y es válida, no descarga; `--force` la reinstala |
+| `mth tools prune` | Borra las versiones gestionadas que ya no están en el manifiesto y las instalaciones a medias. No borra nada sin esta orden |
+
+**Orden de resolución.** Si la herramienta está en el `PATH` y alcanza la versión mínima que pide quien la usa, se usa esa. Si es anterior o su versión no se reconoce, se prefiere la copia gestionada válida; sin ella se usa la del `PATH` y se avisa. Sin `PATH`, se usa la copia gestionada. Sin ninguna, error con `mth tools install <herramienta>`: resolver nunca descarga.
+
+**Caché.** `<caché>/claude-methodology/tools/<herramienta>/<versión>/`, donde `<caché>` es `MTH_TOOLS_DIR` si está definida y, si no, el directorio de caché del sistema (`XDG_CACHE_HOME` o `~/.cache` en Linux, `~/Library/Caches` en macOS, `%LOCALAPPDATA%` en Windows). Se puede borrar y regenerar. Los directorios se crean con permisos solo del usuario.
+
+**Verificación.** La URL debe ser https. La suma SHA-256 del archivo se comprueba antes de extraer; la extracción rechaza rutas absolutas o con `..`, enlaces y ficheros especiales, y acota tamaño y número de miembros. La copia se publica con un renombrado atómico y la suma del ejecutable se comprueba antes de cada uso: si no coincide, `mth` falla sin ejecutarlo y pide `mth tools install <herramienta> --force`.
+
+**Límite.** No hay verificación de firmas: la suma del manifiesto comparte origen con el binario, así que protege de descargas dañadas o alteradas en tránsito, no de una release comprometida.
+
+**Plataformas de `gitleaks`:** linux x64 y arm64, darwin x64 y arm64, y windows x64. Los formatos admitidos son `tar.gz` y `zip`. Windows y `.zip` no se han probado con binarios reales, solo con archivos generados en los tests.
+
+**Añadir o actualizar una herramienta.** Se edita `plugins/methodology/tools/manifest.toml`, sin código nuevo:
+
+- Una sola versión por herramienta, con `version_args` (argumentos que imprimen su versión) y una entrada `platforms.<sistema>_<arquitectura>` con `url`, `sha256`, `format` y `entry`.
+- Las sumas se copian de la release oficial, no se calculan de una descarga propia.
+- El PR lo revisa `revisor-seguridad`.
+- Para `gitleaks`, la versión y la suma de `linux_x64` deben coincidir con las de la plantilla del workflow de CI de secretos (`plugins/methodology/templates/workflows/`).
 
 ### Directorio de trabajo local
 
