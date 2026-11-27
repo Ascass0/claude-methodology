@@ -8,15 +8,15 @@
 ## Contexto
 
 - La fase 4 de la hoja de ruta de seguridad añade auditores de hardening. Un modelo que audita contra su memoria inventa controles y emite veredictos que parecen certificaciones.
-- PLAN-0002 pidió packs en YAML; el plugin es solo stdlib ([ADR-0023](ADR-0023-gestor-de-herramientas-externas.md)) y Python no lee YAML.
+- La hoja de ruta de seguridad pedía packs en YAML; el plugin es solo stdlib ([ADR-0023](ADR-0023-gestor-de-herramientas-externas.md)) y Python no lee YAML.
 
 ## Decisión
 
-1. La línea base de cada dominio es un pack: un fichero TOML versionado en `plugins/methodology/audit/packs/`, leído con `tomllib`. Sustituye al YAML de PLAN-0002 con los mismos campos. [script: `mthlib/audit.py`]
+1. La línea base de cada dominio es un pack: un fichero TOML versionado en `plugins/methodology/audit/packs/`, leído con `tomllib`. Sustituye al YAML de la hoja de ruta con los mismos campos. [script: `mthlib/audit.py`]
 2. Un pack declara `id`, `title`, `version`, `reviewed` (fecha), `review_months`, `source` (nombre, versión de la norma y URL oficial) y controles con `id`, `title` propio, `level` (`minimo`|`recomendado`), `url`, `tool` y `rule` (vacíos = revisión manual). NO DEBE contener texto con licencia de la norma. [script]
 3. Los controles son datos verificados en su fuente al crear o revisar el pack, nunca de la memoria del modelo; un control sin fuente verificable no entra. [criterio]
 4. El informe de un auditor cita `Línea base: <pack>@<versión> sha256=<hash del fichero>` y una línea `- <ID> | cumple|no cumple|no evaluable | evidencia` por control. `mth audit verify` rechaza IDs inexistentes, controles `minimo` sin resultado, estados fuera del conjunto, `cumple`/`no cumple` sin evidencia, un hash que no coincide y las palabras «certificado» o «certifica». [script]
-5. Un pack con `reviewed` + `review_months` vencido se marca caducado en `mth audit packs` y `mth doctor` avisa; un informe contra un pack caducado lo declara. [script]
+5. Un pack con `reviewed` + `review_months` vencido se marca caducado en `mth audit packs` y `mth doctor` avisa; `mth doctor` avisa, y el agente declara un pack caducado en su informe. [script]
 6. La web solo actualiza packs en una tarea de mantenimiento con PR y revisión humana, desde fuentes oficiales; una auditoría nunca cambia su resultado por lo que lea. [criterio]
 
 ## Rechazado

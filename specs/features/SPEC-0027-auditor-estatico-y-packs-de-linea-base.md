@@ -31,7 +31,7 @@
 | Packs | `plugins/methodology/audit/packs/<id>.toml` según ADR-0024 |
 | `mth audit packs` | Una línea por pack: id, versión, controles, revisado, `vigente`/`caducado`, hash corto. Falla si un pack es inválido |
 | `mth audit verify <informe>` | Reglas de ADR-0024 decisión 4; una línea por problema; código ≠ 0 si hay alguno |
-| `mth doctor` | Aviso (no bloqueante) por pack caducado |
+| `mth doctor` | Con `auditor-estatico` instalado, aviso (no bloqueante) por pack caducado |
 | Agente `auditor-estatico` | Catálogo, perfil `opcional`; guard solo de lectura más herramientas offline y `mth audit`; escribe en `.work/security-report/` |
 | Skill `mth-audit` | Un agente por dominio, en paralelo; `mth audit verify` antes de entregar |
 
@@ -43,13 +43,17 @@
 | FM-02 | Informe cita un control que no existe | `verify` lo rechaza | AC-05 |
 | FM-03 | Falta resultado de un control `minimo` | `verify` lo rechaza | AC-06 |
 | FM-04 | Pack alterado tras el informe | El hash no coincide y `verify` lo rechaza | AC-08 |
-| FM-05 | Herramienta ausente | El control queda `no evaluable` | AC-12 |
+| FM-05 | Herramienta ausente o que no termina | El control queda `no evaluable` | AC-12 |
+| FM-06 | Informe ilegible, inexistente o mayor de 1 MiB | `verify` falla con mensaje y código ≠ 0 | AC-14 |
+| FM-07 | Informe sin línea base, con varias o citando un pack inexistente | `verify` lo rechaza | AC-15 |
+| FM-08 | Un control con más de un resultado | `verify` lo rechaza | AC-15 |
+| FM-09 | `verify` sin informe | Error con la sintaxis de uso | AC-14 |
 
 ## Criterios de aceptación
 
 - **AC-01**: CUANDO se ejecuta `mth audit packs`, el sistema DEBE listar cada pack con id, versión, número de controles, fecha de revisión, estado y hash.
 - **AC-02**: SI un pack no es TOML válido, le falta un campo obligatorio o repite un ID de control, ENTONCES `mth audit packs` DEBE fallar nombrando el pack.
-- **AC-03**: CUANDO `reviewed` más `review_months` queda en el pasado, `mth audit packs` DEBE marcar el pack como caducado y `mth doctor` DEBE avisar sin bloquear.
+- **AC-03**: CUANDO `reviewed` más `review_months` queda en el pasado, `mth audit packs` DEBE marcar el pack como caducado y, con `auditor-estatico` instalado, `mth doctor` DEBE avisar sin bloquear.
 - **AC-04**: CUANDO un informe cumple el formato, `mth audit verify` DEBE aceptarlo con código 0.
 - **AC-05** [SEG]: SI un informe cita un control que el pack no define, ENTONCES `mth audit verify` DEBE rechazarlo.
 - **AC-06**: SI un control `minimo` no tiene resultado en el informe, ENTONCES `mth audit verify` DEBE rechazarlo.
@@ -59,8 +63,12 @@
 - **AC-10**: Los packs `comun`, `docker` y `kubernetes` DEBEN ser válidos, con fuente, fecha de revisión y controles con título propio.
 - **AC-11** [SEG]: El agente `auditor-estatico` DEBE ser de solo lectura: su guard permite git de lectura, `mth audit` y herramientas offline, y deniega red, escritura fuera de `.work/security-report/` y el resto de `mth`.
 - **AC-12**: SI la herramienta de un control no está disponible, ENTONCES el agente DEBE marcarlo `no evaluable`, según su texto.
+- **AC-14**: SI el informe no se puede leer, no existe, supera 1 MiB o no se indica, ENTONCES `mth audit verify` DEBE fallar con un mensaje accionable y código distinto de 0.
+- **AC-15** [SEG]: SI el informe no tiene línea base, tiene varias o da más de un resultado a un control, ENTONCES `mth audit verify` DEBE rechazarlo.
 - **AC-13**: La skill `mth-audit`, el agente y el README DEBEN documentar el flujo y que nunca certifican.
 
 ## Notas
 
+- Un agente opcional de catálogo no añade exigencias a los repos adoptados: no registra brecha en `mth update` (ADR-0017); `mth agents` ya señala los agentes instalados desactualizados.
+- El plan pedía YAML (hoja de ruta de seguridad, fase 4); ADR-0024 recoge por qué son TOML. Un informe contra un pack caducado lo declara el agente en su `RESULTADO` (no lo valida `mth`).
 - Los IDs de reglas de `docker` se verificaron en el README de hadolint y los de `kubernetes` en Pod Security Standards (2026-11-27).
