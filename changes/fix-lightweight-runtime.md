@@ -1,5 +1,5 @@
 ---
-bump: patch
+bump: minor
 refs: SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0010, SPEC-0014, SPEC-0024, SPEC-0025
 ---
 ### Cambiado
