@@ -10,7 +10,7 @@ agents = [
 
 [opcional]
 description = "Agentes con requisitos específicos del repo (benchmark, evals, bases de estado, CI)."
-agents = ["ingeniero-rendimiento", "analista-evals", "lector-estado", "respondedor-incidencias"]
+agents = ["ingeniero-rendimiento", "analista-evals", "lector-estado", "respondedor-incidencias", "auditor-estatico"]
 
 [autonomo]
 description = "Hilo principal para sesiones autónomas largas (`claude --agent orquestador`)."
