@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -59,6 +60,55 @@ class StagedScanTests(unittest.TestCase):
 
     def mode(self, mode: str) -> None:
         os.environ["FAKE_GITLEAKS_MODE"] = mode
+
+    def git(self, *args: str) -> None:
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=self.root, check=True,
+                       capture_output=True)
+
+    def committed_repo(self) -> None:
+        self.git("init", "-q")
+        (self.root / "a.txt").write_text("one\n")
+        (self.root / "b.txt").write_text("two\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "base")
+
+    def test_nothing_staged_or_only_deletions_never_run_gitleaks(self):
+        # regression: the pre-commit hook started gitleaks even when the commit adds no content
+        self.committed_repo()
+        secretgate.enforce_staged(self.root, SECTION)
+        self.git("rm", "-q", "a.txt")
+        secretgate.enforce_staged(self.root, SECTION)
+        self.assertFalse(self.log.exists())
+
+    def test_a_commit_that_adds_nothing_is_still_rejected_when_gitleaks_is_missing(self):
+        # verifies: SPEC-0024/FM-02
+        self.committed_repo()
+        self.git("rm", "-q", "a.txt")
+        only_git = self.tmp / "only-git"
+        only_git.mkdir()
+        (only_git / "git").symlink_to(shutil.which("git"))
+        with mock.patch.dict(os.environ, {"PATH": str(only_git)}):
+            with self.assertRaises(MthError) as ctx:
+                secretgate.enforce_staged(self.root, SECTION)
+        self.assertIn("gitleaks", ctx.exception.message)
+        self.assertFalse(self.log.exists())
+
+    def test_when_git_cannot_say_what_is_staged_the_scan_runs(self):
+        # regression: the early exit must fail safe when git does not answer
+        secretgate.enforce_staged(self.root, SECTION)  # self.root is not a repository: git fails
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_added_modified_and_renamed_files_are_scanned(self):
+        # regression: the early exit must not skip content that can hold a secret
+        self.committed_repo()
+        (self.root / "c.txt").write_text("new\n")
+        self.git("add", "c.txt")
+        secretgate.enforce_staged(self.root, SECTION)
+        (self.root / "b.txt").write_text("changed\n")
+        self.git("add", "b.txt")
+        self.git("mv", "a.txt", "renamed.txt")
+        secretgate.enforce_staged(self.root, SECTION)
+        self.assertEqual(len(self.calls()), 2)
 
     def test_scans_only_what_is_staged_and_passes_the_baseline_if_it_exists(self):
         # verifies: SPEC-0024/AC-02

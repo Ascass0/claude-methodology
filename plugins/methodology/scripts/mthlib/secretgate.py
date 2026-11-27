@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
-from . import secretci, tools
+from . import secretci
 from .errors import MthError
 from .files import atomic_write
 from .proc import run
@@ -73,12 +73,14 @@ def baseline_path(root: Path, section: dict[str, Any]) -> Path:
     return path
 
 
-def resolve() -> tools.Resolved:
+def resolve() -> "tools.Resolved":
     """Where to run ``gitleaks`` from: the PATH if it reaches ``MIN_VERSION``, else the managed copy (SPEC-0025, ADR-0023).
 
     Raises:
         MthError: There is no ``gitleaks`` (with the remedy) or the managed copy was altered.
     """
+    from . import tools  # lazy: it brings tarfile, zipfile and hashlib, and importing the configuration must not
+
     try:
         return tools.resolve(tools.tool_named(TOOL), MIN_VERSION)
     except tools.NotFound as exc:
@@ -164,12 +166,24 @@ def enforce(root: Path, section: dict[str, Any], rev_range: str | None) -> None:
                        hint="Rota el secreto en su servicio y retíralo del código. Los valores no se imprimen.")
 
 
+def _adds_content(root: Path) -> bool:
+    """Whether the index adds or changes any file: a commit of only deletions has nothing to leak."""
+    try:
+        done = run(["git", "diff", "--cached", "--name-only", "--diff-filter=d"], cwd=root, check=False, timeout=30)
+    except MthError:
+        return True
+    return done.returncode != 0 or bool(done.stdout.strip())  # when git cannot answer, scan: fail-safe
+
+
 def enforce_staged(root: Path, section: dict[str, Any]) -> None:
     """Scan what is staged and fail on any finding outside the baseline (the pre-commit hook, SPEC-0024).
 
     Raises:
         MthError: There are findings, or the scan could not run (the commit is rejected either way).
     """
+    if not _adds_content(root):
+        resolve()  # fail closed (ADR-0022): without the tool the commit is rejected even if there is nothing to scan
+        return
     found = scan(root, None, baseline_path(root, section), staged=True)
     if found:
         listing = "\n".join(f"  - {f}" for f in found[:50])

@@ -14,7 +14,6 @@ An unknown variable is an error (fail-fast), never a silent empty string.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 import tomllib
 from dataclasses import dataclass
@@ -243,6 +242,8 @@ def _render_guard(catalog: Path, name: str, ctx: dict[str, Any]) -> str:
 
 
 def _digest(agent_md: str, guard: str | None) -> str:
+    import hashlib  # lazy: the configuration imports this module on every command
+
     blank = _LOCAL.sub(LOCAL_BEGIN + LOCAL_END, _HEADER.sub("", agent_md))
     return hashlib.sha256((blank + "\0" + (guard or "")).encode("utf-8")).hexdigest()
 
