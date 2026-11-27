@@ -24,6 +24,9 @@ BEFORE = {"core.md": 2487, "claude-block.md": 492, "PRINCIPLES.md": 22720, "skil
 # in one (the EARS lines of section 7) cannot hide a rule lost in another.
 NORMATIVE_BEFORE = {1: 8, 2: 20, 3: 6, 4: 1, 5: 13, 6: 3, 7: 9, 8: 1, 9: 7, 10: 2, 11: 2}
 CORE_RULES_BEFORE, CORE_STOPS_BEFORE = 9, 3
+# Optional catalog agents added after SPEC-0018 (SPEC-0027, SPEC-0028): their description loads only when a repo installs
+# them, and test_catalog bounds its length, so they are outside the «lighter than before SPEC-0018» comparison.
+ADDED_LATER = {"auditor-estatico", "auditor-ejecucion"}
 
 
 class LoadedContextTests(unittest.TestCase):
@@ -34,7 +37,7 @@ class LoadedContextTests(unittest.TestCase):
             "claude-block.md": len((PLUGIN / "templates/claude-block.md").read_text(encoding="utf-8")),
             "PRINCIPLES.md": len((PLUGIN / "PRINCIPLES.md").read_text(encoding="utf-8")),
             "skills": sum(len(description(f)) for f in PLUGIN.glob("skills/*/SKILL.md")),
-            "agents": sum(len(description(f)) for f in [*PLUGIN.glob("agents/*.md"), *PLUGIN.glob("catalog/*/agent.md.tmpl")]),
+            "agents": sum(len(description(f)) for f in [*PLUGIN.glob("agents/*.md"), *PLUGIN.glob("catalog/*/agent.md.tmpl")] if f.parent.name not in ADDED_LATER),
         }
         for name, before in BEFORE.items():
             with self.subTest(document=name):
