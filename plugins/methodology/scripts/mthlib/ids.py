@@ -7,6 +7,7 @@ Everything else that mentions it is a *reference*.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from . import globs
@@ -35,7 +36,7 @@ class IdRegistry:
         files: Repository files (relative POSIX paths).
     """
 
-    def __init__(self, cfg: Config, files: list[str]) -> None:
+    def __init__(self, cfg: Config, files: list[str], read: Callable[[Path], str | None] = read_text) -> None:
         self.cfg = cfg
         self.kinds: dict[str, str] = {k: v["pattern"] for k, v in cfg["ids"].items()}
         self._any = re.compile(r"(?<![\w-])(?:" + "|".join(
@@ -47,7 +48,7 @@ class IdRegistry:
             for rel in files:
                 if not globs.match_any(rel, spec["defined_in"]):
                     continue
-                text = read_text(cfg.root / rel)
+                text = read(cfg.root / rel)
                 for lineno, line in enumerate((text or "").splitlines(), 1):
                     heading = _HEADING.match(line)
                     if heading and (m := start.match(heading.group(1))):

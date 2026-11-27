@@ -327,7 +327,7 @@ class InstallTests(ToolsCase):
         with mock.patch("urllib.request.build_opener", return_value=opener):
             with self.assertRaises(MthError):
                 tools.download("https://example.test/a", self.tmp / "out", 5, 1)
-        redirect = tools._HttpsOnly()
+        redirect = tools._https_only()()
         with self.assertRaises(OSError):
             redirect.redirect_request(mock.Mock(), None, 302, "Found", {}, "http://evil.test/x")
 

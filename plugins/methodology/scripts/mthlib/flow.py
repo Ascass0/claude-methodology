@@ -25,7 +25,6 @@ from .log import Tracer, say, warn
 from .proc import run_shell
 from .trace import Finding, partition
 from .trace import Tracer as TraceChecker
-from .trace import check as trace_check
 from .work import WORK_DIR
 
 _MAX_LISTED = 50
@@ -120,21 +119,32 @@ def _line_base(ctx: Ctx):
     return lines_at_base
 
 
-def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
-    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base)."""
-    findings = trace_check(ctx.cfg, ctx.git.files()) + line_limits(ctx)[0]
+def trace_checker(ctx: Ctx) -> TraceChecker:
+    """One checker per command: it reads each file once, however many checks go through it."""
+    return TraceChecker(ctx.cfg, ctx.git.files())
+
+
+def run_trace(ctx: Ctx, checker: TraceChecker | None = None,
+              limit_result: tuple[list[Finding], list[Finding]] | None = None) -> tuple[list[Finding], list[Finding]]:
+    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base).
+
+    ``checker`` and ``limit_result`` let a command that also reports warnings reuse what it already computed.
+    """
+    checker = trace_checker(ctx) if checker is None else checker
+    limit_result = line_limits(ctx) if limit_result is None else limit_result
+    findings = checker.run() + limit_result[0]
     base = ctx.cfg["trace"]["legacy_base"]
     return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
 
 
-def limit_notes(ctx: Ctx) -> list[Finding]:
+def limit_notes(limit_result: tuple[list[Finding], list[Finding]]) -> list[Finding]:
     """Files over the line limit that the branch does not make grow: a warning for `mth trace`."""
-    return line_limits(ctx)[1]
+    return limit_result[1]
 
 
-def single_test_notes(ctx: Ctx) -> list[Finding]:
+def single_test_notes(checker: TraceChecker) -> list[Finding]:
     """Acceptance criteria with a single test (ADR-0015): a warning for `mth trace`, never a gate."""
-    return TraceChecker(ctx.cfg, ctx.git.files()).single_test()
+    return checker.single_test()
 
 
 def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:
