@@ -14,7 +14,7 @@ class ReadmeCase(unittest.TestCase):
         start = text.index("### Herramientas externas (`mth tools`)")
         end = text.find("\n## ", start)
         section = text[start:end if end != -1 else None]
-        for needle in ("mth tools install", "mth tools prune", "PATH", "MTH_TOOLS_DIR", "SHA-256", "manifest.toml"):
+        for needle in ("mth tools install", "mth tools prune", "PATH", "MTH_TOOLS_DIR", "SHA-256", "manifest.toml", "gestionada", "Añadir o actualizar"):
             self.assertIn(needle, section)
 
 

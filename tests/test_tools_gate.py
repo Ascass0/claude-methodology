@@ -106,6 +106,16 @@ class DoctorLinesTests(ResolverCase):
         # an old PATH tool yields to the valid managed copy, so no old-version warning remains
         self.assertIn("gestionada", [msg for _, msg, _ in self.lines()][1])
 
+    def test_doctor_warns_about_an_old_path_tool_without_a_managed_copy(self):
+        # verifies: SPEC-0025/AC-14
+        old = self.tmp / "nobin"
+        old.mkdir()
+        (old / "gitleaks").write_bytes(b"#!/bin/sh\necho 8.18.4\n")
+        (old / "gitleaks").chmod(0o755)
+        found = self.lines()
+        self.assertEqual([(ok, blocking) for ok, _, blocking in found][-1], (False, False))
+        self.assertIn("PATH (mínima 8.19.0)", found[-1][1])
+
 
 if __name__ == "__main__":
     unittest.main()
