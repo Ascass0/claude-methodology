@@ -14,9 +14,7 @@ from .errors import EXIT_ERROR, MthError, run_guarded
 from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
                    start, sync)
 from .git import Git
-from .ids import IdRegistry
 from .log import Tracer, say, warn
-
 
 
 def _ctx(command: str) -> Ctx:
