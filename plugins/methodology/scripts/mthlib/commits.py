@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import re
 
-from .config import Config
-from .ids import IdRegistry
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Config
+    from .ids import IdRegistry
 
 TYPES = ("feat", "fix", "refactor", "perf", "docs", "test", "build", "ci", "chore", "revert")
 MAX_HEADER = 72
