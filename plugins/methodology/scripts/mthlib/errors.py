@@ -1,4 +1,5 @@
 """Expected failures. Anything else is a bug and is handled at the CLI boundary."""
+import sys
 
 
 class MthError(Exception):
@@ -13,3 +14,9 @@ class MthError(Exception):
         super().__init__(message)
         self.message = message
         self.hint = hint
+
+    def report(self) -> None:
+        """Print the failure and its hint on stderr, the way every command does."""
+        print(f"✗ {self.message}", file=sys.stderr)
+        if self.hint:
+            print(f"  → {self.hint}", file=sys.stderr)

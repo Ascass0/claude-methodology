@@ -42,16 +42,7 @@ def _text(value: str | None, file: str | None, name: str) -> str:
 
 
 def _cmd_check_msg(args: argparse.Namespace) -> int:
-    git = Git.discover(Path.cwd())
-    cfg = load(git.root)
-    message = Path(args.file).read_text(encoding="utf-8")
-    errors = commits.validate(message, cfg, IdRegistry(cfg, git.files()))
-    if errors:
-        print("✗ Mensaje de commit inválido:", file=sys.stderr)
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
-        return EXIT_ERROR
-    return 0
+    return commits.check_file(args.file)
 
 
 def _cmd_trace(args: argparse.Namespace) -> int:
@@ -675,9 +666,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return _dispatch(args)
     except MthError as exc:
-        print(f"✗ {exc.message}", file=sys.stderr)
-        if exc.hint:
-            print(f"  → {exc.hint}", file=sys.stderr)
+        exc.report()
         return EXIT_ERROR
     except KeyboardInterrupt:
         return 130

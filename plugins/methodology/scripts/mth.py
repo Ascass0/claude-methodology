@@ -13,6 +13,15 @@ if sys.argv[1:2] == ["agent-guard"]:  # SPEC-0012: runs on every subagent tool c
     from mthlib.agent_guard import main as agent_guard_main
     sys.exit(agent_guard_main(sys.stdin.read()))
 
+if len(sys.argv) == 3 and sys.argv[1] == "check-msg":  # commit-msg hook: runs on every commit
+    from mthlib.commits import check_file
+    from mthlib.errors import MthError
+    try:
+        sys.exit(check_file(sys.argv[2]))
+    except MthError as exc:
+        exc.report()
+        sys.exit(1)
+
 if sys.argv[1:2] == ["session"]:  # SessionStart hook: every session pays for the CLI imports otherwise
     from mthlib.session import main as session_main
     sys.exit(session_main())

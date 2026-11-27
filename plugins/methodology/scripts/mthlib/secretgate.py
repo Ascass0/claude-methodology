@@ -164,12 +164,23 @@ def enforce(root: Path, section: dict[str, Any], rev_range: str | None) -> None:
                        hint="Rota el secreto en su servicio y retíralo del código. Los valores no se imprimen.")
 
 
+def _adds_content(root: Path) -> bool:
+    """Whether the index adds or changes any file: a commit of only deletions has nothing to leak."""
+    try:
+        done = run(["git", "diff", "--cached", "--name-only", "--diff-filter=d"], cwd=root, check=False, timeout=30)
+    except MthError:
+        return True  # cannot ask git: scan, and let the scan report what is missing (fail-safe)
+    return done.returncode != 0 or bool(done.stdout.strip())  # if git itself fails, scan: fail-safe
+
+
 def enforce_staged(root: Path, section: dict[str, Any]) -> None:
     """Scan what is staged and fail on any finding outside the baseline (the pre-commit hook, SPEC-0024).
 
     Raises:
         MthError: There are findings, or the scan could not run (the commit is rejected either way).
     """
+    if not _adds_content(root):
+        return
     found = scan(root, None, baseline_path(root, section), staged=True)
     if found:
         listing = "\n".join(f"  - {f}" for f in found[:50])
