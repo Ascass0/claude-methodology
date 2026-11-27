@@ -3,6 +3,9 @@ on:
   pull_request:
   push:
     branches: [main, development]
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}  # never cancel the run of a push to a protected branch
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -17,4 +20,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Tests
-        run: python -m unittest discover -b -s tests -v
+        run: sh tests/run.sh
+        env:
+          MTH_PYTHON: python  # the interpreter of this matrix cell, not the first one run.sh would find
