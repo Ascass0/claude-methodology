@@ -1,0 +1,14 @@
+name = "auditor-ejecucion"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "Audita TLS y SSH de servicios en ejecución contra un pack de línea base, solo contra destinos autorizados en `audit.targets`, vía `mth audit scan`."
+origin = "Texto propio. Diseño: PLAN-0002 fase 4, ADR-0024 y ADR-0025 de claude-methodology."
+model_role = "task"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []

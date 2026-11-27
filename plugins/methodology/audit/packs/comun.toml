@@ -1,0 +1,52 @@
+id = "comun"
+title = "Matriz común de hardening"
+version = "1"
+reviewed = "2026-11-27"
+review_months = 12
+
+[source]
+name = "Matriz común de claude-methodology (controles propios, sin norma externa)"
+version = "1"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.secretos-fuera-del-repo"
+title = "Ningún secreto en el código, la configuración versionada ni los artefactos"
+level = "minimo"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.exposicion-declarada"
+title = "Cada puerto o servicio expuesto está declarado y justificado"
+level = "minimo"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.salida-limitada"
+title = "La salida de red y la segmentación entre componentes están acotadas"
+level = "recomendado"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.timeouts-y-limites"
+title = "Hay timeouts, límites de tamaño y de recursos en lo que atiende entrada externa"
+level = "recomendado"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.autenticacion-explicita"
+title = "Todo acceso privilegiado se autentica, y el servidor y el cliente se identifican donde aplica"
+level = "minimo"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.trazabilidad"
+title = "Los eventos de seguridad quedan registrados sin secretos"
+level = "recomendado"
+url = "https://github.com/Ascass0/claude-methodology"
+
+[[control]]
+id = "comun.componentes-fijados"
+title = "Imágenes, paquetes y herramientas con versión fijada"
+level = "recomendado"
+url = "https://github.com/Ascass0/claude-methodology"

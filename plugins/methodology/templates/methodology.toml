@@ -131,6 +131,11 @@ ci = ""
 # Hallazgos aceptados que ya estaban en el historial (mth secrets --history --accept). Rota esos secretos.
 baseline = ".gitleaks-baseline.json"
 
+[audit]
+# Destinos que el auditor de ejecución (mth audit scan) puede escanear: "host" o "host:puerto", coincidencia exacta,
+# sin comodines. Vacía = ningún destino autorizado. Añade solo destinos que son tuyos o que tienes permiso para auditar.
+targets = []
+
 [release]
 github_release = true
 sign_tags = false

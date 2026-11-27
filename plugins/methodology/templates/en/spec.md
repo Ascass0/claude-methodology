@@ -5,7 +5,9 @@
 - Format: compact
 - ADRs: —
 - Supersedes: —
+- Security: none
 
+<!-- Security: «none» or the list of surfaces (external input, authentication, sensitive data); with a surface, at least one «**AC-NN** [SEC]» criterion with a test. -->
 <!-- Statuses: draft → approved → implemented → superseded. "implemented" requires a test with `verifies: {{ID}}/AC-NN` per AC.
      Style (PRINCIPLES §7): one rule per line, tables instead of paragraphs, references by ID, no introduction or summary. -->
 

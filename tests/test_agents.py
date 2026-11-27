@@ -286,12 +286,12 @@ class SyncTests(AgentsTestCase):
         self.addCleanup(shutil.rmtree, old.parent)
         shutil.copytree(CATALOG, old)
         meta = old / "revisor-seguridad" / "meta.toml"
-        meta.write_text(meta.read_text(encoding="utf-8").replace('version = "1.0.0"', 'version = "1.1.0"'),
+        meta.write_text(re.sub(r'^version = "[^"]+"', 'version = "99.0.0"', meta.read_text(encoding="utf-8"), count=1, flags=re.M),
                         encoding="utf-8")
         self.assertEqual(self.quiet(self.manager(old).sync, ["revisor-seguridad"], False), 0)
         text = path.read_text(encoding="utf-8")
         self.assertIn("Activos: tokens de despliegue.", text)
-        self.assertIn("revisor-seguridad@1.1.0", text)
+        self.assertIn("revisor-seguridad@99.0.0", text)
 
     def test_sync_refuses_hand_edits_without_force(self):
         # verifies: SPEC-0012/AC-06

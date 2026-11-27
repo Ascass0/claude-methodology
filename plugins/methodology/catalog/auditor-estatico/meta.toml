@@ -1,0 +1,14 @@
+name = "auditor-estatico"
+version = "1.0.0"
+kind = "trabajador"
+profiles = ["opcional"]
+summary = "Audita el hardening de un dominio (Docker, Kubernetes, matriz común) contra un pack de línea base verificable y entrega un informe que `mth audit verify` valida."
+origin = "Texto propio. Diseño: PLAN-0002 fase 4 y ADR-0024 de claude-methodology."
+model_role = "task"
+model_hint = "sonnet"
+local_section = true
+local_required = false
+
+[requires]
+config = []
+vars = []

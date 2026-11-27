@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, catalog, forge, lang, limits, secretgate, versions, work
+from . import __version__, catalog, forge, lang, limits, scan, secretgate, versions, work
 from .errors import MthError
 
 CONFIG_PATH = Path(".claude") / "methodology.toml"
@@ -54,6 +54,7 @@ DEFAULTS: dict[str, Any] = {
                "exclude": ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generated/**"],
                "exceptions": []},
     "secrets": {"mode": "", "hook": "", "ci": "", "baseline": ".gitleaks-baseline.json"},
+    "audit": {"targets": []},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
@@ -91,6 +92,7 @@ _SCHEMA: dict[str, Any] = {
               "test_patterns": dict},
     "limits": {"max_file_lines": int, "exclude": list, "exceptions": list},
     "secrets": {"mode": str, "hook": str, "ci": str, "baseline": str},
+    "audit": {"targets": list},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
     "language": {"docs": str},
@@ -216,6 +218,7 @@ def _check_semantics(data: dict[str, Any]) -> None:
         raise MthError(f"'trace.legacy_base' = '{legacy}' debe ser el hash completo de un commit (40 caracteres hexadecimales).")
     limits.validate(data["limits"])
     secretgate.validate(data["secrets"])
+    scan.validate(data["audit"]["targets"])
     known = {"feat", "fix", "chore", "hotfix", *data["branches"]["extra"]}
     if unknown := [k for k in data["plans"]["required_for"] if k not in known]:  # SPEC-0023/AC-01
         raise MthError(f"'plans.required_for' tiene tipos de rama desconocidos: {', '.join(map(str, unknown))}.",
