@@ -51,3 +51,4 @@
 - [script] `mthlib/trace.py`: campos del ADR, EARS y `FM-NN`; `mthlib/lang.py`: palabras clave por idioma.
 - [criterio] `revisor-adr`: longitud y estilo (PRINCIPLES §7).
 - [criterio] Rescritura de lo que se carga siempre: sin pérdida de reglas.
+- [criterio] Extensión (SPEC-0026): cabecera opcional `Seguridad` y etiqueta `[SEG]` en AC; la valida `mthlib/compact.py`.
