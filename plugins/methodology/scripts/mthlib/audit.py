@@ -15,6 +15,7 @@ from pathlib import Path
 from .errors import MthError
 
 PACKS_DIR = Path(__file__).resolve().parents[2] / "audit" / "packs"
+MAX_BYTES = 1024 * 1024  # a report or a pack larger than this is not read (PRINCIPLES §2, limits)
 LEVELS = ("minimo", "recomendado")
 RESULTS = ("cumple", "no cumple", "no evaluable")
 _DECIDED = ("cumple", "no cumple")
@@ -64,6 +65,8 @@ def _text(table: dict, key: str, where: str) -> str:
 
 def parse_pack(raw: bytes, name: str) -> Pack:
     """Validated pack from the bytes of its file; ``name`` is only used in messages."""
+    if len(raw) > MAX_BYTES:
+        raise MthError(f"{name}: el pack supera {MAX_BYTES} bytes.")
     try:
         data = tomllib.loads(raw.decode("utf-8"))
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
@@ -96,10 +99,10 @@ def parse_pack(raw: bytes, name: str) -> Pack:
                 tuple(controls), hashlib.sha256(raw).hexdigest())
 
 
-def load_packs(directory: Path = PACKS_DIR) -> dict[str, Pack]:
+def load_packs(directory: Path | None = None) -> dict[str, Pack]:
     """Every pack of ``directory`` by id; the first invalid one raises."""
     packs: dict[str, Pack] = {}
-    for path in sorted(directory.glob("*.toml")):
+    for path in sorted((directory or PACKS_DIR).glob("*.toml")):
         pack = parse_pack(path.read_bytes(), path.name)
         if pack.id in packs:
             raise MthError(f"{path.name}: el pack {pack.id} está repetido.")
@@ -107,32 +110,57 @@ def load_packs(directory: Path = PACKS_DIR) -> dict[str, Pack]:
     return packs
 
 
-def verify_report(text: str, packs: dict[str, Pack]) -> list[str]:
-    """Problems of an audit report against its baseline pack (ADR-0024, decision 4); empty means valid."""
-    header = _BASELINE.search(text)
-    if header is None:
-        return ["falta la línea «Línea base: <pack>@<versión> sha256=<hash>»"]
-    pack = packs.get(header.group(1))
+def read_report(path: Path) -> str:
+    """Text of a report file, refusing unreadable or oversized files."""
+    try:
+        if path.stat().st_size > MAX_BYTES:
+            raise MthError(f"El informe {path} supera {MAX_BYTES} bytes.", hint="Un informe es una línea por control.")
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise MthError(f"No se puede leer el informe {path}: {exc}.") from exc
+
+
+def _header_problems(text: str, packs: dict[str, Pack]) -> tuple[Pack | None, list[str]]:
+    headers = _BASELINE.findall(text)
+    if not headers:
+        return None, ["falta la línea «Línea base: <pack>@<versión> sha256=<hash>»"]
+    if len(headers) > 1:
+        return None, ["el informe tiene más de una línea «Línea base:»"]
+    name, version, digest = headers[0]
+    pack = packs.get(name)
     if pack is None:
-        return [f"la línea base cita el pack {header.group(1)}, que no existe"]
-    problems = []
-    if header.group(2) != pack.version or header.group(3) != pack.sha256:
-        problems.append(f"la línea base no coincide con {pack.id}@{pack.version} sha256={pack.sha256}")
-    known = {c.id: c for c in pack.controls}
-    results: dict[str, str] = {}
+        return None, [f"la línea base cita el pack {name}, que no existe"]
+    if (version, digest) != (pack.version, pack.sha256):
+        return pack, [f"la línea base no coincide con {pack.id}@{pack.version} sha256={pack.sha256}"]
+    return pack, []
+
+
+def _row_problems(text: str, pack: Pack) -> tuple[dict[str, str], list[str]]:
+    known, results, problems = {c.id for c in pack.controls}, {}, []
     for number, line in enumerate(text.splitlines(), 1):
         if _CERTIFIES.search(line):
             problems.append(f"línea {number}: un informe no certifica cumplimiento")
-        if not (row := _ROW.match(line)) or line.lstrip().startswith("- Línea base"):
+        if not (row := _ROW.match(line)):
             continue
         ident, result, evidence = row.groups()
         if ident not in known:
             problems.append(f"línea {number}: el control {ident} no existe en {pack.id}")
+        elif ident in results:
+            problems.append(f"línea {number}: el control {ident} tiene más de un resultado")
         elif result not in RESULTS:
             problems.append(f"línea {number}: {ident} tiene el resultado «{result}» (válidos: {', '.join(RESULTS)})")
         elif result in _DECIDED and not evidence:
             problems.append(f"línea {number}: {ident} es «{result}» y no lleva evidencia")
         else:
             results[ident] = result
-    problems += [f"el control mínimo {c.id} no tiene resultado" for c in pack.controls if c.level == "minimo" and c.id not in results]
-    return problems
+    return results, problems
+
+
+def verify_report(text: str, packs: dict[str, Pack]) -> list[str]:
+    """Problems of an audit report against its baseline pack (ADR-0024, decision 4); empty means valid."""
+    pack, problems = _header_problems(text, packs)
+    if pack is None:
+        return problems
+    results, rows = _row_problems(text, pack)
+    missing = [c.id for c in pack.controls if c.level == "minimo" and c.id not in results]
+    return problems + rows + [f"el control mínimo {ident} no tiene resultado" for ident in missing]

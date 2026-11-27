@@ -573,7 +573,7 @@ def _doctor_packs(report) -> None:
     try:
         packs = audit.load_packs()
     except MthError as exc:
-        report(False, f"packs de línea base: {exc.message}", blocking=False)
+        report(False, f"packs de línea base: {exc.message} (`mth audit packs` da el detalle)", blocking=False)
         return
     for pack in packs.values():
         report(not pack.expired(date.today()), f"Pack {pack.id}@{pack.version} revisado {pack.reviewed} "

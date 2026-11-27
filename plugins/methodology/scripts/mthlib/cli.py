@@ -359,11 +359,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
         return 0
     if not args.report:
         raise MthError("mth audit verify necesita el informe.", hint="mth audit verify .work/security-report/<informe>.md")
-    path = Path(args.report)
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise MthError(f"No se puede leer el informe {args.report}: {exc}.") from exc
+    text = audit.read_report(Path(args.report))
     problems = audit.verify_report(text, packs)
     for problem in problems:
         say(f"✗ {problem}")

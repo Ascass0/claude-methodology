@@ -14,7 +14,6 @@ id = "comun.secretos-fuera-del-repo"
 title = "Ningún secreto en el código, la configuración versionada ni los artefactos"
 level = "minimo"
 url = "https://github.com/Ascass0/claude-methodology"
-tool = "gitleaks"
 
 [[control]]
 id = "comun.exposicion-declarada"

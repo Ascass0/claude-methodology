@@ -7,7 +7,7 @@ allow = ["git diff", "git log", "git show", "git grep", "git status", "git ls-fi
          "mth audit packs", "mth audit verify", "hadolint"]
 filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut"]
 deny_operators = [">", "$(", "`", "<("]
-deny_flags = ["--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager"]
+deny_flags = ["--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager", "--no-index"]
 
 [write]
 allow = [".work/security-report/**"]
