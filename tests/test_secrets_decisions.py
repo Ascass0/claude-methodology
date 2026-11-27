@@ -122,9 +122,9 @@ class DoctorTests(unittest.TestCase):
         # verifies: SPEC-0024/AC-14
         self.set_key("hook", "on")
         self.with_tool("8.18.4")
-        self.assertIn("⚠ gitleaks 8.18.4 (mínima 8.19.0)", self.mth("doctor"))
+        self.assertIn("⚠ gitleaks 8.18.4 · PATH (mínima 8.19.0)", self.mth("doctor"))
         self.with_tool("8.30.1")
-        self.assertIn("✓ gitleaks 8.30.1 (mínima 8.19.0)", self.mth("doctor"))
+        self.assertIn("✓ gitleaks 8.30.1 · PATH (mínima 8.19.0)", self.mth("doctor"))
 
 
 class InterviewTests(unittest.TestCase):

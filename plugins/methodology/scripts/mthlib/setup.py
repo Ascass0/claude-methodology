@@ -10,7 +10,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import adoption, agents, changelog, commits, forge, lang, secretci, secretgate, survey, versions, work
+from . import adoption, agents, changelog, commits, forge, lang, secretci, secretgate, survey, tools, versions, work
 from .files import atomic_write
 from .config import CONFIG_PATH, Config, load, parse
 from .ids import IdRegistry
@@ -565,13 +565,26 @@ def _doctor_secrets_pieces(git: Git, cfg: Config, report) -> None:
     elif cfg["secrets"]["ci"] == "on" and secrets_workflow_applies(cfg):
         state = secretci.state(git.root, cfg["secrets"]["baseline"])
         report(state == "current", f"Workflow de secretos: {state}", blocking=False)
-    if cfg["secrets"]["mode"] == "block" or switch == "on":
-        found = secretgate.version()
-        if secretgate.is_installed():
-            minimum = ".".join(map(str, secretgate.MIN_VERSION))
-            report(found is not None and found >= secretgate.MIN_VERSION,
-                   f"gitleaks {'.'.join(map(str, found)) if found else 'de versión no reconocida'} (mínima {minimum})",
-                   blocking=False)
+
+
+def _doctor_gitleaks(report) -> None:
+    """Whether ``gitleaks`` resolves (blocking), where from and with which version (warnings), SPEC-0025/AC-14."""
+    try:
+        resolved = secretgate.resolve()
+    except MthError as exc:
+        report(False, f"gitleaks instalado (secrets.mode = block o secrets.hook = on): {exc.message}")
+        if exc.hint:
+            print(f"  → {exc.hint}")
+        return
+    report(True, "gitleaks instalado (secrets.mode = block o secrets.hook = on)")
+    shown = ".".join(map(str, resolved.version)) if resolved.version else "de versión no reconocida"
+    minimum = ".".join(map(str, secretgate.MIN_VERSION))
+    report(resolved.version is not None and resolved.version >= secretgate.MIN_VERSION,
+           f"gitleaks {shown} · {resolved.origin} (mínima {minimum})", blocking=False)
+    others = tools.other_versions(tools.tool_named(secretgate.TOOL))
+    if others:
+        report(False, f"copia gestionada de gitleaks de otra versión ({', '.join(others)}): "
+               "`mth tools install gitleaks` instala la actual y `mth tools prune` borra las viejas", blocking=False)
 
 
 def doctor(start: Path) -> int:
@@ -649,7 +662,7 @@ def doctor(start: Path) -> int:
             report(False, notice, blocking=False)
     mode = cfg["secrets"]["mode"]
     if mode == "block" or cfg["secrets"]["hook"] == "on":
-        report(secretgate.is_installed(), "gitleaks instalado (secrets.mode = block o secrets.hook = on)")
+        _doctor_gitleaks(report)
     else:
         report(False, "secrets.mode " + ("sin decidir" if mode == "" else "= off")
                + ": no se buscan secretos al integrar (mth update --plan)", blocking=False)
