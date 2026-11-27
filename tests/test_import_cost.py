@@ -52,6 +52,17 @@ class ImportCostTests(unittest.TestCase):
         for heavy in ("mthlib.cli", "urllib.request"):
             self.assertNotIn(heavy, loaded)
 
+    def test_the_commit_msg_entry_point_skips_the_cli(self):
+        # regression: every commit imported the whole CLI to validate one message
+        run = ("import runpy, sys\n"
+               "sys.argv = ['mth.py', 'check-msg', 'COMMIT_EDITMSG']\n"
+               f"try:\n    runpy.run_path({str(SCRIPTS / 'mth.py')!r}, run_name='__main__')\nexcept SystemExit as exc:\n"
+               "    assert exc.code == 1, exc.code  # outside a repository it fails cleanly\n")
+        with tempfile.TemporaryDirectory() as outside:
+            loaded = modules_after(run, cwd=outside)
+        for heavy in ("mthlib.cli", "urllib.request"):
+            self.assertNotIn(heavy, loaded)
+
     def test_the_guard_still_confirms_exactly_the_autonomy_levels_the_configuration_defines(self):
         # unit: guard.CONFIRM
         self.assertEqual(set(guard.CONFIRM), set(config.AUTONOMY_LEVELS))
