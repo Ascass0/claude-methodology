@@ -19,6 +19,7 @@ La spec de una feature se escribe dentro de su rama `feat/` (primer commit de la
 Plantillas en formato compacto (`- Formato: compacto`): una regla por línea, tablas en lugar de párrafos, referencias por ID, sin introducción ni resumen final. `mth trace` valida el formato; los documentos sin la marca no se validan.
 
 - **Criterios de aceptación** `- **AC-01**: …` en EARS, una línea cada uno y verificable por un test automático: `CUANDO <disparador>, <sistema> DEBE …` · `SI <condición>, ENTONCES <sistema> DEBE …` · `MIENTRAS <estado>, <sistema> DEBE …` · `<sistema> DEBE …`. Si no se puede automatizar, reformúlalo.
+- **Seguridad** (cabecera opcional): `- Seguridad: ninguna` o la lista de superficies que toca la feature (`entrada externa`, `autenticación`, `datos sensibles`). Con superficie, al menos un AC de seguridad con la etiqueta tras el ID, `- **AC-03** [SEG]: SI la entrada no es válida, ENTONCES el sistema DEBE rechazarla.`, con su test; `mth trace` lo exige. En inglés `- Security:` y `[SEC]`. Decídela antes de escribir código.
 - **Modos de fallo**: tabla `| ID | Causa | Respuesta | Cubierto por |` con `FM-NN` únicos (referencia: `SPEC-NNNN/FM-NN`). Cada fila genera al menos un test.
 - **Fuera de alcance** explícito: evita que la feature crezca.
 - Enlaza los ADR que la justifican (`ADR-NNNN`).

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from .lang import Vocabulary
 
-AC_LINE = re.compile(r"\*\*(AC-\d{2,3})\*\*\s*:\s*(.*)")
+AC_LINE = re.compile(r"\*\*(AC-\d{2,3})\*\*(?:\s*\[[A-Z]+\])?\s*:\s*(.*)")
 FM_ID = re.compile(r"FM-\d{2,3}")
 _FM_ROW = re.compile(r"^\s*\|\s*(FM-\d{2,3})\s*\|")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -115,3 +115,31 @@ def local_failure_refs(text: str, defs: list[tuple[str, int]], spec_id_pattern: 
             if not qualified.search(before) and m.group(0) not in known:
                 out.append(Problem(n, f"referencia a {m.group(0)}, que la spec no define"))
     return out
+
+
+def _security_header(text: str, vocab: Vocabulary) -> tuple[int, str] | None:
+    """Line number and value of the security header, looked up in the header block only (before the first ``##``)."""
+    top = re.search(r"^##\s", text, re.MULTILINE)
+    block = text[:top.start()] if top else text  # a body bullet is not the declaration
+    found = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
+    return None if found is None else (block[:found.start()].count("\n") + 1, found.group(1).strip())
+
+
+def _has_security_criterion(text: str, vocab: Vocabulary) -> bool:
+    """Whether a valid EARS criterion tagged for security exists outside code fences."""
+    tagged = re.compile(rf"\*\*AC-\d{{2,3}}\*\*\s*\[{re.escape(vocab.security_tag)}\]\s*:\s*(.*)")
+    in_fence = False
+    for row in text.splitlines():
+        if _FENCE.match(row):
+            in_fence = not in_fence
+        elif not in_fence and (m := tagged.search(row)) and ears_problem(m.group(1).strip(), vocab) is None:
+            return True
+    return False
+
+
+def security_problems(text: str, vocab: Vocabulary) -> list[Problem]:
+    """A declared security surface needs a tagged criterion (SPEC-0026/AC-02); an empty header counts as declared (AC-03)."""
+    header = _security_header(text, vocab)
+    if header is None or header[1].lower() == vocab.security_none.lower() or _has_security_criterion(text, vocab):
+        return []
+    return [Problem(header[0], f"la spec declara superficie de seguridad y no tiene ningún criterio «**AC-NN** [{vocab.security_tag}]»")]

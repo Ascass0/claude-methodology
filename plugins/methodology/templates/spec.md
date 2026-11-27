@@ -5,7 +5,9 @@
 - Formato: compacto
 - ADRs: —
 - Sustituye a: —
+- Seguridad: ninguna
 
+<!-- Seguridad: «ninguna» o la lista de superficies (entrada externa, autenticación, datos sensibles); con superficie, al menos un AC «**AC-NN** [SEG]» con test. -->
 <!-- Estados: borrador → aprobada → implementada → sustituida. "implementada" exige un test con `verifies: {{ID}}/AC-NN` por AC.
      Estilo (PRINCIPLES §7): una regla por línea, tablas en lugar de párrafos, referencias por ID, sin introducción ni resumen. -->
 

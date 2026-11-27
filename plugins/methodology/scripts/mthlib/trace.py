@@ -181,6 +181,7 @@ class Tracer:
                 modes[owner] = {i for i, _ in defs}
                 if compact.is_compact(text, vocab):
                     out += at(path, untagged + compact.duplicate_failure_modes(defs) + compact.criteria_problems(text, vocab)
+                              + compact.security_problems(text, vocab)
                               + compact.local_failure_refs(text, defs, self.registry.kinds[spec_kind]))
             elif kind == adr_kind and path.startswith(adr_dir) and compact.is_compact(text, vocab):
                 out += at(path, compact.adr_problems(text, vocab))
