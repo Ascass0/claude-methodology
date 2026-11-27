@@ -49,6 +49,11 @@ class SecurityHeaderTests(unittest.TestCase):
         self.assertIn("AC-02 no sigue ningún patrón EARS", broken)
         self.assertIn("[SEG]", broken)
 
+    def test_a_tagged_line_inside_a_code_fence_is_not_a_criterion(self):
+        # verifies: SPEC-0026/AC-04
+        fenced = "\n    ```\n    - **AC-02** [SEG]: SI la entrada no es válida, ENTONCES el sistema DEBE rechazarla.\n    ```"
+        self.assertIn("[SEG]", findings({PATH: spec("- Seguridad: entrada externa", fenced)}))
+
     def test_english_vocabulary_requires_the_sec_tag(self):
         # verifies: SPEC-0026/AC-02
         en = (SPEC.replace("Estado", "Status").replace("Formato: compacto", "Format: compact\n    - Security: external input")

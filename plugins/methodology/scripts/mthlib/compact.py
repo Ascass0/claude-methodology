@@ -117,15 +117,29 @@ def local_failure_refs(text: str, defs: list[tuple[str, int]], spec_id_pattern: 
     return out
 
 
-def security_problems(text: str, vocab: Vocabulary) -> list[Problem]:
-    """A declared security surface (header other than «none») needs at least one tagged criterion (SPEC-0026)."""
+def _security_header(text: str, vocab: Vocabulary) -> tuple[int, str] | None:
+    """Line number and value of the security header, looked up in the header block only (before the first ``##``)."""
     top = re.search(r"^##\s", text, re.MULTILINE)
-    block = text[:top.start()] if top else text  # the header block only: a body bullet is not the declaration
-    header = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
-    if header is None or header.group(1).strip().lower() == vocab.security_none.lower():
-        return []
+    block = text[:top.start()] if top else text  # a body bullet is not the declaration
+    found = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
+    return None if found is None else (block[:found.start()].count("\n") + 1, found.group(1).strip())
+
+
+def _has_security_criterion(text: str, vocab: Vocabulary) -> bool:
+    """Whether a valid EARS criterion tagged for security exists outside code fences."""
     tagged = re.compile(rf"\*\*AC-\d{{2,3}}\*\*\s*\[{re.escape(vocab.security_tag)}\]\s*:\s*(.*)")
-    if any((m := tagged.search(line)) and ears_problem(m.group(1).strip(), vocab) is None for line in text.splitlines()):
+    in_fence = False
+    for row in text.splitlines():
+        if _FENCE.match(row):
+            in_fence = not in_fence
+        elif not in_fence and (m := tagged.search(row)) and ears_problem(m.group(1).strip(), vocab) is None:
+            return True
+    return False
+
+
+def security_problems(text: str, vocab: Vocabulary) -> list[Problem]:
+    """A declared security surface needs a tagged criterion (SPEC-0026/AC-02); an empty header counts as declared (AC-03)."""
+    header = _security_header(text, vocab)
+    if header is None or header[1].lower() == vocab.security_none.lower() or _has_security_criterion(text, vocab):
         return []
-    line = text[:header.start()].count("\n") + 1
-    return [Problem(line, f"la spec declara superficie de seguridad y no tiene ningún criterio «**AC-NN** [{vocab.security_tag}]»")]
+    return [Problem(header[0], f"la spec declara superficie de seguridad y no tiene ningún criterio «**AC-NN** [{vocab.security_tag}]»")]

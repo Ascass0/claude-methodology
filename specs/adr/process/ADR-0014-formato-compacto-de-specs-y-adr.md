@@ -51,4 +51,4 @@
 - [script] `mthlib/trace.py`: campos del ADR, EARS y `FM-NN`; `mthlib/lang.py`: palabras clave por idioma.
 - [criterio] `revisor-adr`: longitud y estilo (PRINCIPLES §7).
 - [criterio] Rescritura de lo que se carga siempre: sin pérdida de reglas.
-- [criterio] Extensión (SPEC-0026): cabecera opcional `Seguridad` y etiqueta `[SEG]` en AC; la valida `mthlib/compact.py`.
+- [criterio] Extensión (SPEC-0026): cabecera opcional `Seguridad` y etiqueta `[SEG]` en AC, validadas por `mthlib/compact.py`. Se amplía este ADR y no se crea otro porque no cambia la decisión (documentos validables por marca, EARS, sin romper los existentes) y solo añade un campo opcional del mismo formato.
