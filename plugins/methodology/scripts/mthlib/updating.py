@@ -170,13 +170,37 @@ def _generated(lines: list[str]) -> tuple[int, int] | None:
     return start, end
 
 
-def _merge(previous: str, fresh: str) -> str:
-    """``previous`` with only the list of applied gaps replaced: what the person wrote stays."""
+def _new_pending(previous: str, new: list[str], after: int) -> list[str]:
+    """Pending-gap bullets of the fresh ADR that the previous text never mentions (``after``: end of the applied list)."""
+    found = []
+    for line in new[after:]:
+        if line.startswith("## "):
+            break
+        ident = re.match(r"   - `([^`]+)`", line)
+        if ident and f"`{ident.group(1)}`" not in previous:
+            found.append(line)
+    return found
+
+
+def _merge(previous: str, fresh: str) -> str | None:
+    """``previous`` with the list of applied gaps replaced and any new pending gap added; what the person wrote stays.
+
+    ``None`` when ``previous`` is not recognisable as ours.
+    """
     old, new = previous.split("\n"), fresh.split("\n")
     span_old, span_new = _generated(old), _generated(new)
     if span_old is None or span_new is None:
-        return fresh  # not recognisable as ours: regenerate
-    return "\n".join(old[:span_old[0]] + new[span_new[0]:span_new[1]] + old[span_old[1]:])
+        return None
+    applied = new[span_new[0]:span_new[1]]
+    merged = old[:span_old[0]] + applied + old[span_old[1]:]
+    added = _new_pending(previous, new, span_new[1])
+    if added:
+        tail = span_old[0] + len(applied)  # where the person's text resumes
+        end = next((i for i in range(tail, len(merged)) if merged[i].startswith("## ")), len(merged))
+        while end > 0 and not merged[end - 1].strip():  # insert before the blank lines that end the section
+            end -= 1
+        merged[end:end] = added
+    return "\n".join(merged)
 
 
 def _ident(adr: Path) -> str:
@@ -199,7 +223,11 @@ def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update
     others = sorted(p.name[:m.start()] for p in folder.glob("*.md")
                     if (m := setup.METHODOLOGY_ADR.search(p.name)) and p != adr)
     text = adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab)
-    adr.write_text(_merge(previous_text, text) if previous_text else text, encoding="utf-8")
+    merged = _merge(previous_text, text) if previous_text else text
+    if merged is None:
+        warn(f"El ADR {adr.name} no tiene la estructura generada: se regenera y se pierde lo que se hubiera anotado en él.")
+        merged = text
+    atomic_write(adr, merged)  # it may now hold notes that cannot be regenerated
     return adr
 
 

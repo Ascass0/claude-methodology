@@ -477,6 +477,25 @@ class AdrTextTests(unittest.TestCase):
             self.assertEqual(compact.adr_problems(text, vocab), [], vocab.code)
             self.assertIn("ADR-0001", text)
 
+    def test_a_new_pending_gap_is_added_to_a_resumed_adr_without_repeating_the_known_ones(self):
+        # verifies: SPEC-0021/AC-09
+        known = update.Gap("secretos", update.DECISION, "mode sin decidir", "x")
+        new = update.Gap("formato", update.DECISION, "3 docs", "x")
+        first = updating.adr_text("ADR-0002", None, self.gaps, [known], lang.ES, date(2026, 11, 25))
+        edited = first.replace("2. ", "2. Decidido: ", 1)  # the person rewrites the pending list
+        fresh = updating.adr_text("ADR-0002", None, self.gaps, [known, new], lang.ES, date(2026, 11, 25))
+        merged = updating._merge(edited, fresh)
+        self.assertIn("2. Decidido: ", merged)
+        self.assertEqual(merged.count("`secretos`"), 1)  # already there: not repeated
+        self.assertEqual(merged.count("`formato`"), 1)  # new: added
+        self.assertTrue(compact.is_compact(merged, lang.ES))
+        self.assertLess(merged.index("`formato`"), merged.index("## Rechazado"))  # inside the Decision section
+
+    def test_an_adr_without_the_generated_structure_is_not_merged(self):
+        # verifies: SPEC-0021/AC-09
+        fresh = updating.adr_text("ADR-0002", None, self.gaps, [], lang.ES, date(2026, 11, 25))
+        self.assertIsNone(updating._merge("# Notas sueltas\n\nSin lista numerada.\n", fresh))
+
     def test_missing_keys_are_added_without_touching_existing_lines(self):
         # verifies: SPEC-0021/AC-03
         template = tomllib.loads('forge = "github"\n[limits]\nmax_file_lines = 1000\nexclude = []\n[hooks]\ncommit_msg = "own"\n')
