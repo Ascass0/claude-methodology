@@ -5,9 +5,12 @@ with fixed arguments, and the output is kept as untrusted data under ``.work/sec
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
+import signal
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +26,8 @@ _TARGET = re.compile(r"^(?P<host>[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?
 
 @dataclass(frozen=True)
 class ScanTool:
+    """A scan tool: executable names, default port and fixed arguments with ``{host}``, ``{port}`` and ``{hostport}`` placeholders."""
+
     name: str
     executables: tuple[str, ...]
     default_port: int
@@ -38,7 +43,7 @@ TOOLS: dict[str, ScanTool] = {t.name: t for t in (
 
 def normalize(target: str) -> tuple[str, int | None]:
     """Host (lower case) and port of a ``host`` or ``host:port`` text; raises ``MthError`` on anything else."""
-    match = _TARGET.match(target) if isinstance(target, str) else None
+    match = _TARGET.fullmatch(target) if isinstance(target, str) else None
     if match is None or match["host"].startswith("-"):
         raise MthError(f"Destino no válido: {target!r}.", hint="Usa host o host:puerto, sin esquema, ruta, espacios ni comodines.")
     port = int(match["port"]) if match["port"] else None
@@ -75,30 +80,46 @@ def _executable(tool: ScanTool, which: Callable[[str], str | None]) -> str:
                    hint="Instálalo tú: mth no lo descarga. Los controles que dependen de él quedan `no evaluable`.")
 
 
-def scan(tool_name: str, target: str, targets: list[str], root: Path, *,
-         which: Callable[[str], str | None] = shutil.which,
-         runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> tuple[Path, int]:
+def run_to_file(argv: list[str], output: Path, timeout: float, limit: int) -> int:
+    """Run ``argv`` (no shell) with stdout going to ``output``; kills the whole process group on timeout or when ``output`` passes ``limit``."""
+    with output.open("wb") as sink:
+        proc = subprocess.Popen(argv, stdout=sink, stderr=subprocess.DEVNULL, start_new_session=True)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                return proc.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                over = time.monotonic() > deadline or output.stat().st_size > limit
+                if over:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+                    raise MthError(f"{argv[0]} superó el tiempo ({timeout:.0f} s) o el tamaño ({limit} bytes) máximos: sin resultado, "
+                                   "el control queda `no evaluable`.") from None
+
+
+Runner = Callable[[list[str], Path, float, int], int]
+
+
+def scan(tool_name: str, target: str, targets: list[str], root: Path, *, which: Callable[[str], str | None] = shutil.which,
+         runner: Runner = run_to_file, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> tuple[Path, int]:
     """Run ``tool_name`` against an authorized ``target``; returns the output file and the tool's exit code."""
     tool = TOOLS.get(tool_name)
     if tool is None:
         raise MthError(f"Herramienta de escaneo desconocida: {tool_name}.", hint=f"Disponibles: {', '.join(TOOLS)}.")
     host, port = authorize(target, targets)
     port = port or tool.default_port
-    executable = _executable(tool, which)
     values = {"host": host, "port": str(port), "hostport": f"{host}:{port}"}
-    argv = [executable, *(arg.format(**values) for arg in tool.arguments)]
+    argv = [_executable(tool, which), *(arg.format(**values) for arg in tool.arguments)]
+    path = root / REPORT_DIR / f"scan-{tool.name}-{host}-{port}-{now().strftime('%Y%m%dT%H%M%SZ')}.txt"
     try:
-        done = runner(argv, capture_output=True, timeout=TIMEOUT_S, check=False)
-    except subprocess.TimeoutExpired as exc:
-        raise MthError(f"{tool.name} no terminó en {TIMEOUT_S} s: sin resultado, el control queda `no evaluable`.") from exc
+        path.parent.mkdir(parents=True, exist_ok=True)
+        code = runner(argv, path, TIMEOUT_S, MAX_OUTPUT)
+        if path.stat().st_size > MAX_OUTPUT:
+            raise MthError(f"La salida de {tool.name} supera {MAX_OUTPUT} bytes y no se guarda.")
     except OSError as exc:
-        raise MthError(f"No se pudo ejecutar {tool.name}: {exc}.") from exc
-    if len(done.stdout) > MAX_OUTPUT:
-        raise MthError(f"La salida de {tool.name} supera {MAX_OUTPUT} bytes y no se guarda.")
-    directory = root / REPORT_DIR
-    directory.mkdir(parents=True, exist_ok=True)
-    stamp = now().strftime("%Y%m%dT%H%M%SZ")
-    path = directory / f"scan-{tool.name}-{host}-{port}-{stamp}.txt"
-    path.write_bytes(done.stdout)
-    return path, done.returncode
+        path.unlink(missing_ok=True)
+        raise MthError(f"No se pudo ejecutar o guardar {tool.name}: {exc}.", hint="Comprueba permisos y espacio en .work/security-report/.") from exc
+    except MthError:
+        path.unlink(missing_ok=True)
+        raise
+    return path, code

@@ -22,18 +22,19 @@ NOW = datetime(2026, 11, 27, 10, 0, 0, tzinfo=timezone.utc)
 
 
 class Runner:
-    """Fake process runner: records the argv and returns canned output."""
+    """Fake process runner: records the argv, writes canned output to the output file and returns the exit code."""
 
     def __init__(self, stdout: bytes = b"ok", code: int = 0, error: Exception | None = None):
         self.calls: list[list[str]] = []
         self.stdout, self.code, self.error = stdout, code, error
 
-    def __call__(self, argv, **kwargs):
+    def __call__(self, argv, output, timeout, limit):
         self.calls.append(list(argv))
-        self.kwargs = kwargs
+        self.timeout, self.limit = timeout, limit
+        output.write_bytes(self.stdout)
         if self.error:
             raise self.error
-        return subprocess.CompletedProcess(argv, self.code, self.stdout, b"")
+        return self.code
 
 
 def do_scan(root: Path, tool="testssl", target="Example.org:443", targets=("example.org:443",), runner=None, which=None):
@@ -42,9 +43,22 @@ def do_scan(root: Path, tool="testssl", target="Example.org:443", targets=("exam
 
 
 class ConfigTests(unittest.TestCase):
-    def test_audit_targets_default_to_empty_and_invalid_entries_fail_the_load(self):
+    def test_the_configuration_load_rejects_an_invalid_target_naming_the_key(self):
         # verifies: SPEC-0028/AC-01
         # verifies: SPEC-0028/FM-06
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            base = 'version = 1\n[commands]\ntest = ""\n[audit]\n'
+            (root / ".claude/methodology.toml").write_text(base + 'targets = ["https://x"]\n', encoding="utf-8")
+            with self.assertRaises(MthError) as ctx:
+                config.load(root)
+            self.assertIn("audit.targets", ctx.exception.message)
+            (root / ".claude/methodology.toml").write_text(base + 'targets = ["example.org:443"]\n', encoding="utf-8")
+            self.assertEqual(config.load(root)["audit"]["targets"], ["example.org:443"])
+
+    def test_audit_targets_default_to_empty_and_invalid_entries_fail_the_load(self):
+        # verifies: SPEC-0028/AC-01
         self.assertEqual(config.DEFAULTS["audit"]["targets"], [])
         scan.validate(["example.org", "10.0.0.5:8443"])
         for bad in (["-oProxyCommand=x"], ["https://example.org"], ["example.org:99999"], "example.org", [1], ["a b"], ["*.example.org"]):
@@ -69,7 +83,7 @@ class AuthorizationTests(unittest.TestCase):
         # verifies: SPEC-0028/AC-03
         # verifies: SPEC-0028/FM-02
         with tempfile.TemporaryDirectory() as tmp:
-            for bad in ("-oProxyCommand=x", "https://example.org", "example.org/path", "example.org 443", "*.example.org", "[::1]:22"):
+            for bad in ("-oProxyCommand=x", "https://example.org", "example.org/path", "example.org 443", "*.example.org", "[::1]:22", "example.org\n"):
                 runner = Runner()
                 with self.subTest(bad=bad), self.assertRaises(MthError):
                     do_scan(Path(tmp), target=bad, targets=[bad], runner=runner)
@@ -95,8 +109,7 @@ class ExecutionTests(unittest.TestCase):
             self.assertEqual(path, Path(tmp) / ".work/security-report/scan-testssl-example.org-443-20261127T100000Z.txt")
             self.assertEqual(runner.calls[0][0], "/usr/bin/testssl.sh")
             self.assertEqual(runner.calls[0][-1], "example.org:443")
-            self.assertEqual(runner.kwargs["timeout"], scan.TIMEOUT_S)
-            self.assertNotIn("shell", runner.kwargs)
+            self.assertEqual((runner.timeout, runner.limit), (scan.TIMEOUT_S, scan.MAX_OUTPUT))
 
     def test_a_missing_tool_fails_and_nothing_is_installed(self):
         # verifies: SPEC-0028/AC-06
@@ -110,10 +123,20 @@ class ExecutionTests(unittest.TestCase):
         # verifies: SPEC-0028/FM-04
         # verifies: SPEC-0028/FM-05
         with tempfile.TemporaryDirectory() as tmp:
-            for runner in (Runner(error=subprocess.TimeoutExpired("x", 1)), Runner(b"x" * (scan.MAX_OUTPUT + 1))):
+            for runner in (Runner(error=MthError("tiempo")), Runner(b"x" * (scan.MAX_OUTPUT + 1)), Runner(error=OSError("disco lleno"))):
                 with self.subTest(), self.assertRaises(MthError):
                     do_scan(Path(tmp), runner=runner)
-            self.assertFalse((Path(tmp) / ".work").exists())
+                self.assertEqual(list((Path(tmp) / ".work/security-report").iterdir()), [])
+
+    def test_the_real_runner_kills_a_tool_that_does_not_finish_and_one_that_floods_the_output(self):
+        # verifies: SPEC-0028/AC-07
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.txt"
+            with self.assertRaises(MthError):
+                scan.run_to_file([sys.executable, "-c", "import time; time.sleep(30)"], out, 1, 1000)
+            with self.assertRaises(MthError):
+                scan.run_to_file([sys.executable, "-c", "import sys,time\nwhile True:\n sys.stdout.write('x'*5000); sys.stdout.flush(); time.sleep(0.05)"], out, 30, 1000)
+            self.assertEqual(scan.run_to_file([sys.executable, "-c", "print('hola')"], out, 10, 1000), 0)
 
     def test_an_unknown_tool_is_rejected(self):
         # verifies: SPEC-0028/AC-08
@@ -123,6 +146,8 @@ class ExecutionTests(unittest.TestCase):
     def test_the_command_refuses_an_unauthorized_target_with_a_failing_code(self):
         # verifies: SPEC-0028/AC-02
         self.assertEqual(run("audit", "scan", "testssl", "unlisted.example.org")[0], 1)
+        _, runner = do_scan(Path(tempfile.mkdtemp()), target="example.org", targets=["example.org"])
+        self.assertEqual(runner.calls[0][-1], "example.org:443")
         self.assertEqual(run("audit", "scan")[0], 1)
 
 

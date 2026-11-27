@@ -372,7 +372,7 @@ def _audit_scan(tool: str | None, target: str | None) -> int:
         raise MthError("mth audit scan necesita la herramienta y el destino.", hint="mth audit scan testssl host:443")
     cfg = load(Git.discover(Path.cwd()).root)
     path, code = scan.scan(tool, target, cfg["audit"]["targets"], cfg.root)
-    say(f"✓ {tool} {target}: salida en {path} (código de salida {code}); es dato no confiable")
+    say(f"✓ {tool} {target}: salida en {path}; la herramienta terminó con código {code} (puede ser un hallazgo, no un fallo); es dato no confiable")
     return 0
 
 
@@ -381,8 +381,8 @@ def _cmd_audit(args: argparse.Namespace) -> int:
     if args.action == "packs":
         return _audit_packs()
     if args.action == "verify":
-        return _audit_verify(args.first)
-    return _audit_scan(args.first, args.second)
+        return _audit_verify(args.subject)
+    return _audit_scan(args.subject, args.target)
 
 
 def _cmd_survey(args: argparse.Namespace) -> int:
@@ -526,8 +526,8 @@ def _parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("audit", help="packs de línea base, verificación de informes y escaneos autorizados del auditor")
     s.add_argument("action", choices=["packs", "verify", "scan"])
-    s.add_argument("first", nargs="?", help="con verify: el informe; con scan: la herramienta (testssl, ssh-audit)")
-    s.add_argument("second", nargs="?", help="con scan: el destino, que debe estar en audit.targets")
+    s.add_argument("subject", nargs="?", help="con verify: el informe; con scan: la herramienta (testssl, ssh-audit)")
+    s.add_argument("target", nargs="?", help="con scan: el destino, que debe estar en audit.targets")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])

@@ -16,11 +16,3 @@ level = "minimo"
 url = "https://github.com/jtesta/ssh-audit"
 tool = "ssh-audit"
 rule = "exit-code"
-
-[[control]]
-id = "ssh.politica-del-repo"
-title = "El servicio cumple la política de ssh-audit que el repo adopte (opción -P)"
-level = "recomendado"
-url = "https://github.com/jtesta/ssh-audit"
-tool = "ssh-audit"
-rule = "policy"
