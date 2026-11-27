@@ -6,6 +6,20 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.17.0] - 2026-11-27
+
+### Añadido
+- `mth models` muestra también al planificador, fijo en `opus`; no sale de `[models]` y no se puede configurar. (SPEC-0023)
+- El agente planificador solo se lanza con `model: "opus"`: `mth-develop` lo exige y la plantilla de encargo de `mth-plan` declara «Modelo: opus». Si el encargo no lo indica, el agente avisa. (SPEC-0023)
+- `mth secrets --staged` escanea con `gitleaks` solo lo preparado para el commit. Falla cerrado: sin `gitleaks`, con un error de la herramienta o al agotar el tiempo, no da nada por limpio. Requiere `gitleaks` 8.19.0 o posterior. (SPEC-0024, ADR-0022)
+- Hook `pre-commit` opcional (`secrets.hook = "on"`) que rechaza el commit si hay secretos preparados. `hooks.pre_commit` (`own`, `replace`, `chain`) decide cómo convive con un hook ajeno. `git commit --no-verify` lo salta. (SPEC-0024, ADR-0022)
+- Workflow de CI opcional `.github/workflows/secrets.yml` (`secrets.ci = "on"`, solo con GitHub y CI exigida) que escanea cada PR y cada push a `main` y `development` con un binario de `gitleaks` fijado. `mth` lo escribe con una marca en la primera línea y no sobrescribe un fichero ajeno. La protección de rama debe exigir su comprobación, porque una rama puede editarlo. (SPEC-0024, ADR-0022)
+- La adopción incluye la pregunta `secretos` (`bloquear`, `integrar`, `ninguno`); un repo nuevo hace como mucho seis preguntas, en dos rondas. `mth update` lista las brechas `secretos-hook` y `secretos-ci` (decisión) y `secretos-workflow` (automática), y `mth doctor` informa del estado y de la versión de `gitleaks`. (SPEC-0024, ADR-0022)
+- Las claves nuevas `secrets.hook` y `secrets.ci` nacen sin decidir (`""`) y `hooks.pre_commit` es `own`. Un plugin anterior las rechaza al cargar la configuración: actualiza el plugin antes de aceptar las brechas. Ni el hook ni el workflow se activan solos. (SPEC-0024, ADR-0022)
+- `mth tools` lista las herramientas externas que usa `mth` (hoy `gitleaks`), su versión, su origen (`PATH`, `gestionada` o `ausente`) y la versión encontrada, sin usar la red. (SPEC-0025, ADR-0023)
+- `mth tools install` (con `--force` para reinstalar) descarga la herramienta a una caché del usuario (`MTH_TOOLS_DIR` o el directorio de caché del sistema) tras comprobar su SHA-256; `mth tools prune` borra las versiones que ya no están en el manifiesto. No se descarga nada sin esa orden explícita. (SPEC-0025, ADR-0023)
+- `mth secrets` y `mth doctor` usan `gitleaks` del `PATH` si alcanza la versión mínima y, si no, la copia gestionada. Sin ninguna, el error indica `mth tools install gitleaks`; `mth doctor` informa del origen y avisa de copias gestionadas de otra versión. (SPEC-0025, ADR-0023)
+
 ## [0.16.0] - 2026-11-26
 
 ### Añadido
