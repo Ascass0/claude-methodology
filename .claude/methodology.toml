@@ -82,6 +82,7 @@ revisor-adr = [
 ]
 
 [roles]
+planner = ''
 # Agentes para cada rol (vacío = Claude asume el rol). documentador y verificador vienen en el plugin.
 coder = ""
 documenter = "documentador"
@@ -130,6 +131,7 @@ review = "sonnet"
 documenter = "sonnet"
 
 [hooks]
+pre_commit = 'own'
 commit_msg = "own"
 
 [autonomy]
@@ -137,3 +139,15 @@ level = "full"
 
 [language]
 docs = "es"
+
+[plans]
+required_for = ['feat', 'fix', 'hotfix']
+
+[secrets]
+mode = 'block'
+hook = 'on'
+ci = 'on'
+baseline = '.gitleaks-baseline.json'
+
+[audit]
+targets = []
