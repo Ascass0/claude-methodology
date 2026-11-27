@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from .lang import Vocabulary
 
-AC_LINE = re.compile(r"\*\*(AC-\d{2,3})\*\*\s*:\s*(.*)")
+AC_LINE = re.compile(r"\*\*(AC-\d{2,3})\*\*(?:\s*\[[A-Z]+\])?\s*:\s*(.*)")
 FM_ID = re.compile(r"FM-\d{2,3}")
 _FM_ROW = re.compile(r"^\s*\|\s*(FM-\d{2,3})\s*\|")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
@@ -115,3 +115,15 @@ def local_failure_refs(text: str, defs: list[tuple[str, int]], spec_id_pattern: 
             if not qualified.search(before) and m.group(0) not in known:
                 out.append(Problem(n, f"referencia a {m.group(0)}, que la spec no define"))
     return out
+
+
+def security_problems(text: str, vocab: Vocabulary) -> list[Problem]:
+    """A declared security surface (header other than «none») needs at least one tagged criterion (SPEC-0026)."""
+    header = re.search(rf"^-\s*{re.escape(vocab.security_label)}:[ \t]*(.*?)\s*$", text, re.IGNORECASE | re.MULTILINE)
+    if header is None or header.group(1).strip().lower() == vocab.security_none.lower():
+        return []
+    tagged = re.compile(rf"\*\*AC-\d{{2,3}}\*\*\s*\[{re.escape(vocab.security_tag)}\]\s*:\s*(.*)")
+    if any((m := tagged.search(line)) and ears_problem(m.group(1).strip(), vocab) is None for line in text.splitlines()):
+        return []
+    line = text[:header.start()].count("\n") + 1
+    return [Problem(line, f"la spec declara superficie de seguridad y no tiene ningún criterio «**AC-NN** [{vocab.security_tag}]»")]

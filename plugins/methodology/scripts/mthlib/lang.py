@@ -40,6 +40,9 @@ class Vocabulary:
     ears: Ears
     adr_fields: tuple[str, ...]  # required ADR headings, in order
     failure_section: str  # heading of the spec's failure-mode table
+    security_label: str  # optional spec header declaring the security surface (SPEC-0026)
+    security_none: str
+    security_tag: str  # marks a security acceptance criterion
     templates: Path
 
 
@@ -54,6 +57,7 @@ ES = Vocabulary(
     ears=Ears(when="CUANDO", while_="MIENTRAS", if_="SI", then="ENTONCES", must=("DEBE", "DEBEN")),
     adr_fields=("Contexto", "Decisión", "Rechazado", "Consecuencias", "Impone"),
     failure_section="Modos de fallo",
+    security_label="Seguridad", security_none="ninguna", security_tag="SEG",
     templates=TEMPLATES,
 )
 
@@ -68,6 +72,7 @@ EN = Vocabulary(
     ears=Ears(when="WHEN", while_="WHILE", if_="IF", then="THEN", must=("SHALL", "MUST")),
     adr_fields=("Context", "Decision", "Rejected", "Consequences", "Imposes"),
     failure_section="Failure modes",
+    security_label="Security", security_none="none", security_tag="SEC",
     templates=TEMPLATES / "en",
 )
 
