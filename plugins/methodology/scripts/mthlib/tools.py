@@ -37,7 +37,8 @@ ARCHITECTURES = ("x64", "arm64")
 FORMATS = ("tar.gz", "zip")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-DOWNLOAD_TIMEOUT = 60  # seconds per attempt
+DOWNLOAD_TIMEOUT = 60  # seconds per socket operation
+DOWNLOAD_TOTAL = 300  # seconds for a whole attempt
 VERSION_TIMEOUT = 30  # seconds: a tool that does not print its version counts as unrecognised
 MAX_DOWNLOAD = 200 * 1024 * 1024
 MAX_MEMBERS = 5000
@@ -258,12 +259,15 @@ def download(url: str, dest: Path, limit: int, timeout: float) -> None:
     opener = urllib.request.build_opener(_HttpsOnly)
     request = urllib.request.Request(url, headers={"User-Agent": "claude-methodology"})
     total = 0
+    deadline = time.monotonic() + DOWNLOAD_TOTAL
     with opener.open(request, timeout=timeout) as response, dest.open("wb") as out:
         declared = response.headers.get("Content-Length")
         if declared and declared.isdigit() and int(declared) > limit:
             raise MthError(f"La descarga supera el tamaño máximo ({limit} bytes): {url}")
         for chunk in iter(lambda: response.read(1 << 16), b""):
             total += len(chunk)
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"La descarga supera el tiempo máximo ({DOWNLOAD_TOTAL} s): {url}")
             if total > limit:
                 raise MthError(f"La descarga supera el tamaño máximo ({limit} bytes): {url}")
             out.write(chunk)
@@ -275,7 +279,8 @@ def _fetch_with_retries(fetch: Fetch, url: str, dest: Path, sleep: Callable[[flo
             fetch(url, dest, MAX_DOWNLOAD, DOWNLOAD_TIMEOUT)
             return
         except OSError as exc:  # URLError and timeouts are OSError: retry with growing waits
-            if attempt == ATTEMPTS - 1:
+            permanent = isinstance(exc, urllib.error.HTTPError) and 400 <= exc.code < 500 and exc.code not in (408, 429)
+            if permanent or attempt == ATTEMPTS - 1:
                 raise MthError(f"No se pudo descargar {url}: {exc}.",
                                hint=f"Comprueba la red o el proxy, o instala {name} a mano en el PATH.") from exc
             sleep(2 ** attempt)
@@ -348,6 +353,8 @@ def _extract_zip(archive: Path, dest: Path) -> None:
 def _make_cache(folder: Path) -> None:
     try:
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for level in (folder, folder.parent):
+            level.chmod(0o700)
         probe = tempfile.TemporaryDirectory(dir=folder)
         probe.cleanup()
     except OSError as exc:
@@ -408,11 +415,22 @@ def _publish(staging: Path, final: Path, tool: Tool, root: Path, force: bool) ->
         final.rename(old)
     try:
         staging.rename(final)
-    except OSError:  # another install published first: keep it if it is valid
-        managed_path(tool, root)
+    except OSError as exc:  # another install may have published first: keep it only if it is valid
+        if managed_path(tool, root) is None:
+            if old is not None:
+                old.rename(final)
+                old = None
+            raise MthError(f"No se pudo publicar la copia gestionada de {tool.name}: {exc}.") from exc
     finally:
         if old is not None:
             shutil.rmtree(old, ignore_errors=True)
+
+
+def _is_ours(folder: Path) -> bool:
+    """A managed install (it has its metadata) or a leftover of one; anything else is not ours to delete."""
+    if not folder.is_dir() or folder.is_symlink():
+        return False
+    return (folder / META).is_file() or ".tmp-" in folder.name or ".old-" in folder.name
 
 
 def prune(manifest: dict[str, Tool], root: Path | None = None) -> list[Path]:
@@ -424,11 +442,8 @@ def prune(manifest: dict[str, Tool], root: Path | None = None) -> list[Path]:
     for tool_dir in sorted(p for p in root.iterdir() if p.is_dir() and not p.is_symlink()):
         keep = manifest[tool_dir.name].version if tool_dir.name in manifest else None
         for version_dir in sorted(tool_dir.iterdir()):
-            if version_dir.name != keep:
-                if version_dir.is_dir() and not version_dir.is_symlink():
-                    shutil.rmtree(version_dir, ignore_errors=True)
-                else:
-                    version_dir.unlink(missing_ok=True)
+            if version_dir.name != keep and _is_ours(version_dir):
+                shutil.rmtree(version_dir, ignore_errors=True)
                 removed.append(version_dir)
         if keep is None and not any(tool_dir.iterdir()):
             tool_dir.rmdir()

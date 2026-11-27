@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -236,6 +237,63 @@ class InstallTests(ToolsCase):
         self.assertIn("PATH", ctx.exception.hint)
         self.assertEqual(self.leftovers(), [])
 
+    def test_a_permanent_http_error_is_not_retried(self):
+        # verifies: SPEC-0025/FM-04
+        tool = make_tool(GOOD)
+        calls = []
+
+        def missing(url, dest, limit, timeout):
+            calls.append(url)
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        with self.assertRaises(MthError):
+            tools.install(tool, root=self.root, system="linux_x64", fetch=missing, sleep=lambda s: None)
+        self.assertEqual(len(calls), 1)
+
+    def test_a_slow_download_stops_at_the_total_deadline(self):
+        # verifies: SPEC-0025/FM-04
+        class Body:
+            headers: dict = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self, size):
+                return b"x"
+        opener = mock.Mock()
+        opener.open.return_value = Body()
+        ticks = iter([0.0, tools.DOWNLOAD_TOTAL + 1.0])
+        with mock.patch("urllib.request.build_opener", return_value=opener), \
+                mock.patch("time.monotonic", side_effect=lambda: next(ticks)):
+            with self.assertRaises(TimeoutError):
+                tools.download("https://example.test/a", self.tmp / "out", 1 << 30, 1)
+
+    def test_a_failed_publish_raises_and_keeps_the_previous_copy_on_force(self):
+        # verifies: SPEC-0025/AC-08
+        tool = self.install_good()
+        before = tools.managed_path(tool, self.root)
+        staging = self.root / "faketool" / "1.2.3.tmp-x"
+        staging.mkdir()
+        final = self.root / "faketool" / "1.2.3"
+        real = Path.rename
+
+        def flaky(path, target):
+            if path == staging:
+                raise PermissionError("denied")
+            return real(path, target)
+        with mock.patch.object(Path, "rename", flaky):
+            with self.assertRaises(MthError):
+                tools._publish(staging, final, tool, self.root, True)
+        self.assertEqual(tools.managed_path(tool, self.root), before)
+
+    def test_the_cache_directories_are_private(self):
+        # verifies: SPEC-0025/AC-09
+        self.install_good()
+        for folder in (self.root, self.root / "faketool"):
+            self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700)
+
     def test_an_oversized_download_is_refused_without_retrying(self):
         # verifies: SPEC-0025/AC-06
         # verifies: SPEC-0025/FM-04
@@ -388,13 +446,19 @@ class IntegrityAndPruneTests(ToolsCase):
         tool = self.install_good()
         folder = self.root / "faketool"
         (folder / "0.1.0").mkdir()
+        (folder / "0.1.0" / tools.META).write_text("{}")
         (folder / "1.2.3.tmp-abc").mkdir()
         (self.root / "gone").mkdir()
         (self.root / "gone" / "1.0.0").mkdir()
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["0.1.0", "1.2.3", "1.2.3.tmp-abc"])  # nothing pruned yet
+        (self.root / "gone" / "1.0.0" / tools.META).write_text("{}")
+        (folder / "notes").mkdir()  # not ours: no metadata and no leftover mark
+        (self.root / "other").mkdir()
+        (self.root / "other" / "data.txt").write_text("keep")
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["0.1.0", "1.2.3", "1.2.3.tmp-abc", "notes"])  # nothing pruned yet
         removed = tools.prune({"faketool": tool}, self.root)
         self.assertEqual(sorted(p.name for p in removed), ["0.1.0", "1.0.0", "1.2.3.tmp-abc"])
-        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["1.2.3"])
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["1.2.3", "notes"])
+        self.assertTrue((self.root / "other" / "data.txt").is_file())
         self.assertFalse((self.root / "gone").exists())
         self.assertTrue(tools.managed_path(tool, self.root).is_file())
         self.assertEqual(tools.prune({"faketool": tool}, self.tmp / "missing"), [])

@@ -74,7 +74,7 @@ def baseline_path(root: Path, section: dict[str, Any]) -> Path:
 
 
 def resolve() -> tools.Resolved:
-    """Where to run ``gitleaks`` from: the PATH if it reaches ``MIN_VERSION``, else the managed copy (SPEC-0025).
+    """Where to run ``gitleaks`` from: the PATH if it reaches ``MIN_VERSION``, else the managed copy (SPEC-0025, ADR-0023).
 
     Raises:
         MthError: There is no ``gitleaks`` (with the remedy) or the managed copy was altered.
@@ -91,14 +91,6 @@ def is_installed() -> bool:
     except MthError:
         return False
     return True
-
-
-def version() -> tuple[int, int, int] | None:
-    """Version of the resolved ``gitleaks``, or None when there is none or its output is not recognised."""
-    try:
-        return resolve().version
-    except MthError:
-        return None
 
 
 def parse_report(text: str) -> list[Finding]:

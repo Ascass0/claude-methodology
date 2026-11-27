@@ -80,7 +80,7 @@
 - **AC-05**: MIENTRAS exista el fichero de línea base, `mth secrets` DEBE pasarlo a `gitleaks`, y los hallazgos que contiene NO DEBEN bloquear; sin fichero DEBE escanear sin él.
 - **AC-06**: CUANDO se ejecuta `mth secrets --history --accept`, `mth` DEBE escribir la línea base con los hallazgos y avisar de que los secretos deben rotarse.
 - **AC-07**: CUANDO `secrets.mode = "block"`, `mth integrate` DEBE escanear la rama antes de subirla y, con un hallazgo, DEBE fallar sin subir; con `"off"` NO DEBE escanear; con `""` DEBE avisar de que falta decidir.
-- **AC-08**: SI `gitleaks` no se resuelve (ni en el `PATH` ni como copia gestionada, ([SPEC-0025](SPEC-0025-gestor-de-herramientas-externas.md))), ENTONCES `mth secrets` y el gate DEBEN fallar con el remedio y NO DEBEN darlo por limpio.
+- **AC-08**: SI `gitleaks` no se resuelve (ni en el `PATH` ni como copia gestionada, [SPEC-0025](SPEC-0025-gestor-de-herramientas-externas.md)), ENTONCES `mth secrets` y el gate DEBEN fallar con el remedio y NO DEBEN darlo por limpio.
 - **AC-09**: SI `gitleaks` termina con un código distinto de 0 y 2 o su informe no es legible, ENTONCES `mth` DEBE fallar nombrando la causa sin reproducir la salida de la herramienta.
 - **AC-10**: `mth secrets` DEBE borrar el informe temporal también cuando el escaneo falla.
 - **AC-11**: `mth doctor` DEBE marcar ✗ con `block` y `gitleaks` ausente, y ⚠ con `""` o `off`.
