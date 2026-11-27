@@ -15,6 +15,8 @@
 1. Se aplican las brechas automáticas de esta ejecución (sin cambiar ningún valor ya decidido):
    - `config`: roles.planner, plans, secrets, audit, hooks.pre_commit
    - `agentes-desactualizados`: revisor-seguridad
+   - `hook`: hook pre-commit absent
+   - `secretos-workflow`: workflow de secretos absent
 2. Decide la persona (skill `mth-update`):
    - `secretos`: `secrets.mode = "block"`: `mth integrate` bloquea si gitleaks encuentra secretos en la rama.
    - `secretos-hook`: `secrets.hook = "on"`: el hook `pre-commit` escanea lo preparado (`hooks.pre_commit = "own"`, sin hook ajeno).
