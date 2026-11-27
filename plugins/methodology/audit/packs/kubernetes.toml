@@ -1,0 +1,87 @@
+id = "kubernetes"
+title = "Manifiestos de Kubernetes (Pod Security Standards)"
+version = "1"
+reviewed = "2026-11-27"
+review_months = 6
+
+[source]
+name = "Kubernetes Pod Security Standards"
+version = "documentación vigente el 2026-11-27"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+
+[[control]]
+id = "kubernetes.no-privileged"
+title = "Ningún contenedor es privilegiado"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Baseline: Privileged Containers"
+
+[[control]]
+id = "kubernetes.no-host-namespaces"
+title = "Sin hostNetwork, hostPID ni hostIPC"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Baseline: Host Namespaces"
+
+[[control]]
+id = "kubernetes.no-hostpath"
+title = "Sin volúmenes hostPath"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Baseline: HostPath Volumes"
+
+[[control]]
+id = "kubernetes.baseline-capabilities"
+title = "Solo capacidades añadidas de la lista permitida"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Baseline: Capabilities"
+
+[[control]]
+id = "kubernetes.no-host-ports"
+title = "Sin hostPort"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Baseline: Host Ports"
+
+[[control]]
+id = "kubernetes.seccomp"
+title = "seccompProfile RuntimeDefault o Localhost, nunca Unconfined"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Seccomp"
+
+[[control]]
+id = "kubernetes.no-privilege-escalation"
+title = "allowPrivilegeEscalation en false"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Privilege Escalation"
+
+[[control]]
+id = "kubernetes.run-as-non-root"
+title = "runAsNonRoot en true"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Running as Non-root"
+
+[[control]]
+id = "kubernetes.drop-all-capabilities"
+title = "Se eliminan todas las capacidades (drop ALL)"
+level = "minimo"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Capabilities"
+
+[[control]]
+id = "kubernetes.non-zero-user"
+title = "runAsUser distinto de 0 o sin definir"
+level = "recomendado"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Running as Non-root user"
+
+[[control]]
+id = "kubernetes.volume-types"
+title = "Solo tipos de volumen permitidos (configMap, secret, emptyDir, PVC…)"
+level = "recomendado"
+url = "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+rule = "Restricted: Volume Types"

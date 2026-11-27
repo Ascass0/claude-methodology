@@ -1,0 +1,114 @@
+id = "docker"
+title = "Dockerfiles"
+version = "1"
+reviewed = "2026-11-27"
+review_months = 6
+
+[source]
+name = "Reglas de hadolint"
+version = "README de la rama master, 2026-11-27"
+url = "https://github.com/hadolint/hadolint#rules"
+
+[[control]]
+id = "docker.non-root-user"
+title = "Dockerfile: el último USER no es root"
+level = "minimo"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3002"
+
+[[control]]
+id = "docker.pinned-base-tag"
+title = "Las imágenes base llevan etiqueta de versión explícita"
+level = "minimo"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3006"
+
+[[control]]
+id = "docker.no-latest"
+title = "Ninguna imagen base usa latest"
+level = "minimo"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3007"
+
+[[control]]
+id = "docker.no-sensitive-env"
+title = "Sin datos sensibles en ARG o ENV"
+level = "minimo"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3064"
+
+[[control]]
+id = "docker.no-sudo"
+title = "No se usa sudo dentro de la imagen"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3004"
+
+[[control]]
+id = "docker.copy-over-add"
+title = "COPY en lugar de ADD para ficheros y carpetas"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3020"
+
+[[control]]
+id = "docker.healthcheck"
+title = "La imagen declara HEALTHCHECK"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3057"
+
+[[control]]
+id = "docker.pinned-apt"
+title = "Paquetes apt-get con versión fijada"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3008"
+
+[[control]]
+id = "docker.apt-lists-cleaned"
+title = "Se borran las listas de apt tras instalar"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3009"
+
+[[control]]
+id = "docker.no-recommends"
+title = "apt-get install sin paquetes recomendados"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3015"
+
+[[control]]
+id = "docker.numeric-user"
+title = "El usuario es numérico y resoluble por el host"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3066"
+
+[[control]]
+id = "docker.absolute-workdir"
+title = "WORKDIR con ruta absoluta"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3000"
+
+[[control]]
+id = "docker.allowed-registry"
+title = "Las imágenes base vienen de un registro permitido"
+level = "recomendado"
+url = "https://github.com/hadolint/hadolint#rules"
+tool = "hadolint"
+rule = "DL3026"

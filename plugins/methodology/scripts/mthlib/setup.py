@@ -8,9 +8,10 @@ import sys
 import tempfile
 import tomllib
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
-from . import adoption, agents, changelog, commits, forge, lang, secretci, secretgate, survey, tools, versions, work
+from . import adoption, agents, audit, changelog, commits, forge, lang, secretci, secretgate, survey, tools, versions, work
 from .files import atomic_write
 from .config import CONFIG_PATH, Config, load, parse
 from .ids import IdRegistry
@@ -567,6 +568,18 @@ def _doctor_secrets_pieces(git: Git, cfg: Config, report) -> None:
         report(state == "current", f"Workflow de secretos: {state}", blocking=False)
 
 
+def _doctor_packs(report) -> None:
+    """Warn about baseline packs past their review date (SPEC-0027/AC-03)."""
+    try:
+        packs = audit.load_packs()
+    except MthError as exc:
+        report(False, f"packs de línea base: {exc.message}", blocking=False)
+        return
+    for pack in packs.values():
+        report(not pack.expired(date.today()), f"Pack {pack.id}@{pack.version} revisado {pack.reviewed} "
+               f"(caduca {pack.expires()}): revísalo contra su fuente y actualiza `reviewed`", blocking=False)
+
+
 def _doctor_gitleaks(report) -> None:
     """Whether ``gitleaks`` resolves (blocking), where from and with which version (warnings), SPEC-0025/AC-14."""
     try:
@@ -660,6 +673,8 @@ def doctor(start: Path) -> int:
         from . import smoke  # lazy: smoke builds on setup (SPEC-0014)
         for notice in smoke.warnings(git, True, explain_unknown=True):
             report(False, notice, blocking=False)
+    if "auditor-estatico" in installed:
+        _doctor_packs(report)
     mode = cfg["secrets"]["mode"]
     if mode == "block" or cfg["secrets"]["hook"] == "on":
         _doctor_gitleaks(report)
