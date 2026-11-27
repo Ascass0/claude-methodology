@@ -30,7 +30,7 @@
 | `audit.targets` | `[audit] targets = []` en `.claude/methodology.toml`; entradas `host` o `host:port` |
 | `mth audit scan <herramienta> <destino>` | Herramientas `testssl` y `ssh-audit`; destino exactamente igual (host en minúsculas) a una entrada |
 | Puerto | `testssl` por defecto 443 y `ssh-audit` 22 cuando el destino no lo trae; una entrada sin puerto no autoriza `host:port` |
-| Ejecución | Sin shell, argumentos fijos por herramienta, tiempo máximo 600 s, salida máxima 5 MiB |
+| Ejecución | Sin shell, argumentos fijos por herramienta, tiempo máximo 600 s, salida máxima 5 MiB (se corta el grupo de procesos al superarlos); un código de salida ≠ 0 de la herramienta es un resultado, no un fallo |
 | Salida | `.work/security-report/scan-<herramienta>-<host>-<puerto>-<marca>.txt`; `mth` imprime la ruta y el código de salida |
 | Agente `auditor-ejecucion` | Catálogo, perfil `opcional`; solo `mth audit scan\|packs\|verify`; escribe en `.work/security-report/` |
 | Packs | `tls` (RFC 9325) y `ssh` (ssh-audit), formato de [ADR-0024](../adr/security/ADR-0024-packs-de-linea-base-en-toml-y-verificacion-del-informe.md) |
@@ -44,6 +44,7 @@
 | FM-03 | Herramienta no instalada | Error; el control queda `no evaluable` | AC-06 |
 | FM-04 | La herramienta no termina | Se mata a los 600 s y no se conserva salida parcial | AC-07 |
 | FM-05 | Salida mayor del límite | Error; no se guarda | AC-07 |
+| FM-07 | No se puede crear o escribir la salida (permisos, disco) | Error accionable y sin fichero parcial | AC-07 |
 | FM-06 | Entrada inválida en `audit.targets` | La configuración falla al cargar nombrando la clave | AC-01 |
 
 ## Criterios de aceptación
@@ -54,7 +55,7 @@
 - **AC-04**: CUANDO el host difiere solo en mayúsculas, `mth audit scan` DEBE tratarlo como el mismo destino, y una entrada sin puerto NO DEBE autorizar `host:port`.
 - **AC-05**: CUANDO el destino está autorizado, `mth audit scan` DEBE ejecutar la herramienta sin shell, con sus argumentos fijos y el tiempo máximo, guardar la salida en `.work/security-report/` e imprimir la ruta y el código de salida.
 - **AC-06**: SI la herramienta no está en el `PATH`, ENTONCES `mth audit scan` DEBE fallar indicando que el control queda `no evaluable` y NO DEBE instalarla.
-- **AC-07**: SI la herramienta supera el tiempo máximo o la salida supera el límite, ENTONCES `mth audit scan` DEBE fallar sin conservar la salida.
+- **AC-07**: SI la herramienta supera el tiempo máximo o la salida supera el límite, o no se puede guardar la salida, ENTONCES `mth audit scan` DEBE fallar con un error accionable sin conservar la salida.
 - **AC-08**: SI la herramienta no es `testssl` ni `ssh-audit`, ENTONCES `mth audit scan` DEBE rechazarla.
 - **AC-09**: Los packs `tls` y `ssh` DEBEN ser válidos y citar su fuente y fecha de revisión.
 - **AC-10** [SEG]: El guard de `auditor-ejecucion` DEBE permitir solo `mth audit scan`, `packs` y `verify` y DEBE denegar herramientas de red directas y escritura fuera de `.work/security-report/`.
