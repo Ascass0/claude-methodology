@@ -29,7 +29,7 @@ class ReadOnceTests(unittest.TestCase):
         # regression: trace read each spec four times (two checkers, each with its own registry)
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root)
-        for rel, text in {"specs/features/SPEC-9001-a.md": SPEC, "tests/test_a.py": TEST}.items():
+        for rel, text in {f"specs/features/{SPEC_ID}-a.md": SPEC, "tests/test_a.py": TEST}.items():
             test_mth._write(root / rel, text)
         names = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
         reads: collections.Counter[Path] = collections.Counter()
