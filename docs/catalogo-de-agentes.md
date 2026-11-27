@@ -129,7 +129,7 @@ El arnés con modelo todavía no está en el repo. `tests/test_catalog.py` solo 
 
 Flujo de una llamada: el shim lee el payload; si no trae `agent_id` ni `agent_type` (sesión principal), sale con 0 sin lanzar Python. Con un subagente llama a `mth agent-guard`, que deja pasar a los agentes que no son del catálogo (`methodology:verificador`, `Explore`, los propios del repo sin cabecera ni guard) y aplica su guard a los del catálogo. Un agente es del catálogo si su `.md` tiene cabecera de plantilla **o** existe su guard: si alguien borra la cabecera al adaptarlo a mano, queda bloqueado hasta `mth agents sync --force` o `mth agents remove`. Sin lanzador (plugin ausente o anterior a 0.8.0), el shim bloquea solo a los agentes del catálogo y a los que no puede identificar (un `agent_type` repetido en el payload, por ejemplo dentro de los argumentos de una herramienta, cuenta como no identificable). El shim y el guard acotan su tiempo (5 s por llamada a `git`, 15 s el guard por su cuenta, 20 s el shim sobre el guard; la entrada del hook, 30 s): si vence, bloquean y queda registrado. El shim usa `timeout` y, donde no existe (macOS sin coreutils), `perl`; sin ninguno de los dos, bloquea a los subagentes en vez de ejecutarlos sin límite. Sale con 0 (permite) o 2 (bloquea, motivo en stderr con el prefijo `[mth-agent-guard]`). Falla cerrado ante cualquier error; la tabla de fallos está en SPEC-0012.
 
-## Los 12 agentes
+## Los 13 agentes
 
 Datos de los `meta.toml` y `guard.toml` del catálogo.
 
@@ -146,6 +146,7 @@ Datos de los `meta.toml` y `guard.toml` del catálogo.
 | `analista-evals` | trabajador | opcional | Read, Grep, Glob, Bash, Write | denylist; escritura solo en `{{vars.reports}}/**` (por defecto `.work/evals`) | variable `results`; `local_required` |
 | `lector-estado` | trabajador | opcional | Read, Bash | allowlist: solo `mth db-query` (+ `head`, `wc`) | variable `databases` |
 | `respondedor-incidencias` | trabajador | opcional | Read, Grep, Glob, Bash | allowlist de git y `gh` de solo lectura; `gh api` sin `--method`, `-f`, `-F`, `--field`, `--input`… | ninguno (`upstream_remote` opcional) |
+| `auditor-estatico` | trabajador | opcional | Read, Grep, Glob, Bash, Write | allowlist: git de lectura, `mth audit packs\|verify` y `hadolint`; escritura solo en `.work/security-report/**` | ninguno |
 | `orquestador` | principal | autonomo | todas (sin `tools` en el frontmatter) | `delegate = "global"` | ninguno |
 
 Los revisores tienen `review.order` 10 (seguridad), 20 (fallos), 25 (adr), 30 (diseño) y 40 (parsimonia), y se exigen en `feat`, `fix` y `hotfix`; `revisor-adr` solo cuando el diff toca ADR, dependencias, contenedores, esquemas o workflows (se amplía en `[review.paths]`). `orquestador` es experimental.
