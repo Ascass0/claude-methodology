@@ -30,6 +30,12 @@ class ImportCostTests(unittest.TestCase):
         self.assertNotIn("urllib.request", loaded)
         self.assertNotIn("http.client", loaded)
 
+    def test_loading_the_configuration_does_not_load_the_tool_manager_or_the_archive_modules(self):
+        # regression: config reached tools through secretgate and pulled tarfile, zipfile, hashlib and platform into every command
+        loaded = modules_after("import mthlib.config")
+        for heavy in ("mthlib.tools", "tarfile", "zipfile", "hashlib", "platform"):
+            self.assertNotIn(heavy, loaded)
+
     def test_the_guard_entry_point_skips_the_cli_and_the_configuration_for_a_plain_command(self):
         # regression: the guard imported the whole CLI on every Bash call
         run = ("import io, runpy, sys\n"
