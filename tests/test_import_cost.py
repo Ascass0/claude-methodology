@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,10 +16,10 @@ from mthlib import config, guard  # noqa: E402
 _LOADED = "import sys, json; print(json.dumps(sorted(sys.modules)))"
 
 
-def modules_after(code: str) -> set[str]:
+def modules_after(code: str, cwd: str | None = None) -> set[str]:
     """Modules a fresh interpreter has loaded once ``code`` ran (``-I``: nothing from the caller's environment)."""
     prelude = f"import sys; sys.path.insert(0, {str(SCRIPTS)!r})\n"
-    out = subprocess.run([sys.executable, "-I", "-c", prelude + code + "\n" + _LOADED], capture_output=True, text=True, check=True)
+    out = subprocess.run([sys.executable, "-I", "-c", prelude + code + "\n" + _LOADED], capture_output=True, text=True, check=True, cwd=cwd)
     return set(json.loads(out.stdout.splitlines()[-1]))
 
 
@@ -38,6 +39,17 @@ class ImportCostTests(unittest.TestCase):
                "    assert exc.code == 0, exc.code\n")
         loaded = modules_after(run)
         for heavy in ("mthlib.cli", "mthlib.config", "mthlib.git", "urllib.request"):
+            self.assertNotIn(heavy, loaded)
+
+    def test_the_session_entry_point_skips_the_cli(self):
+        # regression: every session imported the whole CLI
+        run = ("import runpy, sys\n"
+               "sys.argv = ['mth.py', 'session']\n"
+               f"try:\n    runpy.run_path({str(SCRIPTS / 'mth.py')!r}, run_name='__main__')\nexcept SystemExit as exc:\n"
+               "    assert exc.code == 0, exc.code\n")
+        with tempfile.TemporaryDirectory() as outside:  # not a git repository: the hook only says so
+            loaded = modules_after(run, cwd=outside)
+        for heavy in ("mthlib.cli", "urllib.request"):
             self.assertNotIn(heavy, loaded)
 
     def test_the_guard_still_confirms_exactly_the_autonomy_levels_the_configuration_defines(self):
