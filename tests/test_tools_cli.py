@@ -78,6 +78,7 @@ class ToolsCliTests(unittest.TestCase):
         self.mth("install", "faketool")
         stale = self.tmp / "cache" / "faketool" / "0.0.1"
         stale.mkdir()
+        (stale / tools.META).write_text("{}")
         self.assertTrue(stale.exists())
         code, out, _ = self.mth("prune")
         self.assertEqual(code, 0)
