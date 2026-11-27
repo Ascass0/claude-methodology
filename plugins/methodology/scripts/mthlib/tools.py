@@ -6,6 +6,7 @@ checked before every use of a managed copy.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -18,8 +19,6 @@ import tarfile
 import tempfile
 import time
 import tomllib
-import urllib.error
-import urllib.request
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -242,11 +241,19 @@ def resolve(tool: Tool, minimum: tuple[int, int, int] | None = None, root: Path 
 
 
 # -- download --------------------------------------------------------------------------
-class _HttpsOnly(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001 — stdlib signature
-        if not newurl.startswith("https://"):
-            raise urllib.error.URLError(f"redirección a un destino que no es https: {newurl}")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+@functools.cache
+def _https_only() -> type:
+    """Redirect handler that refuses plain http; built on first use because importing urllib costs every command."""
+    import urllib.error
+    import urllib.request
+
+    class HttpsOnly(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001 — stdlib signature
+            if not newurl.startswith("https://"):
+                raise urllib.error.URLError(f"redirección a un destino que no es https: {newurl}")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    return HttpsOnly
 
 
 def download(url: str, dest: Path, limit: int, timeout: float) -> None:
@@ -256,7 +263,9 @@ def download(url: str, dest: Path, limit: int, timeout: float) -> None:
         MthError: The body is larger than ``limit``.
         OSError: Network failure or timeout (the caller retries).
     """
-    opener = urllib.request.build_opener(_HttpsOnly)
+    import urllib.request
+
+    opener = urllib.request.build_opener(_https_only())
     request = urllib.request.Request(url, headers={"User-Agent": "claude-methodology"})
     total = 0
     deadline = time.monotonic() + DOWNLOAD_TOTAL
@@ -279,7 +288,8 @@ def _fetch_with_retries(fetch: Fetch, url: str, dest: Path, sleep: Callable[[flo
             fetch(url, dest, MAX_DOWNLOAD, DOWNLOAD_TIMEOUT)
             return
         except OSError as exc:  # URLError and timeouts are OSError: retry with growing waits
-            permanent = isinstance(exc, urllib.error.HTTPError) and 400 <= exc.code < 500 and exc.code not in (408, 429)
+            code = getattr(exc, "code", None)  # only urllib's HTTPError carries one
+            permanent = isinstance(code, int) and 400 <= code < 500 and code not in (408, 429)
             if permanent or attempt == ATTEMPTS - 1:
                 raise MthError(f"No se pudo descargar {url}: {exc}.",
                                hint=f"Comprueba la red o el proxy, o instala {name} a mano en el PATH.") from exc

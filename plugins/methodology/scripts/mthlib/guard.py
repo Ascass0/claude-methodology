@@ -18,10 +18,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import AUTONOMY_LEVELS, CONFIG_PATH, load
 from .errors import MthError
-from .git import Git
-from .work import WORK_DIR
 
 _WRAPPERS = {"sudo", "doas", "env", "command", "nohup", "time", "exec", "nice", "ionice", "timeout", "xargs", "setsid",
              "stdbuf", "flock", "taskset", "chrt", "unbuffer", "watch", "parallel"}  # run another command
@@ -47,7 +44,6 @@ CONFIRM: dict[str, set[tuple[str, str]]] = {
     "supervised": _UNTIL_PR | {("mth", "commit"), ("mth", "branch"), ("mth", "reconfigure"),
                                ("git", "commit"), ("git", "push")},
 }
-assert set(CONFIRM) == set(AUTONOMY_LEVELS)
 
 
 @dataclass(frozen=True)
@@ -58,7 +54,15 @@ class Context:
     autonomy: str
 
 
+def _work_dir() -> str:
+    from .work import WORK_DIR  # lazy: most Bash calls never reach the checks that need it
+    return WORK_DIR
+
+
 def _context(cwd: Path) -> Context:
+    from .config import CONFIG_PATH, load  # lazy: the guard runs on every Bash call and most need no configuration
+    from .git import Git
+
     try:
         git = Git.discover(cwd)
     except MthError:
@@ -134,7 +138,7 @@ def _forces_work_dir(args: list[str]) -> bool:
     if any(a in ("-A", "--all") or (a.startswith("-") and not a.startswith("--") and "A" in a[1:]) for a in args):
         return True
     paths = [a.removeprefix("./") for a in args if not a.startswith("-")]
-    return any(p in _WHOLE_TREE or p.rstrip("/") == WORK_DIR or p.startswith(f"{WORK_DIR}/") for p in paths)
+    return any(p in _WHOLE_TREE or p.rstrip("/") == _work_dir() or p.startswith(f"{_work_dir()}/") for p in paths)
 
 
 def _skip_forge_options(tok: list[str]) -> list[str]:
@@ -215,7 +219,7 @@ def violation(command: str, protected: set[str], current: str | None) -> str | N
             if any(r.split(":")[-1] in protected for r in refspecs) or (not refspecs and on_protected):
                 return f"no se hace push directo a {'/'.join(sorted(protected))}: usa mth integrate"
         if sub == "add" and _forces_work_dir(args):
-            return f"{WORK_DIR}/ es local y no se versiona"
+            return f"{_work_dir()}/ es local y no se versiona"
         if sub == "rebase" and not ({"--abort", "--quit"} & set(args)):
             return "rebase reescribe historia: usa `mth sync` (merge)"
         if sub == "pull" and ({"--rebase", "-r"} & set(args) or any(a.startswith("--rebase=") for a in args)):
