@@ -157,11 +157,14 @@ def _read_applied(text: str) -> list[update.Gap]:
 
 
 def _generated(lines: list[str]) -> tuple[int, int] | None:
-    """Span of the generated list of applied gaps: ``1. `` and the bullets under it.
+    """Span of the generated list of applied gaps: ``1. `` and the bullets under it, in the Decision section.
 
     The rest (the pending list the person rewrites as they decide, and every other section) is theirs.
     """
-    start = next((i for i, line in enumerate(lines) if line.startswith("1. ")), None)
+    headings = [i for i, line in enumerate(lines) if line.startswith("## ")]
+    if len(headings) < 3:
+        return None  # Context, Decision and at least one more section
+    start = next((i for i in range(headings[1], headings[2]) if lines[i].startswith("1. ")), None)
     if start is None:
         return None
     end = start + 1

@@ -405,6 +405,21 @@ class ApplyTests(unittest.TestCase):
         self.assertIn(consequence, text)
         self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the new gap is recorded
 
+    def test_resume_warns_and_regenerates_an_adr_that_lost_its_structure(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        adr = self.work / next(f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+                               if f.endswith(UPDATE_ADR))
+        adr.write_text("# Notas sueltas\n\nSin lista numerada.\n")
+        self.mth("agents", "add", "revisor-seguridad")
+        agent = self.work / ".claude/agents/revisor-seguridad.md"
+        agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
+        output = self.mth("update")
+        self.assertIn("no tiene la estructura generada", output)  # it says so before dropping the notes
+        text = adr.read_text()
+        self.assertNotIn("Notas sueltas", text)
+        self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the ADR is whole again
+
     def test_resume_finishes_an_interrupted_run_with_only_its_own_paths(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")
