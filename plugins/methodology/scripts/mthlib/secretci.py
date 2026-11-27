@@ -18,15 +18,24 @@ PLACEHOLDER = "@BASELINE@"
 SAFE_BASELINE = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")  # the value comes from the repo and ends inside a CI script
 
 
-def render(baseline: str) -> str:
-    """The workflow text for ``baseline``.
+def check_baseline(baseline: str) -> None:
+    """Fail unless ``baseline`` is safe to put inside the workflow script.
 
     Raises:
         MthError: ``baseline`` has characters that could change the script around it.
     """
     if not SAFE_BASELINE.fullmatch(baseline) or ".." in baseline.split("/"):
         raise MthError(f"'secrets.baseline' = {baseline!r} tiene caracteres que no se admiten en el workflow.",
-                       hint="Usa solo letras, cifras, '.', '_', '-' y '/'.")
+                       hint="Usa solo letras, cifras, '.', '_', '-' y '/', sin empezar por '-' ni usar '..'.")
+
+
+def render(baseline: str) -> str:
+    """The workflow text for ``baseline``.
+
+    Raises:
+        MthError: ``baseline`` is unsafe (see :func:`check_baseline`).
+    """
+    check_baseline(baseline)
     return TEMPLATE.read_text(encoding="utf-8").replace(PLACEHOLDER, baseline)
 
 

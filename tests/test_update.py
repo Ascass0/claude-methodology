@@ -281,6 +281,23 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(self.git("branch", "--show-current"), "development")
         self.assertEqual((self.work / ".claude/methodology.toml").read_text(), self.before)
 
+    def test_a_pre_commit_hook_that_cannot_be_installed_stops_the_update_before_touching_anything(self):
+        # verifies: SPEC-0024/FM-04
+        self.mth("branch", "chore", "secrets-hook")
+        cfg = self.work / ".claude/methodology.toml"
+        text = cfg.read_text().replace('\nhook = ""', '\nhook = "on"', 1).replace('pre_commit = "own"', 'pre_commit = "chain"', 1)
+        cfg.write_text(text)
+        test_mth._write(self.work / ".husky/pre-commit", "#!/bin/sh\nexit 0\n")
+        self.git("add", "-A")
+        self.mth("commit", "--type", "chore", "--scope", "methodology", "--summary", "enable the secrets hook",
+                 "--body", "Chain a versioned pre-commit hook.", "--refs", "n/a")
+        self.mth("integrate", "--title", "chore(methodology): enable the secrets hook", "--summary", "Hook.")
+        self.before = cfg.read_text()
+        self.git("config", "core.hooksPath", ".husky")
+        out = self.mth("update", ok=False)
+        self.assertIn("versionado", out)
+        self.untouched()
+
     def test_applies_the_automatic_gaps_in_one_commit(self):
         # verifies: SPEC-0021/AC-03
         # verifies: SPEC-0021/AC-04

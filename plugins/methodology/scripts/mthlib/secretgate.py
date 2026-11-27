@@ -15,6 +15,7 @@ from typing import Any
 
 from .errors import MthError
 from .files import atomic_write
+from . import secretci
 from .proc import run
 
 TOOL = "gitleaks"
@@ -51,6 +52,8 @@ def validate(section: dict[str, Any]) -> None:
     for key in ("hook", "ci"):
         if section[key] not in TOGGLES:
             raise MthError(f"'secrets.{key}' = {section[key]!r} debe ser \"\" (sin decidir), \"off\" o \"on\".")
+    if section["ci"] == "on":  # the baseline ends inside the workflow script (SPEC-0024/AC-11)
+        secretci.check_baseline(section["baseline"])
     raw = section["baseline"].strip()
     parts = PurePath(raw).parts
     if not raw or PurePath(raw).is_absolute() or ".." in parts or (parts and parts[0] == ".git"):

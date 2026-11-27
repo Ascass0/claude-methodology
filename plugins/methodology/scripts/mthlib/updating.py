@@ -187,8 +187,6 @@ def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> 
     outdated = update.outdated_agents(repo) if "agentes-desactualizados" in ids else []
     atomic_write(root / CONFIG_PATH, config_text)
     cfg = load(root)
-    if cfg["secrets"]["hook"] == "on":  # fail before any other change when the hook cannot be installed (SPEC-0024/FM-04)
-        setup.check_hook_mode(git, cfg["hooks"]["pre_commit"], setup.PRE_COMMIT)
     if outdated:
         agents.Manager(cfg).sync(outdated, False)
     if "bloque" in ids:
@@ -255,7 +253,9 @@ def apply(start: Path) -> None:
     text = (git.root / CONFIG_PATH).read_text(encoding="utf-8")
     if any(g.id == "config" for g in automatic):
         text = with_keys(text, tomllib.loads(update.TEMPLATE.read_text(encoding="utf-8")), update.missing_keys(repo))
-        parse(git.root, text)  # validate before any mutation
+    new_cfg = parse(git.root, text)  # validate before any mutation
+    if new_cfg["secrets"]["hook"] == "on":  # SPEC-0024/FM-04: nothing is touched when the hook cannot be installed
+        setup.check_hook_mode(git, new_cfg["hooks"]["pre_commit"], setup.PRE_COMMIT)
     if not resuming:
         git.checkout_synced(cfg.development)
         git.out("checkout", "-b", BRANCH)

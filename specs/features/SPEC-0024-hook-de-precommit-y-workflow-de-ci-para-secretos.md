@@ -68,7 +68,7 @@
 | FM-01 | Valor desconocido en `secrets.hook`, `secrets.ci` o `hooks.pre_commit` | Error de configuración que nombra la clave; ningún comando corre | AC-01 |
 | FM-02 | `gitleaks` no instalado, falla o no termina al preparar un commit | El commit se rechaza con el remedio; no se da por limpio | AC-04 |
 | FM-03 | Secreto preparado | El commit se rechaza; se imprime regla, fichero y línea, nunca el valor | AC-03 |
-| FM-04 | Hook `pre-commit` ajeno con `replace` y `pre-commit.pre-mth` ya existente, o directorio de hooks versionado | Error con la instrucción; no se toca ningún fichero | AC-06, AC-07 |
+| FM-04 | Hook `pre-commit` ajeno con `replace` y `pre-commit.pre-mth` ya existente, o directorio de hooks versionado | Error con la instrucción; no se toca ningún fichero (tampoco en `mth update`: se comprueba antes de crear la rama) | AC-06, AC-07 |
 | FM-05 | `pre-commit.local` desaparece o no es ejecutable con `chain` | El hook rechaza el commit y lo explica | AC-06 |
 | FM-06 | Ya existe `.github/workflows/secrets.yml` sin la marca | No se sobrescribe; `mth doctor` avisa | AC-10 |
 | FM-07 | `secrets.baseline` con `-` inicial, `..` o caracteres que no sean letras, cifras, `.`, `_`, `-` o `/` | Error; no se escribe el workflow | AC-11 |
@@ -76,7 +76,7 @@
 | FM-09 | El commit se hace con `--no-verify` | El hook no corre; la CI y `mth integrate` siguen escaneando | AC-09 |
 | FM-10 | La descarga de `gitleaks` en la CI falla, no termina o no coincide con la suma fijada | El job falla (nunca da el escaneo por hecho); la descarga tiene tiempo máximo y reintentos acotados y el job un límite de 15 minutos | AC-09 |
 | FM-11 | Push que reescribe historia: el commit anterior ya no existe en el checkout | `gitleaks` no puede recorrer el rango y el job falla; no se da por limpio | AC-09 |
-| FM-12 | `secrets.baseline` pasa la configuración pero no es válida para el workflow, o el fichero no se puede leer | `mth doctor` y `mth update --plan` lo informan como estado `invalid` y siguen; no se escribe nada | AC-11 |
+| FM-12 | `secrets.ci = "on"` con un `secrets.baseline` no válido para el workflow, o el workflow existente no se puede leer | Con el baseline no válido, error de configuración que nombra la clave; con el fichero ilegible, `mth doctor` informa del estado `invalid` y no se escribe nada | AC-11 |
 
 ## Criterios de aceptación
 
@@ -90,7 +90,7 @@
 - **AC-08**: CUANDO se instala el hook dos veces, `mth` DEBE dejar el mismo resultado que con una.
 - **AC-09**: La plantilla `secrets.yml` DEBE escanear cada `pull_request` y cada `push` a `main` y `development` aunque el hook no se haya ejecutado, tener permisos de solo lectura, descargar `gitleaks` con versión y SHA-256 fijados y con tiempo máximo, reintentos acotados y un límite de tiempo del job, fijar por SHA cada acción que use y no usar acciones de terceros para escanear.
 - **AC-10**: MIENTRAS `secrets.ci = "on"`, `forge = github` y `ci.required = true`, `mth` DEBE escribir `.github/workflows/secrets.yml` desde la plantilla con `secrets.baseline` sustituida; un fichero existente sin la marca NO DEBE sobrescribirse.
-- **AC-11**: SI `secrets.baseline` empieza por `-` o contiene `..` o caracteres distintos de letras, cifras, `.`, `_`, `-` o `/`, ENTONCES `mth` DEBE negarse a escribir el workflow, y `mth doctor` y `mth update --plan` DEBEN informar del estado `invalid` sin detenerse.
+- **AC-11**: SI `secrets.baseline` empieza por `-` o contiene `..` o caracteres distintos de letras, cifras, `.`, `_`, `-` o `/`, ENTONCES, con `secrets.ci = "on"`, la carga de la configuración DEBE fallar nombrando la clave y `mth` NO DEBE escribir el workflow; SI el workflow existente no se puede leer, ENTONCES `mth doctor` DEBE informar del estado `invalid` sin detenerse.
 - **AC-12**: MIENTRAS `secrets.hook = ""`, `mth update --plan` DEBE listar la brecha `secretos-hook` de clase `decision`; y MIENTRAS `secrets.ci = ""` con GitHub y `ci.required = true`, la brecha `secretos-ci`; decididas o sin esas condiciones NO DEBEN listarse.
 - **AC-13**: MIENTRAS `secrets.hook = "on"` y el hook falta o está desactualizado, o `secrets.ci = "on"` y el workflow falta o está desactualizado, `mth update` DEBE corregirlo como brecha `automatica`.
 - **AC-14**: `mth doctor` DEBE marcar ✗ con `secrets.hook = "on"` y `gitleaks` ausente, y ⚠ con el hook o el workflow ausentes o ajenos estando activados, con `secrets.hook` o `secrets.ci` sin decidir, y con `gitleaks` anterior a la versión mínima 8.19.0.

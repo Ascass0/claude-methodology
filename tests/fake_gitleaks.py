@@ -19,6 +19,12 @@ with open(os.environ["FAKE_GITLEAKS_LOG"], "a") as log:
     log.write(json.dumps(argv) + "\n")
 with open(os.environ["FAKE_GITLEAKS_LOG"] + ".paths", "a") as paths:
     paths.write(report + "\n")
+if os.environ.get("FAKE_GITLEAKS_GITLOG"):  # like the real tool: an unreachable range is a tool failure
+    import subprocess
+    for arg in argv:
+        if arg.startswith("--log-opts=") and subprocess.run(
+                ["git", "-C", argv[1], "log", "--oneline", arg.split("=", 1)[1]], capture_output=True).returncode:
+            sys.exit(1)
 if mode == "error":
     print("fatal: leaked TOPSECRET in output", file=sys.stderr)
     sys.exit(1)
