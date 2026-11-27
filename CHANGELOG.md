@@ -6,6 +6,15 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.18.0] - 2026-11-27
+
+### Añadido
+- Nuevo agente opcional `auditor-ejecucion` y packs `tls` (RFC 9325) y `ssh` (ssh-audit): audita TLS y SSH de servicios en marcha. Su única vía de red es `mth audit scan`, que ejecuta `testssl` o `ssh-audit` solo contra los destinos de la nueva clave `audit.targets` (vacía por defecto; coincidencia exacta, sin comodines), sin shell, con tiempo y salida acotados. Las herramientas las instala quien audita; sin ellas, el control queda `no evaluable`. (SPEC-0028, ADR-0025)
+- Las specs compactas pueden declarar su superficie de seguridad con la cabecera `- Seguridad:` (`ninguna`, o `entrada externa`, `autenticación`, `datos sensibles`). Con superficie declarada, `mth trace` exige al menos un criterio de seguridad con la etiqueta `[SEG]` (`[SEC]` en inglés) y su test. Las specs sin la cabecera no cambian. (SPEC-0026)
+- Las plantillas de spec llevan `- Seguridad: ninguna`, la skill `mth-spec` lo explica y `revisor-seguridad` (1.2.0) contrasta la superficie declarada con el diff. (SPEC-0026)
+- `mth audit packs` lista los packs de línea base del auditor (`comun`, `docker` y `kubernetes`: versión, controles, fecha de revisión, vigencia y hash) y `mth audit verify` con el informe valida un informe contra su pack: solo controles reales, resultado con evidencia para los mínimos, versión y hash coincidentes, y nunca «certificado». `mth doctor` avisa de packs caducados cuando el auditor está instalado. (SPEC-0027, ADR-0024)
+- Nuevo agente opcional `auditor-estatico` (catálogo) y skill `mth-audit`: auditan un dominio contra su pack con herramientas offline, solo lectura y escribiendo únicamente en `.work/security-report/`. Sin la herramienta, el control queda `no evaluable`. (SPEC-0027, ADR-0024)
+
 ## [0.17.0] - 2026-11-27
 
 ### Añadido
