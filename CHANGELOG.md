@@ -6,6 +6,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 <!-- mth:releases -->
 
+## [0.19.0] - 2026-11-27
+
+### Cambiado
+- Cada comando de `mth` importa solo los módulos que usa, en lugar de cargar toda la CLI al arrancar. Medianas de 20 ejecuciones: `mth --version` de 126 a 50 ms, `mth plan list` de 137 a 104 ms, `mth models` de 140 a 105 ms y `mth review status` de 143 a 116 ms; con el lanzador `sh`, `mth status` baja de 173-221 a 141-145 ms, y con el intérprete de Python solo de 141-157 a 128-135 ms. La salida, el stderr y el código de salida son idénticos en los 40 casos comparados, incluida la ayuda de cada subcomando. (SPEC-0004, SPEC-0012, SPEC-0014, SPEC-0022, SPEC-0023, SPEC-0025, SPEC-0028, ADR-0023)
+- La configuración ya no carga el gestor de herramientas ni los módulos de archivos (`tarfile`, `zipfile`, `hashlib`, `platform`) en cada comando: se importan cuando se descarga, se extrae o se calcula un digest. (SPEC-0004, SPEC-0012, SPEC-0014, SPEC-0022, SPEC-0023, SPEC-0025, SPEC-0028, ADR-0023)
+- El hook de sesión deja de cargar el código de adopción (`setup`, `adoption`, `survey`, `audit`): los hooks de git y el registro del lanzador viven ahora en `mthlib/hooks.py`. (SPEC-0004, SPEC-0012, SPEC-0014, SPEC-0022, SPEC-0023, SPEC-0025, SPEC-0028, ADR-0023)
+- Sin mejora apreciable: el hook de sesión (~125 ms) y `mth trace` (~270 ms), que dependen sobre todo de validar la configuración y de leer los documentos. No se alcanzan los objetivos fijados (`status` < 90 ms, sesión < 100 ms, `trace` < 250 ms). (SPEC-0004, SPEC-0012, SPEC-0014, SPEC-0022, SPEC-0023, SPEC-0025, SPEC-0028, ADR-0023)
+- El guard de `Bash` tarda 36 ms por llamada en lugar de 128 ms: ya no carga la CLI ni la pila de red, y solo lee la configuración y git para comandos que mencionan git, gh, glab o mth. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0010, SPEC-0014, SPEC-0024, SPEC-0025)
+- El hook de sesión pasa de 160 a 120 ms, y el hook `commit-msg` de 187 a 80 ms, al no cargar la CLI completa. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0010, SPEC-0014, SPEC-0024, SPEC-0025)
+- El hook `pre-commit` de secretos ya no lanza gitleaks cuando el commit solo borra ficheros o no añade contenido (de 711 a 139 ms); sigue rechazando el commit si gitleaks falta, y con ficheros preparados los escanea como antes. Un gitleaks roto o colgado ya no rechaza un commit que no añade contenido, porque no hay nada que escanear. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0010, SPEC-0014, SPEC-0024, SPEC-0025)
+- `mth trace` lee cada documento una vez (de 638 a 267 lecturas) y baja de 366 a 299 ms, con la misma salida. (SPEC-0004, SPEC-0005, SPEC-0006, SPEC-0007, SPEC-0010, SPEC-0014, SPEC-0024, SPEC-0025)
+
+### Corregido
+- `mth update` ya no borra lo que anotaste en el ADR de actualización al volver a ejecutarse en `chore/update-methodology`: solo amplía la lista de brechas aplicadas, añade los pendientes nuevos y conserva tus decisiones y el resto del documento. Si el ADR ya no tiene la estructura generada, se detiene sin tocarlo para no perder lo que escribiste. (SPEC-0021, ADR-0017)
+
 ## [0.18.0] - 2026-11-27
 
 ### Añadido
