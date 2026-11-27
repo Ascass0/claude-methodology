@@ -7,19 +7,15 @@ checked before every use of a managed copy.
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 import os
-import platform
 import re
 import shutil
 import stat
 import sys
-import tarfile
 import tempfile
 import time
 import tomllib
-import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -152,6 +148,8 @@ def tool_named(name: str, manifest: dict[str, Tool] | None = None) -> Tool:
 # -- platform and cache ----------------------------------------------------------
 def platform_key() -> str:
     """``<sistema>_<arquitectura>`` of this machine (for example ``linux_x64``)."""
+    import platform
+
     system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(platform.system(), platform.system().lower())
     machine = platform.machine().lower()
     arch = "arm64" if machine in ("arm64", "aarch64") else "x64" if machine in ("x86_64", "amd64") else machine
@@ -173,6 +171,8 @@ def cache_root(env: dict[str, str] | None = None) -> Path:
 
 
 def _sha256(path: Path) -> str:
+    import hashlib
+
     digest = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -319,6 +319,8 @@ def _copy(source: IO[bytes], target: Path, executable: bool, budget: list[int]) 
 
 
 def _extract_tar(archive: Path, dest: Path) -> None:
+    import tarfile  # lazy: only an install extracts
+
     budget = [MAX_EXTRACTED]
     try:
         with tarfile.open(archive, "r:gz") as tar:
@@ -340,6 +342,8 @@ def _extract_tar(archive: Path, dest: Path) -> None:
 
 
 def _extract_zip(archive: Path, dest: Path) -> None:
+    import zipfile  # lazy: only an install extracts
+
     budget = [MAX_EXTRACTED]
     try:
         with zipfile.ZipFile(archive) as bundle:

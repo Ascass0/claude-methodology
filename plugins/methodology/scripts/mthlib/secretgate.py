@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
-from . import secretci, tools
+from . import secretci
 from .errors import MthError
 from .files import atomic_write
 from .proc import run
@@ -73,12 +73,14 @@ def baseline_path(root: Path, section: dict[str, Any]) -> Path:
     return path
 
 
-def resolve() -> tools.Resolved:
+def resolve() -> "tools.Resolved":
     """Where to run ``gitleaks`` from: the PATH if it reaches ``MIN_VERSION``, else the managed copy (SPEC-0025, ADR-0023).
 
     Raises:
         MthError: There is no ``gitleaks`` (with the remedy) or the managed copy was altered.
     """
+    from . import tools  # lazy: it brings tarfile, zipfile and hashlib, and importing the configuration must not
+
     try:
         return tools.resolve(tools.tool_named(TOOL), MIN_VERSION)
     except tools.NotFound as exc:
