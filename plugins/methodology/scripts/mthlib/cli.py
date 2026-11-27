@@ -7,17 +7,23 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import (__version__, agent_guard, agents, audit, branches, catalog, changelog, commitcheck, commits, db_query, flow, guard, plan, plans,
-               review, scan, session, setup, survey, tools, update, updating)
-from .config import load
+from typing import TYPE_CHECKING
+
+from . import __version__
 from .errors import EXIT_ERROR, MthError, run_guarded
-from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
-                   start, sync)
-from .git import Git
-from .log import Tracer, say, warn
+from .log import say, warn
+
+# Every command imports the modules it uses when it runs: `mth` pays for what a command needs, not for the
+# whole package (a command that needs none of the others does not load them).
+if TYPE_CHECKING:
+    from .flow import Ctx
 
 
 def _ctx(command: str) -> Ctx:
+    from .git import Git
+    from .log import Tracer
+    from .config import load
+    from .flow import Ctx
     git = Git.discover(Path.cwd())
     cfg = load(git.root)
     git.remote = cfg.remote
@@ -25,6 +31,7 @@ def _ctx(command: str) -> Ctx:
 
 
 def _split_refs(value: str | None) -> list[str]:
+    from . import commits
     return [r.strip() for r in (value or "").split(",") if r.strip() and r.strip().lower() != commits.NO_REFS]
 
 
@@ -37,10 +44,12 @@ def _text(value: str | None, file: str | None, name: str) -> str:
 
 
 def _cmd_check_msg(args: argparse.Namespace) -> int:
+    from . import commitcheck
     return commitcheck.check_file(args.file)
 
 
 def _cmd_trace(args: argparse.Namespace) -> int:
+    from . import flow
     ctx = _ctx("trace")
     checker, limit_result = flow.trace_checker(ctx), flow.line_limits(ctx)
     findings, legacy = flow.run_trace(ctx, checker, limit_result)
@@ -65,6 +74,7 @@ def _cmd_trace(args: argparse.Namespace) -> int:
 
 
 def _cmd_changes(args: argparse.Namespace) -> int:
+    from . import branches, changelog
     ctx = _ctx("changes")
     folder = ctx.path("changes")
     if args.action == "new":
@@ -91,6 +101,8 @@ def _cmd_changes(args: argparse.Namespace) -> int:
 
 
 def _cmd_review(args: argparse.Namespace) -> int:
+    from . import branches, review
+    from .flow import required_reviewers
     ctx = _ctx("review")
     branch, sha = ctx.git.current_branch(), ctx.git.sha("HEAD")
     agents = ctx.cfg["review"]["agents"]
@@ -155,6 +167,7 @@ _MODEL_ARG = re.compile(r"^(T-\d{2})=([a-z]+)$")
 
 def _plan_tasks(ctx: Ctx, spec_id: str) -> tuple[str, list[plan.Task]]:
     """Valid tasks of the spec's plan; prints every problem and fails when there are any."""
+    from . import plan
     rel, text = _spec_text(ctx, spec_id)
     vocab = ctx.cfg.vocab
     if not plan.has_plan(text, vocab):
@@ -185,6 +198,7 @@ def _model_overrides(values: list[str] | None, wave_tasks: set[str], ladder: lis
 
 
 def _cmd_plan_stats(ctx: Ctx, spec: str | None) -> int:
+    from . import plan
     path = ctx.git.git_dir() / "mth" / "trace.jsonl"
     if not path.is_file():
         say("No hay datos: la traza aún no registra tareas verificadas.")
@@ -208,6 +222,7 @@ AGREED_ACTIONS = ("new", "agree", "list", "show", "done")  # SPEC-0023: plans ag
 
 
 def _plan_list(ctx: Ctx) -> int:
+    from . import flow, plans
     found, broken = plans.listing(flow.plans_dir(ctx))
     for p in found:
         print(f"{p.ident} · {p.state} · {p.title}" + (f" · {', '.join(p.branches)}" if p.branches else ""))
@@ -219,12 +234,14 @@ def _plan_list(ctx: Ctx) -> int:
 
 
 def _plan_new(ctx: Ctx, slug: str, title: str | None) -> int:
+    from . import flow, plans
     path = plans.create(flow.plans_dir(ctx), slug, title or slug.replace("-", " ").capitalize())
     say(f"✓ Plan creado: {path.relative_to(ctx.root)} (en borrador; redáctalo con la skill mth-plan)")
     return 0
 
 
 def _plan_transition(ctx: Ctx, ident: str, state: str) -> int:
+    from . import flow, plans
     plan = plans.transition(plans.find(flow.plans_dir(ctx), ident), state)
     ctx.tracer.event("plan.transition", plan=plan.ident, state=plan.state)
     say(f"✓ {plan.ident} pasa a «{plan.state}»")
@@ -233,6 +250,7 @@ def _plan_transition(ctx: Ctx, ident: str, state: str) -> int:
 
 def _cmd_agreed_plan(ctx: Ctx, args: argparse.Namespace) -> int:
     """The actions of SPEC-0023; ``args.target`` is the slug of ``new`` or the PLAN-NNNN of the others."""
+    from . import flow, plans
     action = args.action
     if action == "list":
         return _plan_list(ctx)
@@ -249,6 +267,7 @@ def _cmd_agreed_plan(ctx: Ctx, args: argparse.Namespace) -> int:
 
 
 def _cmd_plan(args: argparse.Namespace) -> int:
+    from . import plan
     ctx = _ctx("plan")
     if args.action in AGREED_ACTIONS:
         return _cmd_agreed_plan(ctx, args)
@@ -314,6 +333,7 @@ def _cmd_models(_: argparse.Namespace) -> int:
 
 def _cmd_tools(args: argparse.Namespace) -> int:
     """``mth tools``: list the managed tools, install one on explicit request, or prune the cache (SPEC-0025)."""
+    from . import tools
     manifest = tools.load_manifest()
     if args.action != "install" and (args.tool or args.force):
         raise MthError("Solo `mth tools install` admite una herramienta y --force.")
@@ -336,6 +356,7 @@ def _cmd_tools(args: argparse.Namespace) -> int:
 
 
 def _audit_packs() -> int:
+    from . import audit
     today = date.today()
     for pack in audit.load_packs().values():
         state = "caducado" if pack.expired(today) else "vigente"
@@ -344,6 +365,7 @@ def _audit_packs() -> int:
 
 
 def _audit_verify(report: str | None) -> int:
+    from . import audit
     if not report:
         raise MthError("mth audit verify necesita el informe.", hint="mth audit verify .work/security-report/<informe>.md")
     problems = audit.verify_report(audit.read_report(Path(report)), audit.load_packs())
@@ -355,6 +377,9 @@ def _audit_verify(report: str | None) -> int:
 
 
 def _audit_scan(tool: str | None, target: str | None) -> int:
+    from . import scan
+    from .git import Git
+    from .config import load
     if not (tool and target):
         raise MthError("mth audit scan necesita la herramienta y el destino.", hint="mth audit scan testssl host:443")
     cfg = load(Git.discover(Path.cwd()).root)
@@ -373,6 +398,9 @@ def _cmd_audit(args: argparse.Namespace) -> int:
 
 
 def _cmd_survey(args: argparse.Namespace) -> int:
+    from . import survey
+    from .git import Git
+    from .config import load
     git = Git.discover(Path.cwd())
     result = survey.reconfigure(git, load(git.root), args.only) if args.reconfigure else survey.run(git)
     if args.json:
@@ -395,6 +423,9 @@ def _cmd_survey(args: argparse.Namespace) -> int:
 
 
 def _cmd_db_query(args: argparse.Namespace) -> int:
+    from . import catalog, db_query
+    from .git import Git
+    from .config import load
     if args.schema == bool(args.sql):
         raise MthError("Indica --schema o una consulta SQL, no ambas.")
     git = Git.discover(Path.cwd())
@@ -405,6 +436,9 @@ def _cmd_db_query(args: argparse.Namespace) -> int:
 
 
 def _cmd_agents(args: argparse.Namespace) -> int:
+    from . import agents
+    from .git import Git
+    from .config import load
     git = Git.discover(Path.cwd())
     manager = agents.Manager(load(git.root))
     if args.action == "list":
@@ -422,6 +456,7 @@ def _cmd_agents(args: argparse.Namespace) -> int:
 
 
 def _cmd_smoke(args: argparse.Namespace) -> int:
+    from .git import Git
     from . import smoke  # lazy: it builds on agents and setup
     git = Git.discover(Path.cwd())
     try:
@@ -438,12 +473,14 @@ def _cmd_smoke(args: argparse.Namespace) -> int:
 
 
 def _cmd_status(_: argparse.Namespace) -> int:
+    from . import session
     for line in session._state(Path.cwd()):
         print(line)
     return 0
 
 
 def _parser() -> argparse.ArgumentParser:
+    from . import commits
     p = argparse.ArgumentParser(prog="mth", description="claude-methodology")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
@@ -577,12 +614,16 @@ def _parser() -> argparse.ArgumentParser:
 def _dispatch(args: argparse.Namespace) -> int:
     c = args.command
     if c == "guard":
+        from . import guard
         return guard.main(sys.stdin.read())
     if c == "agent-guard":  # SPEC-0012: its own entry point, fails closed
+        from . import agent_guard
         return agent_guard.main(sys.stdin.read())
     if c == "session":
+        from . import session
         return session.main()
     if c == "init":
+        from . import setup
         if args.decline:
             setup.decline(Path.cwd())
         else:
@@ -596,16 +637,21 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.json and not args.plan:
             raise MthError("--json solo se usa con --plan.")
         if args.plan:
+            from . import update
             update.plan(Path.cwd(), args.json)
         else:
+            from . import updating
             updating.apply(Path.cwd())
         return 0
     if c == "reconfigure":
+        from . import setup
         setup.reconfigure(Path.cwd(), args.answers, args.only)
         return 0
     if c == "doctor":
+        from . import setup
         return EXIT_ERROR if setup.doctor(Path.cwd()) else 0
     if c == "github":
+        from . import setup
         ctx = _ctx(c)
         setup.configure_github(ctx.root, ctx.cfg.main, ctx.cfg.development)
         return 0
@@ -635,24 +681,31 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_tools(args)
     if c == "audit":
         return _cmd_audit(args)
+    return _flow_command(c, args)
+
+
+def _flow_command(c: str, args: argparse.Namespace) -> int:
+    """The commands that run a step of the work flow (they all build the context first)."""
+    from . import flow
+
     ctx = _ctx(c)
     if c == "secrets":
         flow.scan_secrets(ctx, args.history, args.accept, args.staged)
     elif c == "doc":
-        new_doc(ctx, args.kind, args.title, args.category)
+        flow.new_doc(ctx, args.kind, args.title, args.category)
     elif c == "branch":
-        start(ctx, args.kind, args.slug, args.child, args.spec, args.plan)
+        flow.start(ctx, args.kind, args.slug, args.child, args.spec, args.plan)
     elif c == "commit":
-        commit(ctx, args.type, args.scope, args.summary, _text(args.body, args.body_file, "body"),
-               _split_refs(args.refs), args.breaking)
+        flow.commit(ctx, args.type, args.scope, args.summary, _text(args.body, args.body_file, "body"),
+                    _split_refs(args.refs), args.breaking)
     elif c == "sync":
-        sync(ctx)
+        flow.sync(ctx)
     elif c == "integrate":
-        integrate(ctx, args.title, _text(args.summary, args.summary_file, "summary"))
+        flow.integrate(ctx, args.title, _text(args.summary, args.summary_file, "summary"))
     elif c == "release":
-        release_plan(ctx, args.allow_major) if args.plan else release(ctx, args.allow_major)
+        flow.release_plan(ctx, args.allow_major) if args.plan else flow.release(ctx, args.allow_major)
     elif c == "hotfix":
-        hotfix_finish(ctx)
+        flow.hotfix_finish(ctx)
     return 0
 
 

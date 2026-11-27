@@ -545,15 +545,15 @@ class ReviewReportTests(RepoTestCase):
         # verifies: SPEC-0013/AC-07
         from unittest import mock
 
-        from mthlib import cli, review
+        from mthlib import branches, cli, flow, review
         self.record(self.report_file("bad.txt", "HALLAZGOS\nninguno\nBLOQUEANTES: 1\n"), ok=False)
         approved, state = review.describe(self.recorded()["verificador"])
         self.assertFalse(approved)
         self.assertTrue(state.startswith("fallida (intento 1): el revisor declara 1"))
         # The command prints that state; the test repo has no remote, so the branch lookup is stubbed.
         info = mock.Mock()
-        with mock.patch.object(cli.branches, "parse", return_value=info), \
-                mock.patch.object(cli, "required_reviewers", return_value=["verificador"]), \
+        with mock.patch.object(branches, "parse", return_value=info), \
+                mock.patch.object(flow, "required_reviewers", return_value=["verificador"]), \
                 mock.patch.object(cli, "_ctx") as ctx, mock.patch("builtins.print") as shown:
             ctx.return_value.git.current_branch.return_value = "feat/demo"
             ctx.return_value.git.sha.return_value = self.git("rev-parse", "HEAD").strip()
