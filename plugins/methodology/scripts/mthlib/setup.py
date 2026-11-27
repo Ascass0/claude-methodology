@@ -49,8 +49,6 @@ COMMIT_MSG = HookKind("commit-msg", "commit_msg", 'check-msg "$1"', ' "$1"',
                       'Añade `mth check-msg "$1"` al hook commit-msg de tu gestor de hooks.')
 PRE_COMMIT = HookKind("pre-commit", "pre_commit", "secrets --staged", "",
                       "Añade `mth secrets --staged` al hook pre-commit de tu gestor de hooks.")
-CHAINED_HOOK = f"{COMMIT_MSG.name}.local"
-REPLACED_HOOK = f"{COMMIT_MSG.name}.pre-mth"
 
 
 def _chained(kind: HookKind) -> str:
@@ -417,7 +415,7 @@ def _chainable(git: Git) -> bool:
     hooks = git.hooks_dir()
     hook = hooks / "commit-msg"
     foreign = hook.is_file() and HOOK_MARK not in hook.read_text(encoding="utf-8", errors="replace")
-    return foreign or (hooks / CHAINED_HOOK).is_file()
+    return foreign or (hooks / _chained(COMMIT_MSG)).is_file()
 
 
 def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None:

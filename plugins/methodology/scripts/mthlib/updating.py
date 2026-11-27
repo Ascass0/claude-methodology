@@ -187,6 +187,8 @@ def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> 
     outdated = update.outdated_agents(repo) if "agentes-desactualizados" in ids else []
     atomic_write(root / CONFIG_PATH, config_text)
     cfg = load(root)
+    if cfg["secrets"]["hook"] == "on":  # fail before any other change when the hook cannot be installed (SPEC-0024/FM-04)
+        setup.check_hook_mode(git, cfg["hooks"]["pre_commit"], setup.PRE_COMMIT)
     if outdated:
         agents.Manager(cfg).sync(outdated, False)
     if "bloque" in ids:

@@ -74,8 +74,9 @@ def _state(cwd: Path) -> list[str]:
         lines.append(f"⚠ Hook commit-msg: {exc.message} → {exc.hint or ''}".strip())
     try:
         sync_secrets_hook(git, cfg)  # SPEC-0024: keep the opt-in pre-commit hook in step with secrets.hook
-    except MthError as exc:
-        lines.append(f"⚠ Hook pre-commit: {exc.message} → {exc.hint or ''}".strip())
+    except (MthError, OSError) as exc:
+        detail = f"{exc.message} → {exc.hint or ''}" if isinstance(exc, MthError) else str(exc)
+        lines.append(f"⚠ Hook pre-commit: {detail}".strip())
     try:
         register_launcher(git)  # SPEC-0012: the agent-guard shim reads it
     except (MthError, OSError) as exc:

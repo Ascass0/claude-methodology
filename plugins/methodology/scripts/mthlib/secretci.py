@@ -15,7 +15,7 @@ TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "workflows" / "se
 WORKFLOW = Path(".github") / "workflows" / "secrets.yml"
 MARK = "# claude-methodology:secrets-workflow"
 PLACEHOLDER = "@BASELINE@"
-SAFE_BASELINE = re.compile(r"[A-Za-z0-9._/-]+")  # the value comes from the repo and ends inside a CI script
+SAFE_BASELINE = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._/-]*")  # the value comes from the repo and ends inside a CI script
 
 
 def render(baseline: str) -> str:
@@ -24,25 +24,29 @@ def render(baseline: str) -> str:
     Raises:
         MthError: ``baseline`` has characters that could change the script around it.
     """
-    if not SAFE_BASELINE.fullmatch(baseline):
+    if not SAFE_BASELINE.fullmatch(baseline) or ".." in baseline.split("/"):
         raise MthError(f"'secrets.baseline' = {baseline!r} tiene caracteres que no se admiten en el workflow.",
                        hint="Usa solo letras, cifras, '.', '_', '-' y '/'.")
     return TEMPLATE.read_text(encoding="utf-8").replace(PLACEHOLDER, baseline)
 
 
 def state(root: Path, baseline: str) -> str:
-    """``current``, ``stale`` (ours, outdated), ``foreign`` (no mark) or ``absent``."""
+    """``current``, ``stale`` (ours, outdated), ``foreign`` (no mark), ``absent`` or ``invalid`` (unreadable or unsafe baseline)."""
     path = root / WORKFLOW
     if not path.is_file():
         return "absent"
-    text = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        wanted = render(baseline)
+    except (OSError, MthError):
+        return "invalid"  # unreadable file or unsafe baseline: report it, never stop the diagnosis
     if not text.startswith(MARK):
         return "foreign"
-    return "current" if text == render(baseline) else "stale"
+    return "current" if text == wanted else "stale"
 
 
 def install(root: Path, baseline: str) -> str:
-    """Write the workflow unless the file is foreign. Returns the previous state (``foreign`` = left alone).
+    """Write the workflow unless the file is foreign. Returns the previous state (``foreign`` and ``invalid`` = left alone).
 
     Raises:
         MthError: ``baseline`` is unsafe (nothing is written).
