@@ -405,20 +405,19 @@ class ApplyTests(unittest.TestCase):
         self.assertIn(consequence, text)
         self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the new gap is recorded
 
-    def test_resume_warns_and_regenerates_an_adr_that_lost_its_structure(self):
+    def test_resume_refuses_an_adr_that_lost_its_structure_and_leaves_it_untouched(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")
         adr = self.work / next(f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
                                if f.endswith(UPDATE_ADR))
-        adr.write_text("# Notas sueltas\n\nSin lista numerada.\n")
+        notes = "# Notas sueltas\n\nSin lista numerada.\n"
+        adr.write_text(notes)
         self.mth("agents", "add", "revisor-seguridad")
         agent = self.work / ".claude/agents/revisor-seguridad.md"
         agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
-        output = self.mth("update")
-        self.assertIn("no tiene la estructura generada", output)  # it says so before dropping the notes
-        text = adr.read_text()
-        self.assertNotIn("Notas sueltas", text)
-        self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the ADR is whole again
+        output = self.mth("update", ok=False)
+        self.assertIn("no tiene la estructura generada", output)
+        self.assertEqual(adr.read_text(), notes)  # the person's text is still there
 
     def test_resume_finishes_an_interrupted_run_with_only_its_own_paths(self):
         # verifies: SPEC-0021/AC-09
@@ -505,11 +504,6 @@ class AdrTextTests(unittest.TestCase):
         self.assertEqual(merged.count("`formato`"), 1)  # new: added
         self.assertTrue(compact.is_compact(merged, lang.ES))
         self.assertLess(merged.index("`formato`"), merged.index("## Rechazado"))  # inside the Decision section
-
-    def test_an_adr_without_the_generated_structure_is_not_merged(self):
-        # verifies: SPEC-0021/AC-09
-        fresh = updating.adr_text("ADR-0002", None, self.gaps, [], lang.ES, date(2026, 11, 25))
-        self.assertIsNone(updating._merge("# Notas sueltas\n\nSin lista numerada.\n", fresh))
 
     def test_missing_keys_are_added_without_touching_existing_lines(self):
         # verifies: SPEC-0021/AC-03

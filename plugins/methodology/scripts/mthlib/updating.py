@@ -175,12 +175,13 @@ def _generated(lines: list[str]) -> tuple[int, int] | None:
 
 def _new_pending(previous: str, new: list[str], after: int) -> list[str]:
     """Pending-gap bullets of the fresh ADR that the previous text never mentions (``after``: end of the applied list)."""
+    known = {m.group(1) for line in previous.split("\n") if (m := re.match(r"   - `([^`]+)`", line))}
     found = []
     for line in new[after:]:
         if line.startswith("## "):
             break
         ident = re.match(r"   - `([^`]+)`", line)
-        if ident and f"`{ident.group(1)}`" not in previous:
+        if ident and ident.group(1) not in known:
             found.append(line)
     return found
 
@@ -227,9 +228,9 @@ def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update
                     if (m := setup.METHODOLOGY_ADR.search(p.name)) and p != adr)
     text = adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab)
     merged = _merge(previous_text, text) if previous_text else text
-    if merged is None:
-        warn(f"El ADR {adr.name} no tiene la estructura generada: se regenera y se pierde lo que se hubiera anotado en él.")
-        merged = text
+    if merged is None:  # regenerating would destroy what the person wrote in it
+        raise MthError(f"El ADR {adr.name} no tiene la estructura generada (la lista «1.» de brechas aplicadas en la sección de decisión).",
+                       hint="Restáuralo desde git o bórralo para que mth update lo regenere; nada se ha modificado.")
     atomic_write(adr, merged)  # it may now hold notes that cannot be regenerated
     return adr
 
