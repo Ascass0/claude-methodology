@@ -93,12 +93,20 @@ class Tracer:
         self.root = cfg.root
         self.files = [f for f in files if globs.match_any(f, cfg["trace"]["include"])
                       and not globs.match_any(f, cfg["trace"]["exclude"])]
-        self.registry = IdRegistry(cfg, files)
+        self._texts: dict[Path, str | None] = {}
+        self.registry = IdRegistry(cfg, files, self._read)
         self._anchor_cache: dict[str, set[str]] = {}
+        self._verified: dict[tuple[str, str], list[tuple[str, int]]] | None = None
+
+    def _read(self, path: Path) -> str | None:
+        """The text of ``path``, read once per run: the checks and the ID registry all go through here."""
+        if path not in self._texts:
+            self._texts[path] = read_text(path)
+        return self._texts[path]
 
     def run(self) -> list[Finding]:
         findings = self._duplicates()
-        texts = {f: t for f in self.files if (t := read_text(self.root / f)) is not None}
+        texts = {f: t for f in self.files if (t := self._read(self.root / f)) is not None}
         findings += self._references(texts)
         if self.cfg["trace"]["links"]:
             findings += self._links(texts)
@@ -125,7 +133,7 @@ class Tracer:
 
     def single_test(self) -> list[Finding]:
         """Acceptance criteria verified by exactly one test (a warning, never an error)."""
-        texts = {f: t for f in self.files if (t := read_text(self.root / f)) is not None}
+        texts = {f: t for f in self.files if (t := self._read(self.root / f)) is not None}
         spec_kind = self.cfg["trace"]["spec_kind"]
         specs_dir = self.cfg["paths"]["specs"].rstrip("/") + "/"
         counts = self._verifications(texts)
@@ -144,7 +152,9 @@ class Tracer:
         return out
 
     def _verifications(self, texts: dict[str, str]) -> dict[tuple[str, str], list[tuple[str, int]]]:
-        """Places of every ``verifies: SPEC-NNNN/AC-NN`` comment in the test files."""
+        """Places of every ``verifies: SPEC-NNNN/AC-NN`` comment in the test files (computed once per run)."""
+        if self._verified is not None:
+            return self._verified
         id_re = self.registry.kinds[self.cfg["trace"]["spec_kind"]]
         verifies = re.compile(rf"verifies:\s*({id_re})/(AC-\d{{2,3}})", re.IGNORECASE)
         found: dict[tuple[str, str], list[tuple[str, int]]] = {}
@@ -153,6 +163,7 @@ class Tracer:
                 for lineno, line in enumerate(text.splitlines(), 1):
                     for m in verifies.finditer(line):
                         found.setdefault((m.group(1), m.group(2).upper()), []).append((path, lineno))
+        self._verified = found
         return found
 
     def _compact(self, texts: dict[str, str]) -> list[Finding]:
@@ -251,7 +262,7 @@ class Tracer:
 
     def _anchors_of(self, rel: str) -> set[str]:
         if rel not in self._anchor_cache:
-            self._anchor_cache[rel] = _anchors(read_text(self.root / rel) or "")
+            self._anchor_cache[rel] = _anchors(self._read(self.root / rel) or "")
         return self._anchor_cache[rel]
 
     def _acceptance(self, texts: dict[str, str]) -> list[Finding]:
