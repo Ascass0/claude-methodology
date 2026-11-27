@@ -384,6 +384,41 @@ class ApplyTests(unittest.TestCase):
             self.assertIn(gap, text)
         self.assertEqual(text.count("`config`"), 1)  # earlier gaps are kept once, not repeated
 
+    def test_resume_keeps_what_the_person_wrote_in_the_adr(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        adr = self.work / next(f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+                               if f.endswith(UPDATE_ADR))
+        decision = "2. Decide la persona: los documentos no se convierten ahora."
+        consequence = "- **+** Nota propia de la persona."
+        text = adr.read_text()
+        start = text.index("2. ")  # the pending list: the person rewrites it as they decide
+        text = text[:start] + decision + "\n" + text[text.index("\n\n## Rechazado"):]
+        self.assertIn(decision, text)  # the note sits in the Decision section
+        adr.write_text(text.replace("- **+**", f"{consequence}\n- **+**", 1))
+        self.mth("agents", "add", "revisor-seguridad")
+        agent = self.work / ".claude/agents/revisor-seguridad.md"
+        agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
+        self.mth("update")  # resumes: it extends the ADR, it does not rewrite it
+        text = adr.read_text()
+        self.assertIn(decision, text)
+        self.assertIn(consequence, text)
+        self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the new gap is recorded
+
+    def test_resume_refuses_an_adr_that_lost_its_structure_and_leaves_it_untouched(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        adr = self.work / next(f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+                               if f.endswith(UPDATE_ADR))
+        notes = "# Notas sueltas\n\nSin lista numerada.\n"
+        adr.write_text(notes)
+        self.mth("agents", "add", "revisor-seguridad")
+        agent = self.work / ".claude/agents/revisor-seguridad.md"
+        agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
+        output = self.mth("update", ok=False)
+        self.assertIn("no tiene la estructura generada", output)
+        self.assertEqual(adr.read_text(), notes)  # the person's text is still there
+
     def test_resume_finishes_an_interrupted_run_with_only_its_own_paths(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")
@@ -455,6 +490,20 @@ class AdrTextTests(unittest.TestCase):
             self.assertTrue(compact.is_compact(text, vocab), vocab.code)
             self.assertEqual(compact.adr_problems(text, vocab), [], vocab.code)
             self.assertIn("ADR-0001", text)
+
+    def test_a_new_pending_gap_is_added_to_a_resumed_adr_without_repeating_the_known_ones(self):
+        # verifies: SPEC-0021/AC-09
+        known = update.Gap("secretos", update.DECISION, "mode sin decidir", "x")
+        new = update.Gap("formato", update.DECISION, "3 docs", "x")
+        first = updating.adr_text("ADR-0002", None, self.gaps, [known], lang.ES, date(2026, 11, 25))
+        edited = first.replace("2. ", "2. Decidido: ", 1)  # the person rewrites the pending list
+        fresh = updating.adr_text("ADR-0002", None, self.gaps, [known, new], lang.ES, date(2026, 11, 25))
+        merged = updating._merge(edited, fresh)
+        self.assertIn("2. Decidido: ", merged)
+        self.assertEqual(merged.count("`secretos`"), 1)  # already there: not repeated
+        self.assertEqual(merged.count("`formato`"), 1)  # new: added
+        self.assertTrue(compact.is_compact(merged, lang.ES))
+        self.assertLess(merged.index("`formato`"), merged.index("## Rechazado"))  # inside the Decision section
 
     def test_missing_keys_are_added_without_touching_existing_lines(self):
         # verifies: SPEC-0021/AC-03

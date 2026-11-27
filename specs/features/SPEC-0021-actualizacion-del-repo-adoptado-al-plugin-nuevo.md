@@ -108,7 +108,7 @@ Registro inicial:
 - **AC-06**: SI el bloque de CLAUDE.md o el hook `commit-msg` difieren de la plantilla, ENTONCES DEBEN listarse como `automatica` y `mth update` DEBE regenerarlos.
 - **AC-07**: CUANDO se ejecuta `mth update` con el árbol sucio, fuera de `chore/update-methodology` con esa rama existente, o con configuración inválida, `mth` DEBE fallar sin crear rama ni modificar ficheros.
 - **AC-08**: CUANDO se ejecuta `mth update` con brechas `automatica`, `mth` DEBE crear `chore/update-methodology` desde `development` con un único commit que incluye lo aplicado y el ADR de actualización (versión del plugin, brechas aplicadas y pendientes), y subir la rama; SI no hay brechas `automatica`, ENTONCES DEBE fallar con «nada que aplicar» sin crear nada.
-- **AC-09**: CUANDO se vuelve a ejecutar `mth update` en `chore/update-methodology` o tras aplicar, `mth` DEBE aplicar solo lo que falta y `--plan` NO DEBE listar las brechas `automatica` ya aplicadas.
+- **AC-09**: CUANDO se vuelve a ejecutar `mth update` en `chore/update-methodology` o tras aplicar, `mth` DEBE aplicar solo lo que falta, ampliar la lista de brechas aplicadas del ADR de actualización conservando lo que la persona anotó en él, y `--plan` NO DEBE listar las brechas `automatica` ya aplicadas.
 - **AC-10**: Las brechas `informativa` (`humo`, `triangulacion`) NO DEBEN aplicarse ni bloquear nunca `mth update`.
 - **AC-11**: El registro de brechas DEBE definir, para cada brecha, `id`, clase, evidencia y acción, con IDs únicos y una clase válida.
 - **AC-12**: La skill `mth-update` DEBE existir con `model: opus` y `disable-model-invocation: true`, el hook de sesión NO DEBE proponerla y DEBE documentar el flujo y las tres listas de cierre.
