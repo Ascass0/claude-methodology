@@ -144,9 +144,9 @@ docs = "es"
 required_for = ['feat', 'fix', 'hotfix']
 
 [secrets]
-mode = ''
-hook = ''
-ci = ''
+mode = 'block'
+hook = 'on'
+ci = 'on'
 baseline = '.gitleaks-baseline.json'
 
 [audit]

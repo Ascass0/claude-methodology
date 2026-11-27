@@ -15,11 +15,12 @@
 1. Se aplican las brechas automáticas de esta ejecución (sin cambiar ningún valor ya decidido):
    - `config`: roles.planner, plans, secrets, audit, hooks.pre_commit
    - `agentes-desactualizados`: revisor-seguridad
-2. Quedan pendientes; las conduce la skill `mth-update` o la persona:
-   - `secretos` (decision): secrets.mode sin decidir: no se buscan secretos al integrar
-   - `secretos-hook` (decision): secrets.hook sin decidir: no se escanea lo preparado antes de cada commit
-   - `secretos-ci` (decision): secrets.ci sin decidir: la CI no escanea secretos en cada PR
-   - `triangulacion` (informativa): 97 criterios con un único test
+2. Decide la persona (skill `mth-update`):
+   - `secretos`: `secrets.mode = "block"`: `mth integrate` bloquea si gitleaks encuentra secretos en la rama.
+   - `secretos-hook`: `secrets.hook = "on"`: el hook `pre-commit` escanea lo preparado (`hooks.pre_commit = "own"`, sin hook ajeno).
+   - `secretos-ci`: `secrets.ci = "on"`: workflow de secretos en cada PR; la protección de rama debe exigir su comprobación.
+3. Queda pendiente:
+   - `triangulacion` (informativa): 97 criterios con un único test.
 
 ## Rechazado
 
@@ -30,6 +31,7 @@
 
 - **+** `mth update --plan` lista lo que falta y queda en «al día» al terminar.
 - **−** Lo pendiente exige trabajo aparte de esta rama.
+- **−** Integrar y commitear exige gitleaks (≥ 8.19.0) instalado (`mth tools install gitleaks`).
 
 ## Impone
 
