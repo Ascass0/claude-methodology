@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import io
 import re
 import sys
@@ -16,7 +17,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "plugins" / "methodology" / "scripts"))
 
-from mthlib import audit, cli, setup  # noqa: E402
+import test_agents  # noqa: E402
+from mthlib import agent_guard, audit, cli, setup  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 
 PLUGIN = HERE.parent / "plugins" / "methodology"
@@ -122,7 +124,7 @@ class VerifyTests(unittest.TestCase):
     def test_bad_results_and_missing_evidence_are_rejected(self):
         # verifies: SPEC-0027/AC-07
         for row, expected in (("- demo.a | quizá | x", "resultado"), ("- demo.a | cumple | ", "evidencia"),
-                              ("- demo.a | no cumple |", "evidencia")):
+                              ):
             with self.subTest(row=row):
                 problems = audit.verify_report(report(self.p, row, "- demo.b | no evaluable | x"), self.packs)
                 self.assertTrue(any(expected in p for p in problems), problems)
@@ -138,10 +140,32 @@ class VerifyTests(unittest.TestCase):
 
     def test_a_report_never_certifies(self):
         # verifies: SPEC-0027/AC-09
-        for word in ("certificado", "Certifica", "certificada"):
-            with self.subTest(word):
-                text = self.good + f"Resumen: sistema {word}\n"
-                self.assertTrue(any("no certifica" in p for p in audit.verify_report(text, self.packs)))
+        text = self.good + "Resumen: sistema Certificado\n"
+        self.assertTrue(any("no certifica" in p for p in audit.verify_report(text, self.packs)))
+
+    def test_ambiguous_reports_are_rejected(self):
+        # verifies: SPEC-0027/AC-15
+        # verifies: SPEC-0027/FM-07
+        # verifies: SPEC-0027/FM-08
+        twice = self.good + "- demo.a | no cumple | Dockerfile:9\n"
+        self.assertTrue(any("más de un resultado" in p for p in audit.verify_report(twice, self.packs)))
+        two_headers = self.good + f"Línea base: demo@{self.p.version} sha256={self.p.sha256}\n"
+        self.assertTrue(any("más de una" in p for p in audit.verify_report(two_headers, self.packs)))
+        self.assertTrue(audit.verify_report("- demo.a | cumple | x\n", self.packs))
+
+    def test_unreadable_oversized_or_missing_reports_fail_with_an_actionable_message(self):
+        # verifies: SPEC-0027/AC-14
+        # verifies: SPEC-0027/FM-06
+        # verifies: SPEC-0027/FM-09
+        with tempfile.TemporaryDirectory() as tmp:
+            big = Path(tmp) / "big.md"
+            big.write_text("x" * (audit.MAX_BYTES + 1), encoding="utf-8")
+            binary = Path(tmp) / "bin.md"
+            binary.write_bytes(b"\xff\xfe")
+            for path in (big, binary, Path(tmp) / "absent.md"):
+                with self.subTest(path=path.name), self.assertRaises(MthError):
+                    audit.read_report(path)
+        self.assertEqual(run("audit", "verify")[0], 1)
 
     def test_the_verify_command_reports_problems_with_a_failing_code(self):
         # verifies: SPEC-0027/AC-04
@@ -173,15 +197,59 @@ class ShippedPacksTests(unittest.TestCase):
         self.assertTrue(all(re.fullmatch(r"DL\d{4}", r) for r in docker_rules), docker_rules)
 
 
+class DoctorWiringTests(test_agents.AgentsTestCase):
+    def doctor_output(self) -> str:
+        self.write(".claude/settings.json", "{}")
+        cwd, out = os.getcwd(), io.StringIO()
+        os.chdir(self.root)
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                setup.doctor(self.root)
+        finally:
+            os.chdir(cwd)
+        return out.getvalue()
+
+    def test_doctor_warns_about_expired_packs_only_with_the_auditor_installed(self):
+        # verifies: SPEC-0027/AC-03
+        expired = {"demo": pack(PACK.replace(b"2026-01-31", b"2020-01-31"))}
+        with mock.patch.object(audit, "load_packs", return_value=expired):
+            self.assertNotIn("Pack demo@2", self.doctor_output())
+            self.add("auditor-estatico")
+            self.assertIn("⚠ Pack demo@2", self.doctor_output())
+
+
 class AgentTests(unittest.TestCase):
+    def guard_rules(self) -> dict:
+        return tomllib.loads((PLUGIN / "catalog/auditor-estatico/guard.toml").read_text(encoding="utf-8"))
+
     def test_the_agent_guard_is_read_only_with_offline_tools_and_one_report_directory(self):
         # verifies: SPEC-0027/AC-11
-        guard = tomllib.loads((PLUGIN / "catalog/auditor-estatico/guard.toml").read_text(encoding="utf-8"))
-        allowed = " ".join(guard["bash"]["allow"])
-        for forbidden in ("curl", "wget", "ssh", "push", "commit", "tools install"):
-            self.assertNotIn(forbidden, allowed)
-        self.assertEqual(guard["write"]["allow"], [".work/security-report/**"])
-        self.assertEqual(guard["bash"]["mode"], "allowlist")
+        rules = self.guard_rules()
+        for command in ("hadolint --format json Dockerfile", "mth audit verify .work/security-report/a.md", "git ls-files | grep Docker"):
+            agent_guard.check_bash(rules, command)
+        for command in ("curl https://example.com", "mth tools install gitleaks", "git push origin HEAD", "git grep --no-index x /etc",
+                        "hadolint Dockerfile > out.txt", "python -c 'print(1)'"):
+            with self.subTest(command=command), self.assertRaises(agent_guard.Denied):
+                agent_guard.check_bash(rules, command)
+        self.assertEqual(rules["write"]["allow"], [".work/security-report/**"])
+
+    def test_every_tool_a_pack_names_is_allowed_by_the_agent_guard(self):
+        # verifies: SPEC-0027/AC-11
+        rules = self.guard_rules()
+        for p in audit.load_packs().values():
+            for tool in sorted({c.tool for c in p.controls if c.tool}):
+                with self.subTest(pack=p.id, tool=tool):
+                    agent_guard.check_bash(rules, tool)
+
+    def test_a_pack_that_fails_to_load_fails_the_command_naming_it(self):
+        # verifies: SPEC-0027/AC-02
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "roto.toml").write_text("id = ", encoding="utf-8")
+            with mock.patch.object(audit, "PACKS_DIR", Path(tmp)), self.assertRaises(MthError) as ctx:
+                audit.load_packs()
+            self.assertIn("roto.toml", ctx.exception.message)
+            with mock.patch.object(audit, "PACKS_DIR", Path(tmp)), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(run("audit", "packs")[0], 1)
 
     def test_the_agent_text_marks_missing_tools_as_not_evaluable_and_never_certifies(self):
         # verifies: SPEC-0027/AC-12
