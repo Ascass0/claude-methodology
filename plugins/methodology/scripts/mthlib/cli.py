@@ -56,7 +56,8 @@ def _cmd_check_msg(args: argparse.Namespace) -> int:
 
 def _cmd_trace(args: argparse.Namespace) -> int:
     ctx = _ctx("trace")
-    findings, legacy = flow.run_trace(ctx)
+    checker, limit_result = flow.trace_checker(ctx), flow.line_limits(ctx)
+    findings, legacy = flow.run_trace(ctx, checker, limit_result)
     for f in findings:
         print(f"✗ {f}")
     say("✓ Trazabilidad OK" if not findings else f"{len(findings)} hallazgos")
@@ -64,12 +65,12 @@ def _cmd_trace(args: argparse.Namespace) -> int:
         say(flow.legacy_summary(ctx, legacy))
         for f in legacy if args.legacy else []:
             print(f"⚠ {f}")
-    single = flow.single_test_notes(ctx)
+    single = flow.single_test_notes(ctx, checker)
     if single:
         say(f"⚠ {len(single)} criterios con un único test: mth trace --single los lista")
         for f in single if args.single else []:
             print(f"⚠ {f}")
-    long_files = flow.limit_notes(ctx)
+    long_files = flow.limit_notes(ctx, limit_result)
     if long_files:
         say(f"⚠ {len(long_files)} ficheros por encima del límite de líneas: mth trace --limits los lista")
         for f in long_files if args.limits else []:

@@ -25,7 +25,6 @@ from .log import Tracer, say, warn
 from .proc import run_shell
 from .trace import Finding, partition
 from .trace import Tracer as TraceChecker
-from .trace import check as trace_check
 from .work import WORK_DIR
 
 _MAX_LISTED = 50
@@ -120,21 +119,30 @@ def _line_base(ctx: Ctx):
     return lines_at_base
 
 
-def run_trace(ctx: Ctx) -> tuple[list[Finding], list[Finding]]:
-    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base)."""
-    findings = trace_check(ctx.cfg, ctx.git.files()) + line_limits(ctx)[0]
+def trace_checker(ctx: Ctx) -> TraceChecker:
+    """One checker per command: it reads each file once, however many checks go through it."""
+    return TraceChecker(ctx.cfg, ctx.git.files())
+
+
+def run_trace(ctx: Ctx, checker: TraceChecker | None = None,
+              limit_result: tuple[list[Finding], list[Finding]] | None = None) -> tuple[list[Finding], list[Finding]]:
+    """Traceability errors and legacy findings (SPEC-0005: unchanged since trace.legacy_base).
+
+    ``checker`` and ``limit_result`` let a command that also reports warnings reuse what it already computed.
+    """
+    findings = (checker or trace_checker(ctx)).run() + (limit_result or line_limits(ctx))[0]
     base = ctx.cfg["trace"]["legacy_base"]
     return partition(findings, ctx.git.unchanged_since(base)) if base else (findings, [])
 
 
-def limit_notes(ctx: Ctx) -> list[Finding]:
+def limit_notes(ctx: Ctx, limit_result: tuple[list[Finding], list[Finding]] | None = None) -> list[Finding]:
     """Files over the line limit that the branch does not make grow: a warning for `mth trace`."""
-    return line_limits(ctx)[1]
+    return (limit_result or line_limits(ctx))[1]
 
 
-def single_test_notes(ctx: Ctx) -> list[Finding]:
+def single_test_notes(ctx: Ctx, checker: TraceChecker | None = None) -> list[Finding]:
     """Acceptance criteria with a single test (ADR-0015): a warning for `mth trace`, never a gate."""
-    return TraceChecker(ctx.cfg, ctx.git.files()).single_test()
+    return (checker or trace_checker(ctx)).single_test()
 
 
 def legacy_summary(ctx: Ctx, legacy: list[Finding]) -> str:
