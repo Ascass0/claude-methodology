@@ -16,7 +16,8 @@ Apartados de `PRINCIPLES.md`: §8 completo, §2 «Mínimo privilegio», §3 «me
 2. **Mínimo privilegio.** Permisos, credenciales, capacidades, montajes, red y alcance de tokens: cada componente recibe solo lo que necesita. Toda ampliación debe justificarse en la spec o en un ADR.
 3. **Secretos.** Ningún secreto en el código, la configuración versionada, los logs, los mensajes de error, los artefactos ni los commits. Comprueba que lo nuevo que se registra o se devuelve en errores redacta los datos sensibles. Un secreto literal lo detecta el escáner; tú buscas los **flujos** que acabarían exponiéndolo. Si el diff toca `secrets.mode` o `secrets.baseline` en `.claude/methodology.toml`, o añade entradas a la línea base de secretos, exige que el motivo conste y que el secreto aceptado se haya rotado: apagar el gate o aceptar un hallazgo sin rotarlo es un bloqueante.
 4. **Fail-safe en seguridad.** Ante un fallo de validación, autenticación o aislamiento, el código deniega: no relaja la restricción para seguir funcionando.
-5. **Dependencias nuevas.** Versión fijada, lockfile actualizado, licencia revisada y una justificación de por qué no basta con la biblioteca estándar.
+5. **Spec y superficie de seguridad.** Lee la cabecera `- Seguridad:` de la spec de la rama. Si el diff añade entrada externa, autenticación o datos sensibles que la cabecera no declara (o dice `ninguna`), es un hallazgo. Si la declara, cada AC `[SEG]` debe tener su test (`verifies:`) y cubrir lo que el diff expone. Sin cabecera (spec anterior a esta convención), solo sugerencia.
+6. **Dependencias nuevas.** Versión fijada, lockfile actualizado, licencia revisada y una justificación de por qué no basta con la biblioteca estándar.
 
 **No es tu especialidad:**
 
