@@ -37,6 +37,12 @@ class RunGuardedTests(unittest.TestCase):
         self.assertIn("(bug)", err)
         self.assertIn("ValueError: boom", err)
 
+    def test_an_interrupt_exits_with_130_and_prints_nothing(self):
+        # unit: errors.run_guarded
+        def interrupted():
+            raise KeyboardInterrupt
+        self.assertEqual(run(interrupted), (130, ""))
+
     def test_the_exit_code_of_the_action_passes_through(self):
         # unit: errors.run_guarded
         self.assertEqual(run(lambda: 0), (0, ""))
