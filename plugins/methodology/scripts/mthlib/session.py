@@ -14,7 +14,7 @@ from . import agents, branches, plans, work
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
-from .setup import install_hook, register_launcher
+from .setup import install_hook, register_launcher, sync_secrets_hook
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 MTH = PLUGIN_ROOT / "scripts" / "mth"  # launcher: picks a Python >= 3.11
@@ -72,6 +72,11 @@ def _state(cwd: Path) -> list[str]:
     except MthError as exc:
         hook = "error"
         lines.append(f"⚠ Hook commit-msg: {exc.message} → {exc.hint or ''}".strip())
+    try:
+        sync_secrets_hook(git, cfg)  # SPEC-0024: keep the opt-in pre-commit hook in step with secrets.hook
+    except (MthError, OSError) as exc:
+        detail = f"{exc.message} → {exc.hint or ''}" if isinstance(exc, MthError) else str(exc)
+        lines.append(f"⚠ Hook pre-commit: {detail}".strip())
     try:
         register_launcher(git)  # SPEC-0012: the agent-guard shim reads it
     except (MthError, OSError) as exc:

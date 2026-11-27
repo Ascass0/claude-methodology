@@ -24,7 +24,7 @@ from .git import Git
 PLUGIN_AGENTS = Path(__file__).resolve().parents[2] / "agents"
 # Ordered by dependency (SPEC-0015): the precedence between the repo and the methodology conditions autonomy and the rest.
 QUESTIONS = ("instrucciones", "autonomia", "forja", "alcance", "ramas", "commits", "versiones", "specs", "decisiones",
-             "tests", "revisores", "colision", "idioma", "ci", "modelos")
+             "tests", "revisores", "colision", "idioma", "ci", "secretos", "modelos")
 DEDUCED, DEFAULT, DECISION = "deducida", "por_defecto", "decision"
 OUTCOMES = (DEDUCED, DEFAULT, DECISION)
 _INTEGRATION_NAMES = ("develop", "dev", "development")
@@ -35,15 +35,15 @@ RECONFIGURE = "reconfigure"
 GROUPS: dict[str, tuple[str, ...]] = {
     "flujo": ("forja", "ramas", "commits", "versiones", "ci"),
     "documentacion": ("alcance", "specs", "decisiones", "idioma", "instrucciones"),
-    "calidad": ("tests", "revisores", "colision"),
+    "calidad": ("tests", "revisores", "colision", "secretos"),
     "agente": ("autonomia", "modelos"),
 }
 # "revisores" is always asked: it also offers the catalog agents (SPEC-0012).
 BASE: dict[str, tuple[str, ...]] = {
-    "new": ("forja", "revisores", "autonomia", "idioma", "modelos"),
-    "existing": ("forja", "alcance", "revisores", "autonomia", "modelos"),
-    "methodology": ("forja", "alcance", "revisores", "autonomia", "modelos"),
-    "fork": ("forja", "alcance", "versiones", "revisores", "autonomia", "modelos"),
+    "new": ("forja", "revisores", "autonomia", "idioma", "secretos", "modelos"),
+    "existing": ("forja", "alcance", "revisores", "autonomia", "secretos", "modelos"),
+    "methodology": ("forja", "alcance", "revisores", "autonomia", "secretos", "modelos"),
+    "fork": ("forja", "alcance", "versiones", "revisores", "autonomia", "secretos", "modelos"),
 }
 PROCESS_SIGNALS = ("specs", "adrs", "agents", "claude_dirs", "instructions", "commit_hook",
                    "hook_managers", "release_tools")
@@ -454,6 +454,8 @@ def current(cfg: Config, qid: str) -> str:
         "idioma": f"language.docs = {d['language']['docs']}",
         "ci": f"ci.required = {str(d['ci']['required']).lower()}",
         "forja": f"forge = {d['forge']}",
+        "secretos": f"secrets.mode = {d['secrets']['mode'] or '(sin decidir)'}; hook = {d['secrets']['hook'] or '(sin decidir)'}; "
+                    f"ci = {d['secrets']['ci'] or '(sin decidir)'}",
         "modelos": f"models.ladder = {', '.join(d['models']['ladder'])}; task = {d['models']['task']}; "
                    f"review = {d['models']['review']}",
     }

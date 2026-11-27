@@ -176,7 +176,8 @@ class ReconfigureTests(unittest.TestCase):
             ({"autonomia": {"option": "full"}}, "agente", "modelos: falta la respuesta"),
             ({"autonomia": {"option": "full"}, "modelos": {"option": "calidad"}, "idioma": {"option": "en"}},
              "agente", "idioma: la pregunta no está en el inventario"),
-            ({"revisores": {"option": "agentes", "agents": []}, "tests": {"option": "ninguno"}},
+            ({"revisores": {"option": "agentes", "agents": []}, "tests": {"option": "ninguno"},
+              "secretos": {"option": "ninguno"}},
              "calidad", "review.paths.verificador"),
             ({"forja": {"option": "github"}, "ramas": {"option": "usar", "branch": "develop"}, "commits": {"option": "otro", "config": {}},
               "versiones": {"option": "continuar"}, "ci": {"option": "sin-ci"}}, "flujo", "no existe en el remoto"),
@@ -240,7 +241,8 @@ class ReconfigureTests(unittest.TestCase):
         self.mth("integrate", "--title", "chore: add a security reviewer", "--summary", "Agente.")
         self.mth("reconfigure", "--answers", self.answers({"revisores": {"option": "agentes",
                                                                          "agents": ["verificador", "seguridad"]},
-                                                           "tests": {"option": "comando", "command": "true"}}),
+                                                           "tests": {"option": "comando", "command": "true"},
+                                                           "secretos": {"option": "ninguno"}}),
                  "--only", "calidad")
         self.assertEqual(tomllib.loads(self.config_text())["review"]["agents"], ["verificador", "seguridad"])
 

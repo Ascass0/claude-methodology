@@ -41,6 +41,7 @@ OPTIONS: dict[str, dict[str, dict[str, tuple[type, bool]]]] = {
     "autonomia": {level: {} for level in AUTONOMY_LEVELS},
     "idioma": {code: {} for code in lang.LANGUAGES},
     "ci": {"sin-ci": {}, "crear": {}},
+    "secretos": {"bloquear": {}, "integrar": {}, "ninguno": {}},  # SPEC-0024
     "forja": {name: {} for name in forge.FORGES},  # ADR-0012
     "modelos": {"equilibrado": {}, "calidad": {}, "ahorro": {}},
 }
@@ -360,10 +361,27 @@ def _apply(data: dict[str, Any], qid: str, option: str, answer: dict[str, Any],
     if qid == "ci":
         data["ci"]["required"] = option == "crear"
         return "ci.required = true; Opus crea el workflow en la rama de adopción" if option == "crear" else "ci.required = false"
+    if qid == "secretos":
+        return _apply_secrets(data, option)
     if qid == "modelos":
         data["models"] = dict(MODEL_PRESETS[option])
         return f"models.ladder = {', '.join(data['models']['ladder'])}; review = {data['models']['review']}"
     raise AssertionError(f"pregunta sin efecto: {qid}")
+
+
+def _apply_secrets(data: dict[str, Any], option: str) -> str:
+    """The ``secretos`` answer (SPEC-0024): the gate, the pre-commit hook and the workflow, never silent."""
+    github_ci = data["forge"] == forge.GITHUB and data["ci"]["required"]
+    secrets = data["secrets"]
+    secrets["mode"] = "off" if option == "ninguno" else "block"
+    secrets["hook"] = "on" if option == "bloquear" else "off"
+    if option == "bloquear":
+        if github_ci:
+            secrets["ci"] = "on"
+    else:
+        secrets["ci"] = "off"
+    note = "" if option != "bloquear" or github_ci else " (la CI de GitHub no aplica: secrets.ci queda sin decidir)"
+    return f"secrets.mode = {secrets['mode']}; secrets.hook = {secrets['hook']}; secrets.ci = {secrets['ci'] or 'sin decidir'}{note}"
 
 
 def _flatten(table: dict[str, Any], prefix: str = "") -> list[str]:

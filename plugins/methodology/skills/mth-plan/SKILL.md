@@ -29,6 +29,7 @@ description: Crea y acuerda con la persona el plan de ejecución de una idea ant
    - Decisiones ya tomadas: <las que haya en la conversación, o «ninguna»>
    - Restricciones y cosas descartadas: <o «ninguna»>
    - Specs y ADR relacionados: <IDs, o «no sé»>
+   - Modelo: opus
    - Principios: <ruta de PRINCIPLES.md del contexto de sesión>
    Devuelve solo el contenido completo del plan.
    ```

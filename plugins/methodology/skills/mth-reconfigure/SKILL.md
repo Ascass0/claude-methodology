@@ -22,7 +22,7 @@ Si el repo no tiene `.claude/methodology.toml`, esta skill no aplica: usa `mth-i
 |---|---|---|
 | `flujo` | `forja`, `ramas`, `commits`, `versiones`, `ci` | forja del remoto, rama de integración, hook `commit-msg`, publicación y CI |
 | `documentacion` | `alcance`, `specs`, `decisiones`, `idioma`, `instrucciones` | legado, specs, ADR, idioma y CLAUDE.md |
-| `calidad` | `tests`, `revisores`, `colision` | comando de tests y revisores |
+| `calidad` | `tests`, `revisores`, `colision`, `secretos` | comando de tests, revisores y gate de secretos |
 | `agente` | `autonomia`, `modelos` | cuánto pregunta Claude y con qué modelos trabaja |
 
 ## 2. Inventario

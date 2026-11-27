@@ -59,7 +59,7 @@ Mientras un repositorio no tiene `.claude/methodology.toml`, el plugin está ina
 La adopción es una entrevista guiada, con la skill `mth-init`:
 
 1. `mth survey` inventaria el repo sin modificarlo (ramas, specs y ADR existentes, agentes, hooks, herramientas de release, CI, forja del remoto) y resuelve cada pregunta como `deducida` (la resuelve una señal, con su evidencia), `por_defecto` o `decision` ([SPEC-0015](specs/features/SPEC-0015-adopcion-deducir-por-defecto-o-preguntar.md), [ADR-0011](specs/adr/process/ADR-0011-adopcion-deducir-por-defecto-o-preguntar.md)).
-2. Opus presenta la metodología y pregunta, en una sola ronda y empezando por la precedencia entre el repo y la metodología, solo las `decision`. Solo ofrece las opciones que funcionan con el repo: por ejemplo, un hook `commit-msg` ajeno solo se encadena, y sin GitHub no se ofrece `ci: crear`.
+2. Opus presenta la metodología y pregunta, empezando por la precedencia entre el repo y la metodología, solo las `decision`, en una ronda (un repo nuevo hace como mucho seis; más de cuatro van en dos rondas). Solo ofrece las opciones que funcionan con el repo: por ejemplo, un hook `commit-msg` ajeno solo se encadena, y sin GitHub no se ofrece `ci: crear`.
 3. `mth init --answers <json> --plan` muestra, sin escribir nada, lo deducido, lo que va por defecto, lo decidido y las capacidades activas y desactivadas con su motivo. Con la confirmación de la persona, `mth init --answers <json>` convierte las respuestas en `.claude/methodology.toml` y en el ADR de adopción, que registra el resultado de cada pregunta.
 4. Si no se quiere adoptar, `mth init --decline` desactiva el plugin en ese repo (`.claude/settings.local.json`, no versionado).
 
@@ -113,17 +113,56 @@ El fichero de configuración se regenera, así que se pierden sus comentarios: e
 | `review.agents` / `required_for` | Agentes revisores del repo (en orden de precedencia) y ramas que exigen revisión |
 | `roles.*` | Agentes del repo para coder, documentador, verificador y planificador (`roles.planner`, por defecto `planificador`) |
 | `plans.required_for` | Tipos de rama que necesitan un plan acordado antes de crearse y de integrarse (por defecto `feat`, `fix` y `hotfix`). El plan es un fichero local de `.work/plans/`, nunca se commitea. Ver [SPEC-0023](specs/features/SPEC-0023-planes-acordados-antes-de-desarrollar.md) y [ADR-0021](specs/adr/process/ADR-0021-planes-acordados-antes-de-desarrollar.md) |
-| `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra |
+| `models.*` | Escalera de reintento (`ladder`, por defecto `haiku`, `sonnet`, `opus`) y nivel de las tareas sin modelo (`task`), de los revisores (`review`) y del documentador (`documenter`). Ver [SPEC-0002](specs/features/SPEC-0002-niveles-de-modelo.md); `mth models` los muestra y, además, indica que el planificador va fijo en `opus` (no es configurable) |
 | `ci.required` | Exigir CI en verde en cada PR (fail-safe) |
 | `trace.*` | Comprobaciones activas, ficheros incluidos (`include`) y exclusiones justificadas |
 | `trace.legacy_base` | Commit de la adopción gradual: los hallazgos en ficheros sin cambios desde él son avisos y `mth trace --legacy` los lista. Ver [SPEC-0005](specs/features/SPEC-0005-modo-legado-en-la-trazabilidad.md) |
 | `hooks.commit_msg` | Qué hacer con un hook `commit-msg` ajeno: `own` (lo deja), `replace` (instala el de mth) o `chain` (lo ejecuta antes de validar). Ver [SPEC-0006](specs/features/SPEC-0006-hooks-commit-msg-encadenados.md) |
+| `hooks.pre_commit` | Igual que `hooks.commit_msg`, para el hook `pre-commit` de secretos: `own` (por defecto, deja el ajeno), `replace` (lo guarda como `pre-commit.pre-mth`) o `chain` (lo guarda como `pre-commit.local` y lo ejecuta primero). No confundir con `commands.precommit`. Ver [SPEC-0024](specs/features/SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md) |
+| `secrets.mode` / `hook` / `ci` | Gate al integrar (`mode`), hook `pre-commit` (`hook`) y workflow de CI (`ci`). Valores: `""` (sin decidir, por defecto), `"off"` y `"on"` (`mode` usa `"block"` en lugar de `"on"`). Ver [Secretos](#secretos-antes-del-commit-y-en-la-ci) |
 | `autonomy.level` | `full` (por defecto), `until-pr` (integrar y publicar piden confirmación) o `supervised` (además, ramas, commits y push). Ver [SPEC-0007](specs/features/SPEC-0007-autonomia-configurable.md) y [ADR-0004](specs/adr/process/ADR-0004-autonomia-configurable-por-repositorio.md) |
 | `language.docs` | Idioma de docs, specs, ADR, changelog y PR: `es` (por defecto) o `en`. Código y commits, siempre en inglés. Ver [SPEC-0008](specs/features/SPEC-0008-idioma-de-la-documentacion-configurable.md) |
 | `forge` | Forja del remoto: `github` (por defecto), `gitlab` o `none`. Se deduce del remoto al adoptar. Ver [SPEC-0016](specs/features/SPEC-0016-forja-configurable.md) y [ADR-0012](specs/adr/process/ADR-0012-forja-configurable.md) |
 | `release.*` | Release de GitHub, firma y prefijo de las etiquetas (`tag_prefix`) y ficheros que declaran la versión (`version_files`: `path` y `pattern` con un grupo de captura), que `release` y `hotfix finish` actualizan en el commit de la versión y `doctor` verifica. Ver [SPEC-0003](specs/features/SPEC-0003-ficheros-de-version-en-la-publicacion.md) |
 | `[agents.<agente>]` | Variables de un agente del catálogo (`bench`, `databases`…). Opcional; solo admite las claves que declara ese agente. Requiere plugin ≥ 0.8.0 (un plugin anterior la rechaza, ver [SPEC-0009](specs/features/SPEC-0009-actualizacion-del-plugin-con-configuracion-mas-nueva.md)) |
 | `work.dirs` | Subdirectorios propios del repo en `.work/`, además de los de serie. Ver [Directorio de trabajo local](#directorio-de-trabajo-local) |
+
+### Secretos antes del commit y en la CI
+
+Además del gate de `mth integrate` ([ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md)), hay dos piezas opcionales ([SPEC-0024](specs/features/SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md), [ADR-0022](specs/adr/security/ADR-0022-hook-de-precommit-y-workflow-de-ci-para-secretos.md)). Ninguna se activa sola: nacen sin decidir y la decisión se toma en la adopción (pregunta `secretos`: `bloquear`, `integrar` o `ninguno`) o con `mth update`.
+
+- **`mth secrets --staged`:** escanea con `gitleaks` solo lo preparado y nunca imprime valores. Falla cerrado: sin `gitleaks`, con un error de la herramienta o al agotar el tiempo, termina con error. Requiere `gitleaks` 8.19.0 o posterior, en el `PATH` o instalado con `mth tools install gitleaks` (ver [Herramientas externas](#herramientas-externas-mth-tools)); `mth doctor` informa del origen y la versión, y avisa de una versión anterior o de una copia gestionada de otra versión que la del manifiesto.
+- **Hook `pre-commit`** (`secrets.hook = "on"`): ejecuta `mth secrets --staged` y rechaza el commit si hay secretos o si no encuentra `mth`. Convive con un hook ajeno según `hooks.pre_commit`; con el directorio de hooks versionado, `replace` y `chain` fallan sin tocar nada y piden añadir `mth secrets --staged` al gestor de hooks. `git commit --no-verify` lo salta: por eso existe la CI. Con `"off"`, `mth` retira su hook y no toca uno ajeno.
+- **Workflow `.github/workflows/secrets.yml`** (`secrets.ci = "on"`): solo con `forge = github` y `ci.required = true`. Escanea cada PR y cada push a `main` y `development` con un binario de `gitleaks` de versión y suma de comprobación fijadas, sin acciones de terceros para escanear. Lo escribe `mth` desde la plantilla, con `secrets.baseline` sustituida (solo letras, cifras, `.`, `_`, `-` y `/`). Lleva una marca en la primera línea: un fichero con ese nombre sin marca es ajeno y no se sobrescribe; `mth doctor` avisa.
+- **Protección de rama:** una rama puede editar o borrar el workflow en su propio PR. La protección de `main` y `development` debe exigir la comprobación del workflow, y la revisión debe mirar los cambios de `.github/workflows/**`.
+- **Brechas de `mth update`:** `secretos-hook` y `secretos-ci` (decisión, mientras la clave está sin decidir) y `secretos-workflow` (automática: escribe el workflow cuando falta o está desactualizado, una vez decidido). Con el hook activado, `mth update` también lo reinstala si falta.
+
+### Herramientas externas (`mth tools`)
+
+Los gates dependen de herramientas externas (hoy `gitleaks`). `mth` no las empaqueta ni las descarga por su cuenta: la descarga solo ocurre con una orden explícita. Ver [SPEC-0025](specs/features/SPEC-0025-gestor-de-herramientas-externas.md) y [ADR-0023](specs/adr/security/ADR-0023-gestor-de-herramientas-externas.md).
+
+| Orden | Hace |
+|---|---|
+| `mth tools` | Lista cada herramienta con la versión del manifiesto, su origen (`PATH`, `gestionada` o `ausente`) y la versión encontrada. No usa la red |
+| `mth tools install <herramienta> [--force]` | Descarga, verifica y publica la copia gestionada de la versión del manifiesto. Si ya está instalada y es válida, no descarga; `--force` la reinstala |
+| `mth tools prune` | Borra las versiones gestionadas que ya no están en el manifiesto y las instalaciones a medias. No borra nada sin esta orden |
+
+**Orden de resolución.** Si la herramienta está en el `PATH` y alcanza la versión mínima que pide quien la usa, se usa esa. Si es anterior o su versión no se reconoce, se prefiere la copia gestionada válida; sin ella se usa la del `PATH` y se avisa. Sin `PATH`, se usa la copia gestionada. Sin ninguna, error con `mth tools install <herramienta>`: resolver nunca descarga.
+
+**Caché.** `<caché>/claude-methodology/tools/<herramienta>/<versión>/`, donde `<caché>` es `MTH_TOOLS_DIR` si está definida y, si no, el directorio de caché del sistema (`XDG_CACHE_HOME` o `~/.cache` en Linux, `~/Library/Caches` en macOS, `%LOCALAPPDATA%` en Windows). Se puede borrar y regenerar. Los directorios se crean con permisos solo del usuario.
+
+**Verificación.** La URL debe ser https. La suma SHA-256 del archivo se comprueba antes de extraer; la extracción rechaza rutas absolutas o con `..`, enlaces y ficheros especiales, y acota tamaño y número de miembros. La copia se publica con un renombrado atómico y la suma del ejecutable se comprueba antes de cada uso: si no coincide, `mth` falla sin ejecutarlo y pide `mth tools install <herramienta> --force`.
+
+**Límite.** No hay verificación de firmas: la suma del manifiesto comparte origen con el binario, así que protege de descargas dañadas o alteradas en tránsito, no de una release comprometida.
+
+**Plataformas de `gitleaks`:** linux x64 y arm64, darwin x64 y arm64, y windows x64. Los formatos admitidos son `tar.gz` y `zip`. Windows y `.zip` no se han probado con binarios reales, solo con archivos generados en los tests.
+
+**Añadir o actualizar una herramienta.** Se edita `plugins/methodology/tools/manifest.toml`, sin código nuevo:
+
+- Una sola versión por herramienta, con `version_args` (argumentos que imprimen su versión) y una entrada `platforms.<sistema>_<arquitectura>` con `url`, `sha256`, `format` y `entry`.
+- Las sumas se copian de la release oficial, no se calculan de una descarga propia.
+- El PR lo revisa `revisor-seguridad`.
+- Para `gitleaks`, la versión y la suma de `linux_x64` deben coincidir con las de la plantilla del workflow de CI de secretos (`plugins/methodology/templates/workflows/`).
 
 ### Directorio de trabajo local
 
@@ -159,7 +198,7 @@ Un fork convive con la historia, los tags y los ficheros de upstream. Prepara la
 | IDs únicos y referencias válidas | `mth trace` (también tras `mth sync`, donde aparecen las colisiones de ramas paralelas) |
 | Enlaces internos válidos y dentro del repo | `mth trace` |
 | Ningún fichero supera `limits.max_file_lines` sin excepción con techo y motivo; solo hacerlo crecer bloquea | `mth trace` (`[limits]`). Ver [ADR-0016](specs/adr/process/ADR-0016-limite-de-lineas-por-fichero.md) |
-| Ningún secreto nuevo llega a `development`: `gitleaks` escanea la rama antes de subirla; los hallazgos viejos se aceptan de forma explícita y se rotan | `mth integrate` con `[secrets]` (`secrets.mode = "block"`) y `mth secrets [--history [--accept]]`. Ver [ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md) |
+| Ningún secreto nuevo llega a `development`: `gitleaks` escanea la rama antes de subirla; los hallazgos viejos se aceptan de forma explícita y se rotan | `mth integrate` con `[secrets]` (`secrets.mode = "block"`) y `mth secrets [--history [--accept]]`; antes del commit, hook `pre-commit` (`secrets.hook`) y en la CI, workflow `secrets.yml` (`secrets.ci`). Ver [ADR-0020](specs/adr/security/ADR-0020-gate-de-secretos-en-el-historial.md) y [ADR-0022](specs/adr/security/ADR-0022-hook-de-precommit-y-workflow-de-ci-para-secretos.md) |
 | Cada test lleva etiqueta (`verifies:`, `regression:` o `unit:`); aviso de los AC con un único test | `mth trace` (`trace.test_patterns`; en ficheros legados, aviso). Ver [ADR-0015](specs/adr/process/ADR-0015-triangulacion-y-motivo-declarado-de-cada-test.md) |
 | Specs y ADR con `- Formato: compacto`: criterios en EARS, `FM-NN` únicos y referenciados, campos fijos del ADR | `mth trace` (los documentos sin la marca no se validan). Ver [ADR-0014](specs/adr/process/ADR-0014-formato-compacto-de-specs-y-adr.md) |
 | Conventional Commits + cuerpo + `Refs:` | `mth commit`, hook `commit-msg`, revalidación en `mth integrate` |

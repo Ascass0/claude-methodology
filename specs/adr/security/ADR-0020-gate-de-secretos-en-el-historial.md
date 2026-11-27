@@ -29,7 +29,7 @@
 - Activado por defecto: rompe los repos sin la herramienta y esconde la decisión.
 - trufflehog: licencia AGPL y verificación contra servicios reales; gitleaks es MIT y local.
 - Escanear solo en la CI: no cubre a quien no use `mth` ni evita subir el secreto; la CI sigue siendo la red de respaldo.
-- Hook de precommit en esta iteración: el hook local no se puede imponer y exige instalarlo en cada clon; queda para una spec posterior.
+- Hook de precommit en esta iteración: el hook local no se puede imponer y exige instalarlo en cada clon; queda para una spec posterior. Complementado por [ADR-0022](ADR-0022-hook-de-precommit-y-workflow-de-ci-para-secretos.md). La resolución de `gitleaks` la complementa [ADR-0023](ADR-0023-gestor-de-herramientas-externas.md).
 - Limpiar el historial con `filter-repo`: reescribe historia compartida y no invalida el secreto.
 - Llamar al módulo `secrets.py`: choca con la biblioteca estándar; es `secretgate.py`.
 - Escáner propio con expresiones regulares: reinventa una herramienta madura y se queda atrás.

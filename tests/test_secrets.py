@@ -22,6 +22,8 @@ from mthlib.config import parse  # noqa: E402
 from mthlib.errors import MthError  # noqa: E402
 from test_update import UpdateTestCase  # noqa: E402
 
+# The managed-tools cache of the developer must never decide a test: every secrets test starts with an empty one.
+os.environ.setdefault("MTH_TOOLS_DIR", tempfile.mkdtemp(prefix="mth-tools-test-"))
 BASE = 'version = 1\n[commands]\ntest = ""\n'
 ROOT = HERE.parent
 SECTION = {"mode": "block", "baseline": ".gitleaks-baseline.json"}
@@ -40,7 +42,7 @@ class ConfigTests(unittest.TestCase):
     def test_defaults_are_undecided(self):
         # verifies: SPEC-0022/AC-01
         section = parse(Path("."), BASE)["secrets"]
-        self.assertEqual(section, {"mode": "", "baseline": ".gitleaks-baseline.json"})
+        self.assertEqual(section, {"mode": "", "hook": "", "ci": "", "baseline": ".gitleaks-baseline.json"})
 
     def test_unknown_mode_or_empty_baseline_fail_fast_naming_the_key(self):
         # verifies: SPEC-0022/AC-01
@@ -134,7 +136,7 @@ class ScanTests(unittest.TestCase):
             with self.assertRaises(MthError) as ctx:
                 secretgate.enforce(self.root, SECTION, "a..b")
         self.assertIn("gitleaks", ctx.exception.message)
-        self.assertIn("Instala", ctx.exception.hint)
+        self.assertIn("mth tools install gitleaks", ctx.exception.hint)
 
     def test_baseline_that_resolves_outside_the_repo_is_refused(self):
         # verifies: SPEC-0022/AC-14

@@ -94,7 +94,7 @@ class ClassificationTests(unittest.TestCase):
         defaults = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
                     "instrucciones": {"option": "metodologia"}, "tests": {"option": "ninguno"},
                     "decisiones": {"option": "archivar"}, "versiones": {"option": "continuar"},
-                    "ci": {"option": "sin-ci"}}
+                    "ci": {"option": "sin-ci"}, "secretos": {"option": "ninguno"}}
         return {q: defaults[q] for q in inv.asked()}
 
     def test_without_github_nothing_that_needs_it_is_offered(self):
@@ -161,8 +161,9 @@ class AnswersTests(unittest.TestCase):
         # verifies: SPEC-0015/AC-07
         # verifies: SPEC-0016/AC-03
         inv = inventory(language="en", forge="gitlab", tags={"prefix": "v", "count": 1}, tests=["make test"])
-        self.assertEqual(inv.asked(), ["autonomia", "revisores"])
-        answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []}}
+        self.assertEqual(inv.asked(), ["autonomia", "revisores", "secretos"])
+        answers = {"autonomia": {"option": "supervised"}, "revisores": {"option": "agentes", "agents": []},
+                   "secretos": {"option": "ninguno"}}
         adoption.validate(inv, answers)
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
@@ -202,7 +203,7 @@ class AnswersTests(unittest.TestCase):
         inv = inventory("existing", tests=["make test"])
         self.assertEqual(inv.question("modelos")["outcome"], survey.DEFAULT)
         answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
-                   "ci": {"option": "sin-ci"}, "modelos": {"option": "ahorro"}}
+                   "ci": {"option": "sin-ci"}, "modelos": {"option": "ahorro"}, "secretos": {"option": "ninguno"}}
         adoption.validate(inv, answers)
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
@@ -217,7 +218,7 @@ class AnswersTests(unittest.TestCase):
         # verifies: SPEC-0015/AC-08
         inv = inventory("existing", tests=["make test"])
         answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
-                   "ci": {"option": "crear"}}
+                   "ci": {"option": "crear"}, "secretos": {"option": "ninguno"}}
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
         out = adoption.summary_text(inv, plan)
@@ -231,7 +232,8 @@ class AnswersTests(unittest.TestCase):
     def test_adoption_adr_records_the_outcome_of_every_question(self):
         # verifies: SPEC-0015/AC-09
         inv = inventory("methodology", language="en", forge="gitlab", commit_hook=True, tests=["make test"])
-        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []}}
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
+                   "secretos": {"option": "ninguno"}}
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
         for code in ("es", "en"):
@@ -245,7 +247,8 @@ class AnswersTests(unittest.TestCase):
     def test_generated_adrs_are_compact_in_both_languages(self):
         # verifies: SPEC-0004/AC-12
         inv = inventory("methodology", language="en", forge="gitlab", commit_hook=True, tests=["make test"])
-        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []}}
+        answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
+                   "secretos": {"option": "ninguno"}}
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
         for code in ("es", "en"):
@@ -261,7 +264,7 @@ class AnswersTests(unittest.TestCase):
         # verifies: SPEC-0015/AC-09
         inv = inventory("new", language="unknown", files=0)
         answers = {"autonomia": {"option": "full"}, "revisores": {"option": "agentes", "agents": []},
-                   "ci": {"option": "sin-ci"}}
+                   "ci": {"option": "sin-ci"}, "secretos": {"option": "ninguno"}}
         template = (lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8")
         plan = adoption.build(template, inv, answers, "main", "a" * 40)
         text = adoption.adr_text("ADR-0001", inv, plan, lang.vocabulary("es"))
@@ -291,6 +294,7 @@ class OfferedOptionsTests(unittest.TestCase):
         ("idioma", "es"): {}, ("idioma", "en"): {},
         ("ci", "sin-ci"): {}, ("ci", "crear"): {},
         ("forja", "github"): {}, ("forja", "gitlab"): {}, ("forja", "none"): {},
+        ("secretos", "bloquear"): {}, ("secretos", "integrar"): {}, ("secretos", "ninguno"): {},
         ("modelos", "equilibrado"): {}, ("modelos", "calidad"): {}, ("modelos", "ahorro"): {},
     }
 
@@ -318,7 +322,8 @@ class OfferedOptionsTests(unittest.TestCase):
                 "revisores": {"option": "agentes", "agents": []}, "colision": {"option": "mantener"},
                 "specs": {"option": "archivar"}, "decisiones": {"option": "archivar"},
                 "versiones": {"option": "continuar"}, "ramas": {"option": "crear"},
-                "tests": {"option": "ninguno"}, "ci": {"option": "sin-ci"}}[qid]
+                "tests": {"option": "ninguno"}, "ci": {"option": "sin-ci"},
+                "secretos": {"option": "ninguno"}}[qid]
 
     def test_texts_only_promise_commands_and_keys_that_exist(self):
         # verifies: SPEC-0015/AC-10
@@ -340,7 +345,8 @@ class OfferedOptionsTests(unittest.TestCase):
         inv = inventory("methodology", agents=["api-reviewer"], forge="gitlab", tests=["make test"])
         answers = {"revisores": {"option": "agentes", "agents": ["api-reviewer"],
                                  "paths": {"api-reviewer": ["api/**", "!api/docs/**"]}},
-                   "instrucciones": {"option": "metodologia"}, "autonomia": {"option": "full"}}
+                   "instrucciones": {"option": "metodologia"}, "autonomia": {"option": "full"},
+                   "secretos": {"option": "ninguno"}}
         adoption.validate(inv, {q: a for q, a in answers.items() if q in inv.asked()})
         plan = adoption.build((lang.TEMPLATES / "methodology.toml").read_text(encoding="utf-8"), inv,
                               {q: a for q, a in answers.items() if q in inv.asked()}, "main", "a" * 40)
@@ -507,19 +513,19 @@ class RealCaseTests(unittest.TestCase):
     def answers(self, extra: dict | None = None) -> str:
         data = {"instrucciones": {"option": "metodologia"}, "autonomia": {"option": "full"},
                 "decisiones": {"option": "mapear", "path": "docs/adr", "kind": "ADR", "pattern": "ADR-\\d{3}"},
-                "revisores": {"option": "agentes", "agents": []}, **(extra or {})}
+                "revisores": {"option": "agentes", "agents": []}, "secretos": {"option": "ninguno"}, **(extra or {})}
         path = self.tmp / "answers.json"
         path.write_text(json.dumps({"answers": data}), encoding="utf-8")
         return str(path)
 
-    def test_the_interview_asks_four_questions_in_one_round(self):
+    def test_the_interview_asks_five_questions_in_two_rounds(self):
         # verifies: SPEC-0015/AC-11
         # verifies: SPEC-0015/AC-01
         result = self.survey()
         by_id = {q["id"]: q for q in result["questions"]}
         self.assertEqual(result["profile"], "methodology")
         self.assertEqual([q for q, v in by_id.items() if v["outcome"] == "decision"],
-                         ["instrucciones", "autonomia", "decisiones", "revisores"])
+                         ["instrucciones", "autonomia", "decisiones", "revisores", "secretos"])
         self.assertEqual(by_id["ramas"]["answer"], {"option": "usar", "branch": "dev"})
         self.assertEqual(by_id["commits"]["answer"], {"option": "encadenar"})
         self.assertEqual(by_id["tests"]["answer"]["command"], "make test")
@@ -528,7 +534,7 @@ class RealCaseTests(unittest.TestCase):
                          ("deducida", {"option": "continuar", "version_files": []}, "deducida", "por_defecto",
                           {"option": "gitlab"}))
         skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("una sola ronda", skill)
+        self.assertIn("dos rondas", skill)
         self.assertIn("--plan", skill)
         self.assertLess(skill.index("--plan"), skill.index("--marketplace-repo"))
 

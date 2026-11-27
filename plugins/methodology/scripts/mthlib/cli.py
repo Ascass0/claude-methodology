@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 
 from . import (__version__, agent_guard, agents, branches, catalog, changelog, commits, db_query, flow, guard, plan, plans,
-               review, session, setup, survey, update, updating)
+               review, session, setup, survey, tools, update, updating)
 from .config import load
 from .errors import MthError
 from .flow import (Ctx, commit, hotfix_finish, integrate, new_doc, release, release_plan, required_reviewers,
@@ -320,6 +320,30 @@ def _cmd_models(_: argparse.Namespace) -> int:
     for role, label in (("task", "Tareas del plan sin modelo"), ("review", "Revisores"),
                         ("documenter", "Documentador")):
         print(f"{label}: {models[role]}")
+    print("Planificador: opus (fijo)")
+    return 0
+
+
+def _cmd_tools(args: argparse.Namespace) -> int:
+    """``mth tools``: list the managed tools, install one on explicit request, or prune the cache (SPEC-0025)."""
+    manifest = tools.load_manifest()
+    if args.action != "install" and (args.tool or args.force):
+        raise MthError("Solo `mth tools install` admite una herramienta y --force.")
+    if args.action == "install":
+        if not args.tool:
+            raise MthError("mth tools install necesita la herramienta.", hint=f"Disponibles: {', '.join(manifest)}.")
+        tool = tools.tool_named(args.tool, manifest)
+        status = tools.install(tool, force=args.force)
+        say(f"✓ {tool.name} {tool.version} {status}: {tools.managed_path(tool, tools.cache_root())}")
+    elif args.action == "prune":
+        removed = tools.prune(manifest)
+        for path in removed:
+            say(f"· borrado {path}")
+        say(f"✓ {len(removed)} entradas borradas de la caché" if removed else "✓ nada que borrar")
+    else:
+        for tool in manifest.values():
+            origin, found = tools.status(tool)
+            say(f"{tool.name} {tool.version} · {origin} · {found}")
     return 0
 
 
@@ -455,6 +479,12 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("secrets", help="busca secretos en la rama o en el historial (gitleaks)")
     s.add_argument("--history", action="store_true", help="escanea todo el historial")
     s.add_argument("--accept", action="store_true", help="con --history: acepta los hallazgos actuales como línea base")
+    s.add_argument("--staged", action="store_true", help="escanea solo lo preparado para el commit (lo usa el hook pre-commit)")
+
+    s = sub.add_parser("tools", help="herramientas externas gestionadas (gitleaks…): lista, instala o limpia la caché")
+    s.add_argument("action", nargs="?", choices=["list", "install", "prune"], default="list")
+    s.add_argument("tool", nargs="?", help="con install: la herramienta del manifiesto")
+    s.add_argument("--force", action="store_true", help="con install: reinstala aunque ya esté instalada")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
@@ -571,9 +601,11 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_agents(args)
     if c == "smoke":
         return _cmd_smoke(args)
+    if c == "tools":
+        return _cmd_tools(args)
     ctx = _ctx(c)
     if c == "secrets":
-        flow.scan_secrets(ctx, args.history, args.accept)
+        flow.scan_secrets(ctx, args.history, args.accept, args.staged)
     elif c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
     elif c == "branch":
