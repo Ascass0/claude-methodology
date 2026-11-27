@@ -80,6 +80,24 @@ class StagedScanTests(unittest.TestCase):
         secretgate.enforce_staged(self.root, SECTION)
         self.assertFalse(self.log.exists())
 
+    def test_a_commit_that_adds_nothing_is_still_rejected_when_gitleaks_is_missing(self):
+        # verifies: SPEC-0024/FM-02
+        self.committed_repo()
+        self.git("rm", "-q", "a.txt")
+        only_git = self.tmp / "only-git"
+        only_git.mkdir()
+        (only_git / "git").symlink_to(shutil.which("git"))
+        with mock.patch.dict(os.environ, {"PATH": str(only_git)}):
+            with self.assertRaises(MthError) as ctx:
+                secretgate.enforce_staged(self.root, SECTION)
+        self.assertIn("gitleaks", ctx.exception.message)
+        self.assertFalse(self.log.exists())
+
+    def test_when_git_cannot_say_what_is_staged_the_scan_runs(self):
+        # regression: the early exit must fail safe when git does not answer
+        secretgate.enforce_staged(self.root, SECTION)  # self.root is not a repository: git fails
+        self.assertEqual(len(self.calls()), 1)
+
     def test_added_modified_and_renamed_files_are_scanned(self):
         # regression: the early exit must not skip content that can hold a secret
         self.committed_repo()

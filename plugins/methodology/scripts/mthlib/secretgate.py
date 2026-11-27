@@ -169,8 +169,8 @@ def _adds_content(root: Path) -> bool:
     try:
         done = run(["git", "diff", "--cached", "--name-only", "--diff-filter=d"], cwd=root, check=False, timeout=30)
     except MthError:
-        return True  # cannot ask git: scan, and let the scan report what is missing (fail-safe)
-    return done.returncode != 0 or bool(done.stdout.strip())  # if git itself fails, scan: fail-safe
+        return True
+    return done.returncode != 0 or bool(done.stdout.strip())  # when git cannot answer, scan: fail-safe
 
 
 def enforce_staged(root: Path, section: dict[str, Any]) -> None:
@@ -180,6 +180,7 @@ def enforce_staged(root: Path, section: dict[str, Any]) -> None:
         MthError: There are findings, or the scan could not run (the commit is rejected either way).
     """
     if not _adds_content(root):
+        resolve()  # fail closed (ADR-0022): without the tool the commit is rejected even if there is nothing to scan
         return
     found = scan(root, None, baseline_path(root, section), staged=True)
     if found:
