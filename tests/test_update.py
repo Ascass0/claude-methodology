@@ -384,6 +384,27 @@ class ApplyTests(unittest.TestCase):
             self.assertIn(gap, text)
         self.assertEqual(text.count("`config`"), 1)  # earlier gaps are kept once, not repeated
 
+    def test_resume_keeps_what_the_person_wrote_in_the_adr(self):
+        # verifies: SPEC-0021/AC-09
+        self.mth("update")
+        adr = self.work / next(f for f in self.git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+                               if f.endswith(UPDATE_ADR))
+        decision = "2. Decide la persona: los documentos no se convierten ahora."
+        consequence = "- **+** Nota propia de la persona."
+        text = adr.read_text()
+        start = text.index("2. ")  # the pending list: the person rewrites it as they decide
+        text = text[:start] + decision + "\n" + text[text.index("\n\n## Rechazado"):]
+        self.assertIn(decision, text)  # the note sits in the Decision section
+        adr.write_text(text.replace("- **+**", f"{consequence}\n- **+**", 1))
+        self.mth("agents", "add", "revisor-seguridad")
+        agent = self.work / ".claude/agents/revisor-seguridad.md"
+        agent.write_text(agent.read_text().replace(f"revisor-seguridad@{SEGURIDAD}", "revisor-seguridad@0.9.0"))
+        self.mth("update")  # resumes: it extends the ADR, it does not rewrite it
+        text = adr.read_text()
+        self.assertIn(decision, text)
+        self.assertIn(consequence, text)
+        self.assertIn("`agentes-desactualizados`: revisor-seguridad", text)  # and the new gap is recorded
+
     def test_resume_finishes_an_interrupted_run_with_only_its_own_paths(self):
         # verifies: SPEC-0021/AC-09
         self.mth("update")

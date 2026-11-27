@@ -156,6 +156,29 @@ def _read_applied(text: str) -> list[update.Gap]:
     return found
 
 
+def _generated(lines: list[str]) -> tuple[int, int] | None:
+    """Span of the generated list of applied gaps: ``1. `` and the bullets under it.
+
+    The rest (the pending list the person rewrites as they decide, and every other section) is theirs.
+    """
+    start = next((i for i, line in enumerate(lines) if line.startswith("1. ")), None)
+    if start is None:
+        return None
+    end = start + 1
+    while end < len(lines) and lines[end].startswith("   - "):
+        end += 1
+    return start, end
+
+
+def _merge(previous: str, fresh: str) -> str:
+    """``previous`` with only the list of applied gaps replaced: what the person wrote stays."""
+    old, new = previous.split("\n"), fresh.split("\n")
+    span_old, span_new = _generated(old), _generated(new)
+    if span_old is None or span_new is None:
+        return fresh  # not recognisable as ours: regenerate
+    return "\n".join(old[:span_old[0]] + new[span_new[0]:span_new[1]] + old[span_old[1]:])
+
+
 def _ident(adr: Path) -> str:
     """``ADR-0007`` from ``ADR-0007-actualizacion-de-claude-methodology.md``."""
     return "-".join(adr.name.split("-")[:2])
@@ -175,7 +198,8 @@ def _record(repo: update.Repo, automatic: list[update.Gap], pending: list[update
     applied = earlier + [g for g in automatic if (g.id, g.evidence) not in seen]
     others = sorted(p.name[:m.start()] for p in folder.glob("*.md")
                     if (m := setup.METHODOLOGY_ADR.search(p.name)) and p != adr)
-    adr.write_text(adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab), encoding="utf-8")
+    text = adr_text(ident, others[-1] if others else None, applied, pending, cfg.vocab)
+    adr.write_text(_merge(previous_text, text) if previous_text else text, encoding="utf-8")
     return adr
 
 
