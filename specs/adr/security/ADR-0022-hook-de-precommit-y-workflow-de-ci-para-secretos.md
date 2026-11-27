@@ -40,6 +40,7 @@
 - **riesgo** `--no-verify` salta el hook → la CI y `mth integrate` siguen escaneando.
 - **riesgo** Una rama hostil desactiva el workflow → protección de rama obligatoria y revisión de `.github/workflows/**`.
 - **riesgo** En un PR, la línea base se lee del árbol del propio PR: quien lo abre puede ampliarla para aceptar su secreto → un cambio en `secrets.baseline` exige revisión humana (`revisor-seguridad` lo vigila en el diff, ADR-0020).
+- **riesgo** Sin `gitleaks` en la máquina, el hook rechaza todo commit → [ADR-0023](ADR-0023-gestor-de-herramientas-externas.md) añade la copia gestionada con `mth tools install gitleaks`.
 - **riesgo** `gitleaks` solo recibe parches de seguridad (el autor traslada el desarrollo a otro proyecto) → la plantilla fija una versión; cambiar de escáner exigiría un ADR nuevo.
 
 ## Impone
