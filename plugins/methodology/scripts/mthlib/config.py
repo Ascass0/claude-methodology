@@ -53,12 +53,12 @@ DEFAULTS: dict[str, Any] = {
     "limits": {"max_file_lines": 1000,
                "exclude": ["**/*.lock", "**/package-lock.json", "**/migrations/**", "**/generated/**"],
                "exceptions": []},
-    "secrets": {"mode": "", "baseline": ".gitleaks-baseline.json"},
+    "secrets": {"mode": "", "hook": "", "ci": "", "baseline": ".gitleaks-baseline.json"},
     "release": {"github_release": True, "sign_tags": False, "tag_prefix": "v", "version_files": []},
     "models": {"ladder": ["haiku", "sonnet", "opus"], "task": "sonnet",
                "review": "sonnet", "documenter": "sonnet"},
     "language": {"docs": "es"},
-    "hooks": {"commit_msg": "own"},
+    "hooks": {"commit_msg": "own", "pre_commit": "own"},
     "autonomy": {"level": "full"},
     "work": {"dirs": []},
     "agents": {},
@@ -90,11 +90,11 @@ _SCHEMA: dict[str, Any] = {
               "adr_kind": str, "include": list, "exclude": list, "legacy_base": str,
               "test_patterns": dict},
     "limits": {"max_file_lines": int, "exclude": list, "exceptions": list},
-    "secrets": {"mode": str, "baseline": str},
+    "secrets": {"mode": str, "hook": str, "ci": str, "baseline": str},
     "release": {"github_release": bool, "sign_tags": bool, "tag_prefix": str, "version_files": list},
     "models": {"ladder": list, "task": str, "review": str, "documenter": str},
     "language": {"docs": str},
-    "hooks": {"commit_msg": str},
+    "hooks": {"commit_msg": str, "pre_commit": str},
     "autonomy": {"level": str},
     "work": {"dirs": list},
     "agents": dict,  # SPEC-0012: validated against the catalog metas
@@ -206,8 +206,9 @@ def _check_semantics(data: dict[str, Any]) -> None:
     work.validate(data["work"]["dirs"])
     if data["forge"] not in forge.FORGES:
         raise MthError(f"'forge' = '{data['forge']}' debe ser uno de {', '.join(forge.FORGES)}.")
-    if data["hooks"]["commit_msg"] not in HOOK_MODES:
-        raise MthError(f"'hooks.commit_msg' = '{data['hooks']['commit_msg']}' debe ser uno de {', '.join(HOOK_MODES)}.")
+    for key in ("commit_msg", "pre_commit"):
+        if data["hooks"][key] not in HOOK_MODES:
+            raise MthError(f"'hooks.{key}' = '{data['hooks'][key]}' debe ser uno de {', '.join(HOOK_MODES)}.")
     if data["autonomy"]["level"] not in AUTONOMY_LEVELS:
         raise MthError(f"'autonomy.level' = '{data['autonomy']['level']}' debe ser uno de {', '.join(AUTONOMY_LEVELS)}.")
     legacy = data["trace"]["legacy_base"]

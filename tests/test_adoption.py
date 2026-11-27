@@ -29,7 +29,7 @@ CONFIG = 'version = 1\n[commands]\ntest = ""\n'
 ENGLISH = "This is the readme of the project and it is for the team that works with it. " * 6
 DEFAULT_ANSWERS = {"alcance": {"option": "gradual"}, "ramas": {"option": "crear"}, "tests": {"option": "ninguno"},
                    "autonomia": {"option": "until-pr"}, "idioma": {"option": "es"}, "ci": {"option": "sin-ci"},
-                   "modelos": {"option": "calidad"}, "versiones": {"option": "continuar"},
+                   "modelos": {"option": "calidad"}, "secretos": {"option": "ninguno"}, "versiones": {"option": "continuar"},
                    "instrucciones": {"option": "metodologia"}, "revisores": {"option": "agentes", "agents": []}}
 
 
@@ -165,7 +165,7 @@ class SurveyTests(RepoCase):
         inventory = self.inventory()
         self.assertEqual(inventory.profile, "fork")
         self.assertEqual([q["id"] for q in inventory.questions], ["autonomia", "forja", "alcance", "ramas", "versiones",
-                                                                  "tests", "revisores", "idioma", "ci", "modelos"])
+                                                                  "tests", "revisores", "idioma", "ci", "secretos", "modelos"])
 
     def test_questions_follow_profile_and_signals(self):
         # verifies: SPEC-0004/AC-05
@@ -173,15 +173,15 @@ class SurveyTests(RepoCase):
         self.commit()
         new = self.inventory()
         # The repository has no remote, so the CI question is settled without asking (SPEC-0015).
-        self.assertEqual([q["id"] for q in new.questions], ["autonomia", "forja", "revisores", "idioma", "ci", "modelos"])
-        self.assertEqual(new.asked(), ["autonomia", "revisores"])
+        self.assertEqual([q["id"] for q in new.questions], ["autonomia", "forja", "revisores", "idioma", "ci", "secretos", "modelos"])
+        self.assertEqual(new.asked(), ["autonomia", "revisores", "secretos"])
         self.write("src/app.py")
         self.write(".github/workflows/ci.yml", "on: push\n")
         self.write("docs/guia.md", "El proyecto es para la gente que trabaja con el código de la casa. " * 6)
         existing = self.inventory()
         self.assertEqual([q["id"] for q in existing.questions],
-                         ["autonomia", "forja", "alcance", "ramas", "tests", "revisores", "ci", "modelos"])
-        self.assertEqual(existing.asked(), ["autonomia", "tests", "revisores"])
+                         ["autonomia", "forja", "alcance", "ramas", "tests", "revisores", "ci", "secretos", "modelos"])
+        self.assertEqual(existing.asked(), ["autonomia", "tests", "revisores", "secretos"])
         self.write("tests/test_app.py")  # one test candidate: no question
         self.assertNotIn("tests", self.inventory().asked())
 
@@ -284,7 +284,7 @@ class AnswersTests(unittest.TestCase):
             "colision": {"option": "renombrar", "renames": {"verificador": "verificador-repo"}},
             "instrucciones": {"option": "repo", "exceptions": ["pregunta antes de hacer commit"]},
             "autonomia": {"option": "supervised"}, "idioma": {"option": "en"}, "ci": {"option": "crear"},
-            "modelos": {"option": "ahorro"},
+            "modelos": {"option": "ahorro"}, "secretos": {"option": "ninguno"},
         }
         self.assertEqual(sorted(answers), sorted(q["id"] for q in inventory.questions))
         self.assertTrue(set(inventory.asked()) <= set(answers))
@@ -310,7 +310,8 @@ class AnswersTests(unittest.TestCase):
         answers = {"alcance": {"option": "completa"}, "versiones": {"option": "prefijo", "tag_prefix": "fork-v"},
                    "autonomia": {"option": "otro", "config": {"autonomy": {"level": "until-pr"}},
                                  "note": "solo confirmamos la integración"},
-                   "modelos": {"option": "equilibrado"}, "revisores": {"option": "agentes", "agents": []}}
+                   "modelos": {"option": "equilibrado"}, "revisores": {"option": "agentes", "agents": []},
+                   "secretos": {"option": "ninguno"}}
         cfg = self.config(inventory, answers)
         self.assertEqual((cfg["commands"]["test"], cfg["ci"]["required"]), ("pytest", True))
         self.assertEqual(cfg["paths"]["claude_md"], ".claude/CLAUDE.md")

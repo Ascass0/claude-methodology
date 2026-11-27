@@ -6,6 +6,7 @@ never prints a secret value and removes the temporary report whatever happens.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -14,12 +15,15 @@ from typing import Any
 
 from .errors import MthError
 from .files import atomic_write
+from . import secretci
 from .proc import run
 
 TOOL = "gitleaks"
 MODES = ("", "off", "block")
+TOGGLES = ("", "off", "on")  # secrets.hook and secrets.ci (SPEC-0024)
 EXIT_LEAKS = 2  # passed as --exit-code so a tool failure (1) is not read as a finding
 SCAN_TIMEOUT = 600  # seconds: nothing waits forever; a timeout blocks like any other failure (SPEC-0022/AC-15)
+MIN_VERSION = (8, 19, 0)  # the release that replaced `protect` and `detect` by `git` (SPEC-0024)
 INSTALL_HINT = "Instala gitleaks (https://github.com/gitleaks/gitleaks#installing) o pon secrets.mode = \"off\"."
 ACCEPT_WARNING = ("Los secretos aceptados siguen en el historial: rótalos en su servicio. "
                   "Aceptarlos no los invalida.")
@@ -33,17 +37,23 @@ class Finding:
     commit: str
 
     def __str__(self) -> str:
-        return f"{self.rule} · {self.file}:{self.line} · {self.commit[:8]}"
+        where = f"{self.rule} · {self.file}:{self.line}"
+        return f"{where} · {self.commit[:8]}" if self.commit else where  # a staged finding has no commit yet
 
 
 def validate(section: dict[str, Any]) -> None:
     """Check the ``[secrets]`` table.
 
     Raises:
-        MthError: The mode is unknown or the baseline path is empty (fail-fast).
+        MthError: A value is unknown or the baseline path is empty (fail-fast).
     """
     if section["mode"] not in MODES:
         raise MthError(f"'secrets.mode' = {section['mode']!r} debe ser \"\" (sin decidir), \"off\" o \"block\".")
+    for key in ("hook", "ci"):
+        if section[key] not in TOGGLES:
+            raise MthError(f"'secrets.{key}' = {section[key]!r} debe ser \"\" (sin decidir), \"off\" o \"on\".")
+    if section["ci"] == "on":  # the baseline ends inside the workflow script (SPEC-0024/AC-11)
+        secretci.check_baseline(section["baseline"])
     raw = section["baseline"].strip()
     parts = PurePath(raw).parts
     if not raw or PurePath(raw).is_absolute() or ".." in parts or (parts and parts[0] == ".git"):
@@ -69,6 +79,18 @@ def is_installed() -> bool:
     return shutil.which(TOOL) is not None
 
 
+def version() -> tuple[int, int, int] | None:
+    """Installed ``gitleaks`` version, or None when the tool is absent or its output is not recognised."""
+    if not is_installed():
+        return None
+    try:
+        out = run([TOOL, "version"], check=False, timeout=30).stdout
+    except MthError:
+        return None
+    found = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+    return (int(found[1]), int(found[2]), int(found[3])) if found else None
+
+
 def parse_report(text: str) -> list[Finding]:
     """Findings of a gitleaks JSON report; the secret value is never read.
 
@@ -79,20 +101,22 @@ def parse_report(text: str) -> list[Finding]:
         return []
     try:
         items = json.loads(text)
-        return [Finding(str(i["RuleID"]), str(i["File"]), int(i["StartLine"]), str(i["Commit"])) for i in items]
+        return [Finding(str(i["RuleID"]), str(i["File"]), int(i["StartLine"]), str(i.get("Commit", ""))) for i in items]
     except (ValueError, TypeError, KeyError) as exc:
         raise MthError("El informe de gitleaks no se puede leer.",
                        hint="Actualiza gitleaks o repite el escaneo.") from exc
 
 
-def scan(root: Path, rev_range: str | None, baseline: Path | None, report_copy: Path | None = None) -> list[Finding]:
-    """Run gitleaks over a commit range (or the whole history) and return the findings.
+def scan(root: Path, rev_range: str | None, baseline: Path | None, report_copy: Path | None = None,
+         staged: bool = False) -> list[Finding]:
+    """Run gitleaks over a commit range, the whole history or what is staged, and return the findings.
 
     Args:
         root: Repository root.
         rev_range: ``git log`` range to scan, or None for the whole history.
         baseline: Accepted findings to ignore; used only if the file exists.
         report_copy: Where to store the redacted report (to write the baseline).
+        staged: Scan only what is staged (``--pre-commit --staged``, SPEC-0024); ``rev_range`` is ignored.
 
     Raises:
         MthError: The tool is missing, fails or leaves an unreadable report.
@@ -103,7 +127,9 @@ def scan(root: Path, rev_range: str | None, baseline: Path | None, report_copy: 
         report = Path(tmp) / "report.json"
         args = [TOOL, "git", str(root), "--redact", "--no-banner", "--exit-code", str(EXIT_LEAKS),
                 "--report-format", "json", "--report-path", str(report)]
-        if rev_range:
+        if staged:
+            args += ["--pre-commit", "--staged"]
+        elif rev_range:
             args.append(f"--log-opts={rev_range}")
         if baseline is not None and baseline.is_file():
             args += ["--baseline-path", str(baseline)]
@@ -135,6 +161,19 @@ def enforce(root: Path, section: dict[str, Any], rev_range: str | None) -> None:
         more = f"\n  … y {len(found) - 50} más" if len(found) > 50 else ""
         raise MthError(f"Secretos en el historial ({len(found)} hallazgos):\n{listing}{more}",
                        hint="Rota el secreto en su servicio y retíralo del código. Los valores no se imprimen.")
+
+
+def enforce_staged(root: Path, section: dict[str, Any]) -> None:
+    """Scan what is staged and fail on any finding outside the baseline (the pre-commit hook, SPEC-0024).
+
+    Raises:
+        MthError: There are findings, or the scan could not run (the commit is rejected either way).
+    """
+    found = scan(root, None, baseline_path(root, section), staged=True)
+    if found:
+        listing = "\n".join(f"  - {f}" for f in found[:50])
+        raise MthError(f"Secretos en lo preparado para el commit ({len(found)} hallazgos):\n{listing}",
+                       hint="Quita el secreto del cambio y rótalo si ya lo has usado. Los valores no se imprimen.")
 
 
 def accept_history(root: Path, section: dict[str, Any]) -> int:

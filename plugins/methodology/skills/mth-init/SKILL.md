@@ -26,8 +26,8 @@ En un repo nuevo, sustituye la segunda mitad por: «El repo está vacío, así q
 
 ## 3. Pregunta
 
-- Haz **solo** las preguntas con `outcome: decision`, con los textos de [preguntas.md](preguntas.md), en el orden del inventario (la precedencia entre el repo y la metodología va primero) y en **una sola ronda** con `AskUserQuestion`. Ofrece únicamente las opciones de `options` cuando el inventario las da.
-- Si hay más de cuatro `decision`, hazlas en las rondas necesarias y avisa a la persona de que falta una regla de deducción: anótalo en tu mensaje de cierre.
+- Haz **solo** las preguntas con `outcome: decision`, con los textos de [preguntas.md](preguntas.md), en el orden del inventario (la precedencia entre el repo y la metodología va primero) y en una ronda con `AskUserQuestion` (un repo nuevo hace como mucho seis preguntas). Ofrece únicamente las opciones de `options` cuando el inventario las da.
+- `AskUserQuestion` admite cuatro preguntas por ronda: con más de cuatro `decision` (un repo nuevo puede llegar a seis), hazlas en dos rondas. Si en un repo existente son demasiadas, avisa a la persona de que falta una regla de deducción: anótalo en tu mensaje de cierre.
 - Las preguntas `deducida` y `por_defecto` no se preguntan: aparecen en el resumen del paso 4, donde la persona las corrige si quiere.
 - Si la persona corrige el perfil o la evidencia ("esas RFC están abandonadas"), ajústalo en la respuesta que corresponda. El inventario no se edita.
 - Si rechaza adoptar en cualquier momento: `mth init --decline` y termina.
@@ -52,7 +52,7 @@ Si no puedes preguntar: con el perfil `new`, adopta con las opciones recomendada
    - crear el workflow de CI (`ci: crear`);
    - añadir `mth check-msg "$1"` al gestor de hooks, si lo hay;
    - rellenar la sección local (`<!-- mth:local:begin -->`) de los agentes del catálogo instalados: el modelo de amenazas de `revisor-seguridad` es obligatorio. Sale de lo que has leído del repo; si no hay base para escribirlo, pregunta a la persona.
-   - gate de secretos: pregunta con `AskUserQuestion` si activar `secrets.mode = "block"` (escanea con `gitleaks` antes de subir; recomendado) o `"off"`, y escríbelo en `methodology.toml`; sin respuesta queda sin decidir y `mth doctor` lo avisa. Con `block`, ejecuta `mth secrets --history`: lo que ya haya en el historial se rota y solo después se acepta con `--accept`. Anota la decisión en el ADR de adopción;
+   - secretos: la pregunta `secretos` (siempre `decision`) ofrece `bloquear` (`secrets.mode = "block"`, `secrets.hook = "on"` y, con GitHub y CI exigida, `secrets.ci = "on"`), `integrar` (`block` sin hook ni CI) y `ninguno` (todo `off`); requiere `gitleaks` ≥ 8.19.0, que la persona debe instalar. El workflow lo escribe `mth`, no tú. Con `block`, ejecuta `mth secrets --history`: lo que ya haya en el historial se rota y solo después se acepta con `--accept`. Recuerda que la protección de rama debe exigir la comprobación del workflow. Anota la decisión en el ADR de adopción;
 5. `mth doctor` sin ✗ y `mth trace` sin errores (los avisos de legado son normales en una adopción gradual).
 6. Integra con la skill `mth-integrate` (`--title "chore(methodology): adopt claude-methodology"`).
 

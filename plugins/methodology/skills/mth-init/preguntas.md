@@ -166,6 +166,16 @@ Si algún revisor del repo solo aplica a un área (por ejemplo, `api-reviewer` a
 - **Sin CI por ahora (Recomendado)**: `mth doctor` avisará hasta que exista. Respuesta: `{"option": "sin-ci"}`
 - **Crear un workflow básico**: escribes en la rama de adopción un workflow que ejecute `commands.test`. Respuesta: `{"option": "crear"}`
 
+## `secretos`
+
+**Cabecera:** Secretos
+
+**Pregunta:** Un secreto que llega al historial compartido está comprometido y no se puede deshacer. La metodología puede escanear con `gitleaks` (herramienta externa que tendrás que instalar) al integrar, antes de cada commit con un hook local y en cada PR con un workflow de GitHub Actions. Nada se activa sin tu decisión. ¿Qué activamos?
+
+- **Gate, hook y CI (Recomendado)**: escanea al integrar, antes de cada commit y en cada PR (el workflow solo con GitHub y CI exigida). Respuesta: `{"option": "bloquear"}`
+- **Solo al integrar**: `mth integrate` no sube una rama con secretos nuevos; sin hook ni workflow. Respuesta: `{"option": "integrar"}`
+- **Ninguno por ahora**: no se busca nada; `mth doctor` lo recordará. Respuesta: `{"option": "ninguno"}`
+
 ## `modelos`
 
 **Cabecera:** Modelos

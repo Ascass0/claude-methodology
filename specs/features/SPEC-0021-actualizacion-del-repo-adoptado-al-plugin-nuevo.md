@@ -53,6 +53,9 @@ Registro inicial:
 | `hook` | Hook `commit-msg` de la metodología desactualizado | `mth doctor` | `automatica` | Reinstalar según `hooks.commit_msg` |
 | `formato` | Specs y ADR sin `Formato: compacto` | Cuenta por documento | `decision` | Migración: convertir o dejar como están |
 | `secretos` | `secrets.mode` sin decidir | `mth update --plan` ([SPEC-0022](SPEC-0022-gate-de-secretos-en-el-historial.md)) | `decision` | Activar el gate (`block`) o desactivarlo (`off`) |
+| `secretos-hook` | `secrets.hook` sin decidir | `mth update --plan` ([SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md)) | `decision` | Activar el hook `pre-commit` (`on`) o no (`off`) |
+| `secretos-ci` | `secrets.ci` sin decidir con GitHub y `ci.required = true` | `mth update --plan` ([SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md)) | `decision` | Activar el workflow de secretos (`on`) o no (`off`) |
+| `secretos-workflow` | Workflow de secretos ausente o desactualizado con `secrets.ci = "on"` | `mth update --plan` ([SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md)) | `automatica` | Escribirlo desde la plantilla |
 | `humo` | Sin registro de `mth smoke` o de otra versión de Claude Code | `mth doctor` | `informativa` | Ejecutar `mth smoke` |
 | `triangulacion` | Criterios con un único test | `mth trace --single` | `informativa` | Trabajo de tests por spec |
 

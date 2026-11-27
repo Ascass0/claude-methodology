@@ -23,7 +23,7 @@
 ## Fuera de alcance
 
 - Modelos de ramas sin `development` (trunk-based) y publicar con una herramienta externa. Las preguntas de ramas y versiones no los ofrecen.
-- Convertir documentos, editar CLAUDE.md, renombrar agentes o crear workflows de CI de forma automática: lo hace Opus en la rama de adopción, siguiendo la skill.
+- Convertir documentos, editar CLAUDE.md, renombrar agentes o crear workflows de CI de forma automática: lo hace Opus en la rama de adopción, siguiendo la skill. El workflow de secretos es la excepción: es determinista y lo escribe `mth` desde su plantilla ([SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md)).
 - Gestores de hooks que regeneran sus ficheros (husky, lefthook, pre-commit). El inventario los detecta y la skill indica cómo añadir `mth check-msg`.
 - Traducir los mensajes de `mth`.
 
@@ -88,7 +88,7 @@ Señales que detecta:
 | `ci` | — | no hay `ci` |
 | `modelos` | todos | — |
 
-Un repo nuevo hace como mucho cinco preguntas (`revisores`, `autonomia`, `idioma`, `ci`, `modelos`). `revisores` se hace siempre porque también ofrece los agentes del catálogo ([SPEC-0012](SPEC-0012-catalogo-de-agentes.md)).
+Un repo nuevo hace como mucho seis preguntas (`revisores`, `autonomia`, `idioma`, `ci`, `secretos`, `modelos`). `revisores` se hace siempre porque también ofrece los agentes del catálogo ([SPEC-0012](SPEC-0012-catalogo-de-agentes.md)).
 
 `mth survey` muestra el perfil, las señales encontradas y las preguntas. Con `--json` escribe un objeto `{"profile", "signals", "questions"}`, en el que cada pregunta lleva su ID y la evidencia que la dispara.
 
@@ -152,7 +152,7 @@ Cualquier pregunta admite además `{"option": "otro", "config": {...}, "note": "
 - **AC-02**: MIENTRAS no exista `methodology.toml`, el guard NO DEBE bloquear comandos que bloquea en un repo adoptado (push a `main`, rebase).
 - **AC-03**: CUANDO se ejecuta `mth init --decline`, `mth` DEBE desactivar el plugin en `.claude/settings.local.json` conservando las demás claves, de forma idempotente; SI el fichero no es JSON válido, ENTONCES DEBE fallar sin sobrescribirlo.
 - **AC-04**: CUANDO se ejecuta `mth survey --json`, `mth` DEBE clasificar como `new` un repo con solo README, `existing` uno con código sin señales de proceso, `methodology` uno con specs, agentes o un hook ajeno, y `fork` uno con remoto `upstream`.
-- **AC-05**: `mth survey` DEBE producir las preguntas de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo DEBE producir como mucho `revisores`, `autonomia`, `idioma`, `ci` y `modelos`.
+- **AC-05**: `mth survey` DEBE producir las preguntas de la base del perfil más las disparadas por cada señal de la tabla; un repo nuevo DEBE producir como mucho `revisores`, `autonomia`, `idioma`, `ci`, `secretos` y `modelos`.
 - **AC-06**: CUANDO se ejecuta `mth survey`, `mth` DEBE detectar specs y ADR con su patrón de ID, agentes y colisiones de nombre, gestores de hooks, herramientas de publicación, ficheros de versión, candidatos a comando de tests e idioma, sin modificar el repo.
 - **AC-07**: SI el repo ya está adoptado, ENTONCES `mth survey` DEBE fallar; SI un fichero es ilegible durante el inventario, ENTONCES DEBE avisar sin detener el resto.
 - **AC-08**: SI el JSON es inválido, falta una pregunta pedida, sobra una no pedida, hay una opción o parámetro desconocidos o las claves `otro` dejan la configuración inválida, ENTONCES `mth init --answers` DEBE rechazarlo sin modificar nada.

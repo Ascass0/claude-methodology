@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from . import __version__, agents, catalog, compact, setup, smoke
+from . import __version__, agents, catalog, compact, forge, secretci, setup, smoke
 from .config import CONFIG_PATH, Config, load
 from .errors import MthError
 from .git import Git
@@ -110,8 +110,33 @@ def _block(repo: Repo) -> str | None:
 
 
 def _hook(repo: Repo) -> str | None:
+    found = []
     state = setup.hook_state(repo.git, repo.cfg["hooks"]["commit_msg"])
-    return f"hook commit-msg {state}" if state in ("stale", "absent") else None
+    if state in ("stale", "absent"):
+        found.append(f"hook commit-msg {state}")
+    if repo.cfg["secrets"]["hook"] == "on":  # SPEC-0024/AC-13
+        state = setup.hook_state(repo.git, repo.cfg["hooks"]["pre_commit"], setup.PRE_COMMIT)
+        if state in ("stale", "absent"):
+            found.append(f"hook pre-commit {state}")
+    return "; ".join(found) or None
+
+
+def _secrets_hook(repo: Repo) -> str | None:  # SPEC-0024/AC-12
+    return "secrets.hook sin decidir: no se escanea lo preparado antes de cada commit" if repo.cfg["secrets"]["hook"] == "" else None
+
+
+def _secrets_ci(repo: Repo) -> str | None:  # SPEC-0024/AC-12
+    undecided = repo.cfg["secrets"]["ci"] == ""
+    if undecided and repo.cfg.forge == forge.GITHUB and repo.cfg["ci"]["required"]:
+        return "secrets.ci sin decidir: la CI no escanea secretos en cada PR"
+    return None
+
+
+def _secrets_workflow(repo: Repo) -> str | None:  # SPEC-0024/AC-13
+    if not setup.secrets_workflow_applies(repo.cfg):
+        return None
+    state = secretci.state(repo.git.root, repo.cfg["secrets"]["baseline"])
+    return f"workflow de secretos {state}" if state in ("stale", "absent") else None
 
 
 def _read(path: Path) -> str:
@@ -154,6 +179,9 @@ REGISTRY: tuple[GapKind, ...] = (
     GapKind("hook", AUTOMATIC, "Reinstalar el hook según hooks.commit_msg", _hook),
     GapKind("formato", DECISION, "Migración: convertir los documentos o dejarlos como están", _format),
     GapKind("secretos", DECISION, "Activar el gate de secretos (secrets.mode = \"block\") o desactivarlo (\"off\")", _secrets),
+    GapKind("secretos-hook", DECISION, "Activar el hook pre-commit (secrets.hook = \"on\") o no (\"off\")", _secrets_hook),
+    GapKind("secretos-ci", DECISION, "Activar el workflow de secretos (secrets.ci = \"on\") o no (\"off\")", _secrets_ci),
+    GapKind("secretos-workflow", AUTOMATIC, "Escribir el workflow de secretos desde la plantilla", _secrets_workflow),
     GapKind("humo", INFORMATIVE, "Ejecutar mth smoke", _smoke),
     GapKind("triangulacion", INFORMATIVE, "Trabajo de tests por spec (mth trace --single)", _single),
 )

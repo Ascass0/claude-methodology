@@ -456,6 +456,7 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("secrets", help="busca secretos en la rama o en el historial (gitleaks)")
     s.add_argument("--history", action="store_true", help="escanea todo el historial")
     s.add_argument("--accept", action="store_true", help="con --history: acepta los hallazgos actuales como línea base")
+    s.add_argument("--staged", action="store_true", help="escanea solo lo preparado para el commit (lo usa el hook pre-commit)")
 
     s = sub.add_parser("changes", help="fragmentos de changelog")
     s.add_argument("action", choices=["new", "check", "preview"])
@@ -574,7 +575,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_smoke(args)
     ctx = _ctx(c)
     if c == "secrets":
-        flow.scan_secrets(ctx, args.history, args.accept)
+        flow.scan_secrets(ctx, args.history, args.accept, args.staged)
     elif c == "doc":
         new_doc(ctx, args.kind, args.title, args.category)
     elif c == "branch":

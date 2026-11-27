@@ -55,7 +55,7 @@ El inventario añade dos señales: `forge` (`github`, `gitlab` o `none`, deducid
 | `idioma` | `deducida` si el idioma detectado es `es` o `en`; `por_defecto` (`es`) si es `unknown` |
 | `ci` | Si `forge` no es `github`: `deducida` (`sin-ci`) y solo se ofrece `sin-ci`. Con GitHub, `decision` |
 | `modelos` | `por_defecto`: `equilibrado` |
-| `instrucciones`, `autonomia`, `specs`, `decisiones`, `revisores`, `colision` | `decision` |
+| `instrucciones`, `autonomia`, `specs`, `decisiones`, `revisores`, `colision`, `secretos` | `decision` ([SPEC-0024](SPEC-0024-hook-de-precommit-y-workflow-de-ci-para-secretos.md)) |
 
 `ci` se pregunta también cuando `forge` no es `github`, aunque haya workflows, para que el resultado conste.
 
@@ -110,7 +110,7 @@ La tabla del ADR de adopción tiene una columna **Resultado** (`deducida`, `por_
 - **AC-08**: CUANDO se ejecuta `mth init --answers --plan`, `mth` DEBE imprimir los cuatro bloques (deducido con evidencia, por defecto, decidido, capacidades activas y desactivadas con motivo) sin escribir nada; la adopción DEBE imprimir el mismo plan antes de escribir.
 - **AC-09**: La tabla del ADR de adopción DEBE tener, por cada pregunta del inventario, su resultado (`deducida`, `por_defecto` o `decision`).
 - **AC-10**: Todas las opciones del catálogo de preguntas DEBEN existir en `mth init --answers` y aplicarse a la configuración; todos los comandos `mth` y claves de configuración que nombran sus textos DEBEN existir; `revisores` DEBE aceptar `paths` y escribirlo en `[review.paths]`, que el cálculo de revisores obligatorios respeta.
-- **AC-11**: DADO el inventario del caso real (remoto en GitLab, única rama `dev` de la que salen las demás, hook `commit-msg` ajeno, `Makefile` con `test` y `pytest`, docs en español, 42 ADR, `CLAUDE.md`), la entrevista DEBE tener como máximo 4 preguntas `decision`, el plan de adopción DEBE listar `mth integrate` y `mth release` como desactivadas y la skill DEBE documentar una sola ronda y el resumen antes de escribir.
+- **AC-11**: DADO el inventario del caso real (remoto en GitLab, única rama `dev` de la que salen las demás, hook `commit-msg` ajeno, `Makefile` con `test` y `pytest`, docs en español, 42 ADR, `CLAUDE.md`), la entrevista DEBE tener como máximo 5 preguntas `decision` (con `secretos`; más de cuatro van en dos rondas, por el límite de `AskUserQuestion`), el plan de adopción DEBE listar `mth integrate` y `mth release` como desactivadas y la skill DEBE documentar una sola ronda (dos si hay más de cuatro preguntas) y el resumen antes de escribir.
 
 ## Notas
 

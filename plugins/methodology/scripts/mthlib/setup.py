@@ -7,11 +7,12 @@ import shlex
 import sys
 import tempfile
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
-from . import adoption, agents, changelog, commits, forge, lang, secretgate, survey, versions, work
+from . import adoption, agents, changelog, commits, forge, lang, secretci, secretgate, survey, versions, work
 from .files import atomic_write
-from .config import CONFIG_PATH, load, parse
+from .config import CONFIG_PATH, Config, load, parse
 from .ids import IdRegistry
 from .errors import MthError
 from .gh import GitHub
@@ -33,26 +34,46 @@ MARKETPLACE = "claude-methodology"
 PLUGIN = "methodology"
 
 
-# -- git hook -----------------------------------------------------------------
-CHAINED_HOOK = "commit-msg.local"
-REPLACED_HOOK = "commit-msg.pre-mth"
+# -- git hooks ----------------------------------------------------------------
+@dataclass(frozen=True)
+class HookKind:
+    """A git hook that mth manages: the file name, its ``[hooks]`` key and what its script runs."""
+    name: str
+    key: str
+    command: str  # mth subcommand and arguments
+    argument: str  # what the foreign hook it chains to receives
+    instruction: str  # what a versioned hooks directory needs by hand
 
 
-def hook_script(chain: bool = False) -> str:
+COMMIT_MSG = HookKind("commit-msg", "commit_msg", 'check-msg "$1"', ' "$1"',
+                      'Añade `mth check-msg "$1"` al hook commit-msg de tu gestor de hooks.')
+PRE_COMMIT = HookKind("pre-commit", "pre_commit", "secrets --staged", "",
+                      "Añade `mth secrets --staged` al hook pre-commit de tu gestor de hooks.")
+
+
+def _chained(kind: HookKind) -> str:
+    return f"{kind.name}.local"
+
+
+def _replaced(kind: HookKind) -> str:
+    return f"{kind.name}.pre-mth"
+
+
+def hook_script(chain: bool = False, kind: HookKind = COMMIT_MSG) -> str:
     mth = shlex.quote(str(MTH))
     chained = ""
     if chain:  # SPEC-0006: the repo's own hook runs first and can reject the message
-        chained = ('chained="$(dirname "$0")/' + CHAINED_HOOK + '"\n'
+        chained = ('chained="$(dirname "$0")/' + _chained(kind) + '"\n'
                    'if [ ! -x "$chained" ]; then\n'
-                   f"  echo '✗ falta el hook encadenado {CHAINED_HOOK} o no es ejecutable: restáuralo o cambia hooks.commit_msg' >&2\n"
+                   f"  echo '✗ falta el hook encadenado {_chained(kind)} o no es ejecutable: restáuralo o cambia hooks.{kind.key}' >&2\n"
                    "  exit 1\nfi\n"
-                   '"$chained" "$1" || exit $?\n')
+                   f'"$chained"{kind.argument} || exit $?\n')
     return ("#!/bin/sh\n" f"{HOOK_MARK}\n"
             f"if [ ! -f {mth} ]; then\n"
             "  echo '✗ claude-methodology no encontrado: abre una sesión de Claude Code o ejecuta mth doctor' >&2\n"
             "  exit 1\nfi\n"
             f"{chained}"
-            f'exec sh {mth} check-msg "$1"\n')
+            f"exec sh {mth} {kind.command}\n")
 
 
 def _versioned_hooks(git: Git) -> bool:
@@ -60,37 +81,37 @@ def _versioned_hooks(git: Git) -> bool:
     return hooks.is_relative_to(git.root.resolve()) and not hooks.is_relative_to(git.git_dir().resolve())
 
 
-def check_hook_mode(git: Git, mode: str) -> None:
+def check_hook_mode(git: Git, mode: str, kind: HookKind = COMMIT_MSG) -> None:
     """Fail before any change when ``mode`` cannot be applied to a foreign hook.
 
     Raises:
         MthError: Same conditions as :func:`install_hook`.
     """
-    path = git.hooks_dir() / "commit-msg"
+    path = git.hooks_dir() / kind.name
     if mode == "own" or not path.exists() or HOOK_MARK in path.read_text(encoding="utf-8", errors="replace"):
         return
     if _versioned_hooks(git):
         raise MthError(f"El directorio de hooks ({git.hooks_dir()}) está versionado: lo gestiona otra herramienta.",
-                       hint='Añade `mth check-msg "$1"` al hook commit-msg de tu gestor de hooks.')
-    backup = git.hooks_dir() / (CHAINED_HOOK if mode == "chain" else REPLACED_HOOK)
+                       hint=kind.instruction)
+    backup = git.hooks_dir() / (_chained(kind) if mode == "chain" else _replaced(kind))
     if backup.exists():
-        raise MthError(f"No se puede guardar el hook commit-msg ajeno: {backup.name} ya existe.",
+        raise MthError(f"No se puede guardar el hook {kind.name} ajeno: {backup.name} ya existe.",
                        hint="Revisa ese fichero y bórralo o renómbralo antes de volver a instalar.")
 
 
-def install_hook(git: Git, mode: str = "own") -> str:
-    """Install or refresh the commit-msg hook according to ``hooks.commit_msg``. Returns a status word.
+def install_hook(git: Git, mode: str = "own", kind: HookKind = COMMIT_MSG) -> str:
+    """Install or refresh a hook according to ``hooks.<key>``. Returns a status word.
 
     ``own`` never touches a foreign hook (``foreign``); ``replace`` keeps it as
-    ``commit-msg.pre-mth`` (``replaced``); ``chain`` keeps it as ``commit-msg.local``
+    ``<name>.pre-mth`` (``replaced``); ``chain`` keeps it as ``<name>.local``
     and runs it first (``chained``).
 
     Raises:
         MthError: ``replace``/``chain`` on a versioned hooks directory, or the backup name is taken.
     """
     hooks = git.hooks_dir()
-    path = hooks / "commit-msg"
-    desired = hook_script(chain=mode == "chain")
+    path = hooks / kind.name
+    desired = hook_script(chain=mode == "chain", kind=kind)
     status = "installed"
     if path.exists():
         current = path.read_text(encoding="utf-8", errors="replace")
@@ -100,8 +121,8 @@ def install_hook(git: Git, mode: str = "own") -> str:
         elif mode == "own":
             return "foreign"
         else:
-            check_hook_mode(git, mode)
-            path.rename(hooks / (CHAINED_HOOK if mode == "chain" else REPLACED_HOOK))
+            check_hook_mode(git, mode, kind)
+            path.rename(hooks / (_chained(kind) if mode == "chain" else _replaced(kind)))
             status = "chained" if mode == "chain" else "replaced"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(desired, encoding="utf-8")
@@ -109,15 +130,54 @@ def install_hook(git: Git, mode: str = "own") -> str:
     return status
 
 
-def hook_state(git: Git, mode: str = "own") -> str:
-    """Read-only state of the commit-msg hook: ``current``, ``stale`` (ours, outdated), ``foreign`` or ``absent``."""
-    path = git.hooks_dir() / "commit-msg"
+def hook_state(git: Git, mode: str = "own", kind: HookKind = COMMIT_MSG) -> str:
+    """Read-only state of a hook: ``current``, ``stale`` (ours, outdated), ``foreign`` or ``absent``."""
+    path = git.hooks_dir() / kind.name
     if not path.exists():
         return "absent"
     current = path.read_text(encoding="utf-8", errors="replace")
     if HOOK_MARK not in current:
         return "foreign"
-    return "current" if current == hook_script(chain=mode == "chain") else "stale"
+    return "current" if current == hook_script(chain=mode == "chain", kind=kind) else "stale"
+
+
+def secrets_workflow_applies(cfg: Config) -> bool:
+    """The secrets workflow is written only with ``secrets.ci = "on"``, GitHub and a required CI (SPEC-0024)."""
+    return cfg["secrets"]["ci"] == "on" and cfg.forge == forge.GITHUB and cfg["ci"]["required"]
+
+
+def sync_secrets_workflow(root: Path, cfg: Config) -> str | None:
+    """Write the secrets workflow when it applies. Returns the previous state (``foreign`` = left alone) or None.
+
+    Raises:
+        MthError: ``secrets.baseline`` has characters that are unsafe inside the workflow.
+    """
+    return secretci.install(root, cfg["secrets"]["baseline"]) if secrets_workflow_applies(cfg) else None
+
+
+def remove_hook(git: Git, kind: HookKind) -> bool:
+    """Delete our hook (never a foreign one nor the saved copies). True when something was removed."""
+    path = git.hooks_dir() / kind.name
+    if path.is_file() and HOOK_MARK in path.read_text(encoding="utf-8", errors="replace"):
+        path.unlink()
+        return True
+    return False
+
+
+def sync_secrets_hook(git: Git, cfg: Config) -> str | None:
+    """Apply ``secrets.hook`` to the pre-commit hook (SPEC-0024): install on ``on``, retire ours on ``off``.
+
+    Returns the install status, ``removed``, or None when there is nothing to do (undecided).
+
+    Raises:
+        MthError: Same conditions as :func:`install_hook`.
+    """
+    switch = cfg["secrets"]["hook"]
+    if switch == "on":
+        return install_hook(git, cfg["hooks"]["pre_commit"], PRE_COMMIT)
+    if switch == "off" and remove_hook(git, PRE_COMMIT):
+        return "removed"
+    return None
 
 
 LAUNCHER = Path("mth") / "launcher"
@@ -273,6 +333,10 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
             config = config.replace("required = true", "required = false  # TODO: activar cuando el repo tenga CI")
     cfg = parse(root, config, config_file or answers_file or "plantilla")  # validate before any mutation
     check_hook_mode(git, cfg["hooks"]["commit_msg"])
+    if cfg["secrets"]["hook"] == "on":
+        check_hook_mode(git, cfg["hooks"]["pre_commit"], PRE_COMMIT)
+    if secrets_workflow_applies(cfg):
+        secretci.render(cfg["secrets"]["baseline"])  # fail before any mutation on an unsafe baseline
     chosen = plan.catalog if plan is not None else []
     blockers = agents.Manager(cfg).blockers(chosen)  # SPEC-0012: before any mutation
     if blockers:
@@ -308,6 +372,8 @@ def init(start: Path, marketplace_repo: str | None, github: bool, config_file: s
     if marketplace_repo:
         _merge_settings(root, marketplace_repo)
     install_hook(git, cfg["hooks"]["commit_msg"])
+    sync_secrets_hook(git, cfg)
+    sync_secrets_workflow(root, cfg)
     if plan is not None:
         _write_adoption_adr(root, cfg, git, inventory, plan)
     if chosen and agents.Manager(load(root)).add(chosen, None, False):
@@ -349,7 +415,7 @@ def _chainable(git: Git) -> bool:
     hooks = git.hooks_dir()
     hook = hooks / "commit-msg"
     foreign = hook.is_file() and HOOK_MARK not in hook.read_text(encoding="utf-8", errors="replace")
-    return foreign or (hooks / CHAINED_HOOK).is_file()
+    return foreign or (hooks / _chained(COMMIT_MSG)).is_file()
 
 
 def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None:
@@ -381,6 +447,10 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     config_text = RECONFIGURED_HEADER + adoption.dump_toml(tables)
     new_cfg = parse(root, config_text, answers_file)  # validate before any mutation
     check_hook_mode(git, new_cfg["hooks"]["commit_msg"])
+    if new_cfg["secrets"]["hook"] == "on":
+        check_hook_mode(git, new_cfg["hooks"]["pre_commit"], PRE_COMMIT)
+    if secrets_workflow_applies(new_cfg):
+        secretci.render(new_cfg["secrets"]["baseline"])
     if new_cfg["hooks"]["commit_msg"] == "chain" and not _chainable(git):
         raise MthError("hooks.commit_msg = chain necesita un hook commit-msg ajeno que encadenar, y no hay ninguno.",
                        hint="Conserva el modo actual: encadenar sin hook rechazaría todos los commits.")
@@ -407,6 +477,8 @@ def reconfigure(start: Path, answers_file: str, only: str | None = None) -> None
     adr = folder / f"{ident}-{slug}.md"
     adr.write_text(adoption.reconfigure_adr_text(ident, previous[-1] if previous else None, plan, changes, new_cfg.vocab), encoding="utf-8")
     install_hook(git, new_cfg["hooks"]["commit_msg"])
+    sync_secrets_hook(git, new_cfg)
+    sync_secrets_workflow(root, new_cfg)
 
     git.out("add", "-A")
     message = commits.build("chore", "methodology", "reconfigure claude-methodology",
@@ -472,6 +544,34 @@ def _report_work(report, status: work.Status) -> None:
         gaps = ([f"faltan {', '.join(status.missing)}"] if status.missing else []) + \
                ([] if status.excluded else ["sin excluir de git"])
         report(False, f"{name}: {'; '.join(gaps)} (lo prepara la próxima sesión)", blocking=False)
+
+
+def _doctor_secrets_pieces(git: Git, cfg: Config, report) -> None:
+    """Hook, workflow and tool version of the secrets gate: warnings, never blocking (SPEC-0024/AC-14)."""
+    switch = cfg["secrets"]["hook"]
+    if switch == "":
+        report(False, "secrets.hook sin decidir: no se escanea lo preparado antes de cada commit (mth update --plan)",
+               blocking=False)
+    elif switch == "on":
+        try:
+            state = hook_state(git, cfg["hooks"]["pre_commit"], PRE_COMMIT)
+        except OSError as exc:
+            state = f"ilegible ({exc})"
+        report(state == "current", f"Hook pre-commit de secretos: {state}", blocking=False)
+    if cfg["secrets"]["ci"] == "":
+        if cfg.forge == forge.GITHUB and cfg["ci"]["required"]:
+            report(False, "secrets.ci sin decidir: la CI no escanea secretos en cada PR (mth update --plan)",
+                   blocking=False)
+    elif cfg["secrets"]["ci"] == "on" and secrets_workflow_applies(cfg):
+        state = secretci.state(git.root, cfg["secrets"]["baseline"])
+        report(state == "current", f"Workflow de secretos: {state}", blocking=False)
+    if cfg["secrets"]["mode"] == "block" or switch == "on":
+        found = secretgate.version()
+        if secretgate.is_installed():
+            minimum = ".".join(map(str, secretgate.MIN_VERSION))
+            report(found is not None and found >= secretgate.MIN_VERSION,
+                   f"gitleaks {'.'.join(map(str, found)) if found else 'de versión no reconocida'} (mínima {minimum})",
+                   blocking=False)
 
 
 def doctor(start: Path) -> int:
@@ -548,11 +648,12 @@ def doctor(start: Path) -> int:
         for notice in smoke.warnings(git, True, explain_unknown=True):
             report(False, notice, blocking=False)
     mode = cfg["secrets"]["mode"]
-    if mode == "block":
-        report(secretgate.is_installed(), "gitleaks instalado (secrets.mode = block)")
+    if mode == "block" or cfg["secrets"]["hook"] == "on":
+        report(secretgate.is_installed(), "gitleaks instalado (secrets.mode = block o secrets.hook = on)")
     else:
         report(False, "secrets.mode " + ("sin decidir" if mode == "" else "= off")
                + ": no se buscan secretos al integrar (mth update --plan)", blocking=False)
+    _doctor_secrets_pieces(git, cfg, report)
     report(bool(cfg["review"]["agents"]) or not cfg["review"]["required_for"],
            "review.agents declarado (la revisión es obligatoria)", blocking=False)
     report(cfg.test_command != "", "commands.test configurado", blocking=False)

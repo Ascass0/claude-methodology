@@ -193,6 +193,9 @@ def _apply(repo: update.Repo, automatic: list[update.Gap], config_text: str) -> 
         setup.upsert_claude_md(root, cfg["paths"], cfg.vocab)
     if "hook" in ids:
         setup.install_hook(git, cfg["hooks"]["commit_msg"])
+        setup.sync_secrets_hook(git, cfg)
+    if "secretos-workflow" in ids:
+        setup.sync_secrets_workflow(root, cfg)
 
 
 def _agent_files(name: str) -> list[Path]:
@@ -250,7 +253,9 @@ def apply(start: Path) -> None:
     text = (git.root / CONFIG_PATH).read_text(encoding="utf-8")
     if any(g.id == "config" for g in automatic):
         text = with_keys(text, tomllib.loads(update.TEMPLATE.read_text(encoding="utf-8")), update.missing_keys(repo))
-        parse(git.root, text)  # validate before any mutation
+    new_cfg = parse(git.root, text)  # validate before any mutation
+    if new_cfg["secrets"]["hook"] == "on":  # SPEC-0024/FM-04: nothing is touched when the hook cannot be installed
+        setup.check_hook_mode(git, new_cfg["hooks"]["pre_commit"], setup.PRE_COMMIT)
     if not resuming:
         git.checkout_synced(cfg.development)
         git.out("checkout", "-b", BRANCH)
