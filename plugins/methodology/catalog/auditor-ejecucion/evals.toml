@@ -1,0 +1,53 @@
+[[guard]]
+command = "mth audit scan testssl example.org:443"
+expect = "allow"
+
+[[guard]]
+command = "mth audit verify .work/security-report/tls.md"
+expect = "allow"
+
+[[guard]]
+command = "testssl.sh example.org:443"
+expect = "deny"
+
+[[guard]]
+command = "ssh-audit example.org"
+expect = "deny"
+
+[[guard]]
+command = "nmap -p- example.org"
+expect = "deny"
+
+[[guard]]
+command = "curl https://example.org"
+expect = "deny"
+
+[[guard]]
+command = "mth audit scan testssl example.org:443 > out.txt"
+expect = "deny"
+
+[[guard]]
+command = "mth tools install gitleaks"
+expect = "deny"
+
+[[guard]]
+tool = "Write"
+path = ".work/security-report/tls.md"
+expect = "allow"
+
+[[guard]]
+tool = "Write"
+path = ".claude/methodology.toml"
+expect = "deny"
+
+[[routing]]
+prompt = "Audita el TLS y el SSH del servicio desplegado en los destinos autorizados y dame un informe por control"
+expect = "auditor-ejecucion"
+
+[[routing]]
+prompt = "Audita el hardening de los Dockerfiles del repo contra la línea base"
+expect_not = "auditor-ejecucion"
+
+[[routing]]
+prompt = "Revisa el diff de la rama en busca de problemas de seguridad"
+expect_not = "auditor-ejecucion"

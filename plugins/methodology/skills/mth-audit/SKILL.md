@@ -9,7 +9,7 @@ description: Audita el hardening del repo (Docker, Kubernetes, matriz común) co
 
 ## Antes de empezar
 
-1. `mth audit packs`: lista los packs (`comun`, `docker`, `kubernetes`), su versión, hash y si están vigentes. Un pack caducado se declara en el informe; no se actualiza durante una auditoría.
+1. `mth audit packs`: lista los packs (`comun`, `docker`, `kubernetes`, `tls`, `ssh`), su versión, hash y si están vigentes. Un pack caducado se declara en el informe; no se actualiza durante una auditoría.
 2. Si `auditor-estatico` no está instalado: `mth agents add auditor-estatico`.
 3. Las herramientas (`hadolint`) las instala la persona; sin ellas, los controles que dependen de ellas salen `no evaluable`.
 
@@ -24,6 +24,10 @@ Audita el dominio <pack> del repo.
 ```
 
 El agente escribe el informe y ejecuta `mth audit verify`. Vuelve a ejecutarlo tú antes de entregar: `mth audit verify .work/security-report/<informe>.md`.
+
+## Auditoría de ejecución (red)
+
+`auditor-ejecucion` audita TLS y SSH de servicios en marcha (`tls`, `ssh`). Solo escanea los destinos de `audit.targets` en `.claude/methodology.toml`, vacía por defecto: autorizar un destino es un cambio de configuración revisado en PR, nunca algo que decida el agente. Su única vía de red es `mth audit scan <testssl|ssh-audit> <destino>`; las herramientas las instala la persona y, sin ellas, los controles salen `no evaluable`. Mismo encargo (un agente por dominio y destino), mismo informe y mismo `mth audit verify`.
 
 ## Entregar
 

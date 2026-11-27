@@ -1,0 +1,13 @@
+# Auditor de ejecución: su única vía de red es `mth audit scan`, que solo escanea destinos de
+# audit.targets. Ninguna herramienta de red directa, ni git de escritura, ni el resto de `mth`.
+# Es un guard contra errores del agente, no una frontera frente a un agente malicioso (README de
+# claude-methodology, «Límites conocidos»): la autorización real vive en `mth audit scan`.
+[bash]
+mode = "allowlist"
+allow = ["git ls-files", "git rev-parse", "mth audit scan", "mth audit packs", "mth audit verify"]
+filters = ["grep", "head", "tail", "wc", "sort", "uniq", "cut"]
+deny_operators = [">", "$(", "`", "<("]
+deny_flags = ["--output", "--ext-diff", "--textconv", "-O", "--open-files-in-pager", "--no-index"]
+
+[write]
+allow = [".work/security-report/**"]
